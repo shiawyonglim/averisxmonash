@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: CMA CGM
+Bill of Lading No.: BKG675721
+Shipper: GOLDEN AGRI-RESOURCES LTD
+Consignee: MOORIM SP CO., LTD
+Notify Party: UAB NOVAKOPA
+Port of Loading: BELAWAN, INDONESIA (IDBLW)
+Port of Discharge: BARCELONA, SPAIN (ESBCN)
+Total Containers: 7 x 40'HC
+Gross Weight: 27,468 KGS
+Remarks: Shipper verbally requested 5 containers — pls confirm 7.

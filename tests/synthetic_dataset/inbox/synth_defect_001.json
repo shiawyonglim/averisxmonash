@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_001",
+  "from": "agent@maersk.com",
+  "subject": "TO CONFIRM DOCS _ OC-2079 _ HO CHI MINH _ NIPPON PAPER INDUSTRIES CO., LTD _ BKG445705",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_001_SI.txt",
+    "attachments/synth_defect_001_BL.txt"
+  ]
+}

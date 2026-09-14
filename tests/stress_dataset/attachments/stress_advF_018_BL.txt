@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: MAERSK
+Bill of Lading No.: BKG181870
+Shipper: EVERGREEN AGRO EXPORTS SDN BHD
+Consignee: MÜLLER LOGISTIK AG
+Notify Party: EASTERN MARITIME AGENCIES LLC
+Port of Loading: PORT KLANG (WESTPORT), MALAYSIA (MYPKG)
+Port of Discharge: CALLAO, PERU (PECLL)
+Total Containers: 9 x 40'HC
+Gross Weight: 25,516 KGS
+Remarks: Shipper verbally requested 7 containers — pls confirm 9.

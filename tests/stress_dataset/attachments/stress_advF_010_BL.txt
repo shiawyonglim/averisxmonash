@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: CMA CGM
+Bill of Lading No.: BKG517287
+Shipper: WILMAR INTERNATIONAL LIMITED
+Consignee: MÜLLER LOGISTIK AG
+Notify Party: UAB NOVAKOPA
+Port of Loading: SINGAPORE, SINGAPORE (SGSIN)
+Port of Discharge: JEBEL ALI, UNITED ARAB EMIRATES (AEJEA)
+Total Containers: 10 x 40'HC
+Gross Weight: 25,590 KGS
+Remarks: Shipper verbally requested 8 containers — pls confirm 10.

@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_edge_032",
+  "from": "ops@evergreen.com",
+  "subject": "TO CONFIRM DOCS _ OC-5389 _ CALLAO _ BKG912764",
+  "body": "Attached draft BL with pending weight declaration.",
+  "attachments": [
+    "attachments/synth_edge_032_SI.txt",
+    "attachments/synth_edge_032_BL.txt"
+  ]
+}

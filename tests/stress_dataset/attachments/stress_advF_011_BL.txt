@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: ONE
+Bill of Lading No.: BKG279629
+Shipper: ASIA PACIFIC RAYON PTE LTD
+Consignee: INTERNATIONAL PAPER DO BRASIL LTDA
+Notify Party: NIPPON EXPRESS CO., LTD
+Port of Loading: TANJUNG PELEPAS, MALAYSIA (MYTPP)
+Port of Discharge: CALLAO, PERU (PECLL)
+Total Containers: 12 x 40'HC
+Gross Weight: 40,341 KGS
+Remarks: Shipper verbally requested 10 containers — pls confirm 12.

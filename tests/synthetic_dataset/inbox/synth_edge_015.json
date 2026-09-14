@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_edge_015",
+  "from": "desk@msc.com",
+  "subject": "TO CONFIRM DOCS _ OC-2100 _ BUSAN _ BKG414849",
+  "body": "Attached please find the draft bill of lading PDF.",
+  "attachments": [
+    "attachments/synth_edge_015_SI.txt",
+    "attachments/synth_edge_015_BL.pdf"
+  ]
+}

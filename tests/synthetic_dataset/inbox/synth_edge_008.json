@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_edge_008",
+  "from": "ops@oocl.com",
+  "subject": "TO CONFIRM DOCS _ OC-8851 _ ROTTERDAM _ BKG710527",
+  "body": "Attached draft BL with pending weight declaration.",
+  "attachments": [
+    "attachments/synth_edge_008_SI.txt",
+    "attachments/synth_edge_008_BL.txt"
+  ]
+}

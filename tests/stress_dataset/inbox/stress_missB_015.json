@@ -1,0 +1,9 @@
+{
+  "email_id": "stress_missB_015",
+  "from": "ops@msc.com",
+  "subject": "TO CONFIRM DOCS _ OC-9924 _ HO CHI MINH _ BKG931756",
+  "body": "Please review the attached draft BL. (Attachment missing in email payload)",
+  "attachments": [
+    "attachments/stress_missB_015_SI.txt"
+  ]
+}

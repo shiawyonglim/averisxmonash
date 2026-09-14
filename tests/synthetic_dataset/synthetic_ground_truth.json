@@ -1,0 +1,3586 @@
+{
+  "synth_ok_001": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_002": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_003": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_004": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_005": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_006": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_007": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_008": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_009": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_010": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_011": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_012": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_013": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_014": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_015": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_016": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_017": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_018": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_019": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_020": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_021": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_022": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_023": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_024": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_025": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_026": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_027": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_028": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_029": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_030": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_031": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_032": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_033": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_034": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_035": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_036": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_037": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_038": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_039": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_040": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_041": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_042": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_043": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_044": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_045": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_046": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_047": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_048": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_049": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_050": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_051": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_052": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_053": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_054": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_055": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_056": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_057": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_058": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_059": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_060": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_061": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_062": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_063": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_064": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_065": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_066": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_067": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_068": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_069": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_070": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_071": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_072": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_073": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_074": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_075": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_076": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_077": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_078": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_079": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_080": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_081": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_082": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_083": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_084": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_085": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_086": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_087": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_088": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_089": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_090": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_091": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_092": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_093": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_094": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_095": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_096": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_097": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_098": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_099": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_ok_100": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "exact_match"
+  },
+  "synth_style_001": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_002": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_003": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_004": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_005": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_006": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_007": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_008": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_009": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_010": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_011": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_012": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_013": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_014": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_015": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_016": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_017": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_018": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_019": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_020": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_021": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_022": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_023": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_024": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_025": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_026": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_027": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_028": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_029": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_030": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_031": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_032": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_033": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_034": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_035": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_036": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_037": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_038": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_039": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_040": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_041": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_042": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_043": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_044": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_045": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_046": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_047": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_048": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_049": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_050": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_051": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_052": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_053": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_054": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_055": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_056": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_057": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_058": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_059": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_style_060": {
+    "category": "BL_COMPARISON",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "style_variation_match"
+  },
+  "synth_other_001": {
+    "category": "SI_REQUEST",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_002": {
+    "category": "INVOICE_QUERY",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_003": {
+    "category": "GENERAL",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_004": {
+    "category": "SPAM",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_005": {
+    "category": "SI_REQUEST",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_006": {
+    "category": "INVOICE_QUERY",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_007": {
+    "category": "GENERAL",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_008": {
+    "category": "SPAM",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_009": {
+    "category": "SI_REQUEST",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_010": {
+    "category": "INVOICE_QUERY",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_011": {
+    "category": "GENERAL",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_012": {
+    "category": "SPAM",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_013": {
+    "category": "SI_REQUEST",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_014": {
+    "category": "INVOICE_QUERY",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_015": {
+    "category": "GENERAL",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_016": {
+    "category": "SPAM",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_017": {
+    "category": "SI_REQUEST",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_018": {
+    "category": "INVOICE_QUERY",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_019": {
+    "category": "GENERAL",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_020": {
+    "category": "SPAM",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_021": {
+    "category": "SI_REQUEST",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_022": {
+    "category": "INVOICE_QUERY",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_023": {
+    "category": "GENERAL",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_024": {
+    "category": "SPAM",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_025": {
+    "category": "SI_REQUEST",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_026": {
+    "category": "INVOICE_QUERY",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_027": {
+    "category": "GENERAL",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_028": {
+    "category": "SPAM",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_029": {
+    "category": "SI_REQUEST",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_030": {
+    "category": "INVOICE_QUERY",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_031": {
+    "category": "GENERAL",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_032": {
+    "category": "SPAM",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_033": {
+    "category": "SI_REQUEST",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_034": {
+    "category": "INVOICE_QUERY",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_035": {
+    "category": "GENERAL",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_036": {
+    "category": "SPAM",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_037": {
+    "category": "SI_REQUEST",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_038": {
+    "category": "INVOICE_QUERY",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_039": {
+    "category": "GENERAL",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_other_040": {
+    "category": "SPAM",
+    "status": "OK",
+    "defect_fields": [],
+    "review_reason": null,
+    "rule_following": true,
+    "test_type": "non_bl_classification"
+  },
+  "synth_defect_001": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "shipper"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_002": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "consignee"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_003": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "notify_party"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_004": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_loading"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_005": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg",
+      "port_of_discharge"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_006": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_007": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_008": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "shipper"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_009": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "consignee"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_010": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg",
+      "notify_party"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_011": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_loading"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_012": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_discharge"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_013": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_014": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_015": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg",
+      "shipper"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_016": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "consignee"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_017": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "notify_party"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_018": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_loading"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_019": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_discharge"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_020": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_021": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_022": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "shipper"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_023": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "consignee"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_024": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "notify_party"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_025": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg",
+      "port_of_loading"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_026": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_discharge"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_027": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_028": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_029": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "shipper"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_030": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "consignee",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_031": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "notify_party"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_032": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_loading"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_033": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_discharge"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_034": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_035": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_036": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "shipper"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_037": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "consignee"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_038": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "notify_party"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_039": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_loading"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_040": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg",
+      "port_of_discharge"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_041": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_042": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_043": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "shipper"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_044": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "consignee"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_045": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg",
+      "notify_party"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_046": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_loading"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_047": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_discharge"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_048": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_049": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_050": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg",
+      "shipper"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_051": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "consignee"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_052": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "notify_party"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_053": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_loading"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_054": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_discharge"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_055": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_056": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_057": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "shipper"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_058": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "consignee"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_059": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "notify_party"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_060": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg",
+      "port_of_loading"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_061": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_discharge"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_062": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_063": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_064": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "shipper"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_065": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "consignee",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_066": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "notify_party"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_067": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_loading"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_068": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_discharge"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_069": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_070": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_071": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "shipper"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_072": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "consignee"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_073": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "notify_party"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_074": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_loading"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_075": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg",
+      "port_of_discharge"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_076": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_077": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_078": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "shipper"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_079": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "consignee"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_080": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg",
+      "notify_party"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_081": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_loading"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_082": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_discharge"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_083": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_084": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_085": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg",
+      "shipper"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_086": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "consignee"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_087": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "notify_party"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_088": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_loading"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_089": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_discharge"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_090": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_091": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_092": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "shipper"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_093": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "consignee"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_094": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "notify_party"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_095": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg",
+      "port_of_loading"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_096": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_discharge"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_097": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_098": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_099": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "shipper"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_100": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "consignee",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_101": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "notify_party"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_102": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_loading"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_103": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_discharge"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_104": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_105": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_106": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "shipper"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_107": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "consignee"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_108": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "notify_party"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_109": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_loading"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_110": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg",
+      "port_of_discharge"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_111": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_112": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_113": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "shipper"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_114": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "consignee"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_115": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg",
+      "notify_party"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_116": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_loading"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_117": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_discharge"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_118": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_119": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_defect_120": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "gross_weight_kg",
+      "shipper"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "material_discrepancy"
+  },
+  "synth_edge_001": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "wrong_doc_type",
+    "rule_following": false,
+    "test_type": "edge_case_wrong_doc_type"
+  },
+  "synth_edge_002": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "missing_attachment",
+    "rule_following": false,
+    "test_type": "edge_case_missing_attachment"
+  },
+  "synth_edge_003": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "unreadable",
+    "rule_following": false,
+    "test_type": "edge_case_unreadable"
+  },
+  "synth_edge_004": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "missing_value",
+    "rule_following": false,
+    "test_type": "edge_case_missing_value"
+  },
+  "synth_edge_005": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "wrong_doc_type",
+    "rule_following": false,
+    "test_type": "edge_case_wrong_doc_type"
+  },
+  "synth_edge_006": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "missing_attachment",
+    "rule_following": false,
+    "test_type": "edge_case_missing_attachment"
+  },
+  "synth_edge_007": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "unreadable",
+    "rule_following": false,
+    "test_type": "edge_case_unreadable"
+  },
+  "synth_edge_008": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "missing_value",
+    "rule_following": false,
+    "test_type": "edge_case_missing_value"
+  },
+  "synth_edge_009": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "wrong_doc_type",
+    "rule_following": false,
+    "test_type": "edge_case_wrong_doc_type"
+  },
+  "synth_edge_010": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "missing_attachment",
+    "rule_following": false,
+    "test_type": "edge_case_missing_attachment"
+  },
+  "synth_edge_011": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "unreadable",
+    "rule_following": false,
+    "test_type": "edge_case_unreadable"
+  },
+  "synth_edge_012": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "missing_value",
+    "rule_following": false,
+    "test_type": "edge_case_missing_value"
+  },
+  "synth_edge_013": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "wrong_doc_type",
+    "rule_following": false,
+    "test_type": "edge_case_wrong_doc_type"
+  },
+  "synth_edge_014": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "missing_attachment",
+    "rule_following": false,
+    "test_type": "edge_case_missing_attachment"
+  },
+  "synth_edge_015": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "unreadable",
+    "rule_following": false,
+    "test_type": "edge_case_unreadable"
+  },
+  "synth_edge_016": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "missing_value",
+    "rule_following": false,
+    "test_type": "edge_case_missing_value"
+  },
+  "synth_edge_017": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "wrong_doc_type",
+    "rule_following": false,
+    "test_type": "edge_case_wrong_doc_type"
+  },
+  "synth_edge_018": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "missing_attachment",
+    "rule_following": false,
+    "test_type": "edge_case_missing_attachment"
+  },
+  "synth_edge_019": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "unreadable",
+    "rule_following": false,
+    "test_type": "edge_case_unreadable"
+  },
+  "synth_edge_020": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "missing_value",
+    "rule_following": false,
+    "test_type": "edge_case_missing_value"
+  },
+  "synth_edge_021": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "wrong_doc_type",
+    "rule_following": false,
+    "test_type": "edge_case_wrong_doc_type"
+  },
+  "synth_edge_022": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "missing_attachment",
+    "rule_following": false,
+    "test_type": "edge_case_missing_attachment"
+  },
+  "synth_edge_023": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "unreadable",
+    "rule_following": false,
+    "test_type": "edge_case_unreadable"
+  },
+  "synth_edge_024": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "missing_value",
+    "rule_following": false,
+    "test_type": "edge_case_missing_value"
+  },
+  "synth_edge_025": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "wrong_doc_type",
+    "rule_following": false,
+    "test_type": "edge_case_wrong_doc_type"
+  },
+  "synth_edge_026": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "missing_attachment",
+    "rule_following": false,
+    "test_type": "edge_case_missing_attachment"
+  },
+  "synth_edge_027": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "unreadable",
+    "rule_following": false,
+    "test_type": "edge_case_unreadable"
+  },
+  "synth_edge_028": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "missing_value",
+    "rule_following": false,
+    "test_type": "edge_case_missing_value"
+  },
+  "synth_edge_029": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "wrong_doc_type",
+    "rule_following": false,
+    "test_type": "edge_case_wrong_doc_type"
+  },
+  "synth_edge_030": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "missing_attachment",
+    "rule_following": false,
+    "test_type": "edge_case_missing_attachment"
+  },
+  "synth_edge_031": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "unreadable",
+    "rule_following": false,
+    "test_type": "edge_case_unreadable"
+  },
+  "synth_edge_032": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "missing_value",
+    "rule_following": false,
+    "test_type": "edge_case_missing_value"
+  },
+  "synth_edge_033": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "wrong_doc_type",
+    "rule_following": false,
+    "test_type": "edge_case_wrong_doc_type"
+  },
+  "synth_edge_034": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "missing_attachment",
+    "rule_following": false,
+    "test_type": "edge_case_missing_attachment"
+  },
+  "synth_edge_035": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "unreadable",
+    "rule_following": false,
+    "test_type": "edge_case_unreadable"
+  },
+  "synth_edge_036": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "missing_value",
+    "rule_following": false,
+    "test_type": "edge_case_missing_value"
+  },
+  "synth_edge_037": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "wrong_doc_type",
+    "rule_following": false,
+    "test_type": "edge_case_wrong_doc_type"
+  },
+  "synth_edge_038": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "missing_attachment",
+    "rule_following": false,
+    "test_type": "edge_case_missing_attachment"
+  },
+  "synth_edge_039": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "unreadable",
+    "rule_following": false,
+    "test_type": "edge_case_unreadable"
+  },
+  "synth_edge_040": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "defect_fields": [],
+    "review_reason": "missing_value",
+    "rule_following": false,
+    "test_type": "edge_case_missing_value"
+  },
+  "synth_adv_001": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_002": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_003": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_004": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_005": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_006": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_007": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_008": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_009": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_010": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_011": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_012": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_013": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_014": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_015": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_016": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_017": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_018": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_019": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_020": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_021": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_022": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_023": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_024": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_025": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_026": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_027": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_028": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_029": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_030": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_031": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_032": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_033": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_034": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_035": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_036": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_037": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_038": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_039": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  },
+  "synth_adv_040": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "container_count",
+      "gross_weight_kg"
+    ],
+    "review_reason": null,
+    "rule_following": false,
+    "test_type": "adversarial_contradiction"
+  }
+}

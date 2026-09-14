@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_018",
+  "from": "agent@msc.com",
+  "subject": "TO CONFIRM DOCS _ OC-9914 _ BUSAN _ SAICA PACK IBERIA S.L. _ BKG631971",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_018_SI.txt",
+    "attachments/synth_defect_018_BL.txt"
+  ]
+}

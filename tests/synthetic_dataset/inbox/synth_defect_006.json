@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_006",
+  "from": "agent@evergreen.com",
+  "subject": "TO CONFIRM DOCS _ OC-1618 _ BARCELONA _ NIPPON PAPER INDUSTRIES CO., LTD _ BKG794083",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_006_SI.txt",
+    "attachments/synth_defect_006_BL.txt"
+  ]
+}

@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: EVERGREEN
+Bill of Lading No.: BKG540759
+
+Shipper:
+CELLULOSE TRADING S.A.
+AVENIDA PAULISTA 1000, SÃO PAULO, BRAZIL
+
+Consignee:
+PAPELERÍA NACIONAL S.A. DE C.V.
+AV. INSURGENTES SUR 1602, CDMX, MÉXICO
+
+Notify Party:
+UAB NOVAKOPA
+VILNIUS, LITHUANIA
+
+Port of Loading: BELAWAN, INDONESIA (IDBLW)
+Port of Discharge: CALLAO, PERU (PECLL)
+Total Containers: 6 x 40'HC
+Gross Weight: 36,106 KGS
+Reference OC: OC-5029
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

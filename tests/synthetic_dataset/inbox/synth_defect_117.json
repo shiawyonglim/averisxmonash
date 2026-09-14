@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_117",
+  "from": "agent@one.com",
+  "subject": "TO CONFIRM DOCS _ OC-7311 _ BARCELONA _ NIPPON PAPER INDUSTRIES CO., LTD _ BKG112940",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_117_SI.txt",
+    "attachments/synth_defect_117_BL.txt"
+  ]
+}

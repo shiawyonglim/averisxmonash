@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: ONE
+Bill of Lading No.: BKG297801
+Shipper: WILMAR INTERNATIONAL LIMITED
+Consignee: HANWHA CORPORATION
+Notify Party: NIPPON EXPRESS CO., LTD
+Port of Loading: TANJUNG PELEPAS, MALAYSIA (MYTPP)
+Port of Discharge: BUSAN, SOUTH KOREA (KRPUS)
+Total Containers: 4 x 40'HC
+Gross Weight: 39,760 KGS
+Remarks: Shipper verbally requested 2 containers — pls confirm 4.

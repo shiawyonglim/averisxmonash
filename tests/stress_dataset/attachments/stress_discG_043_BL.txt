@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: EVERGREEN
+Bill of Lading No.: BKG443241
+
+Shipper:
+SÜD PAPIER GMBH
+HAFENSTRASSE 12, 20457 HAMBURG, GERMANY
+
+Consignee:
+PAPELERÍA NACIONAL S.A. DE C.V.
+AV. INSURGENTES SUR 1602, CDMX, MÉXICO
+
+Notify Party:
+OCEAN GATEWAY LOGISTICS INC
+LONG BEACH, CA, USA
+
+Port of Loading: PENANG, MALAYSIA (MYPEN)
+Port of Discharge: CALLAO, PERU (PECLL)
+Total Containers: 7 x 40'HC
+Gross Weight: 30,949 KGS
+Reference OC: OC-9713
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

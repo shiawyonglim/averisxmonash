@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: MAERSK
+Bill of Lading No.: BKG594000
+Shipper: CELLULOSE TRADING S.A.
+Consignee: PAPELERÍA NACIONAL S.A. DE C.V.
+Notify Party: NIPPON EXPRESS CO., LTD
+Port of Loading: PORT KLANG (WESTPORT), MALAYSIA (MYPKG)
+Port of Discharge: ROTTERDAM, NETHERLANDS (NLRTM)
+Total Containers: 4 x 40'HC
+Gross Weight: 51,344 KGS
+Remarks: Shipper verbally requested 2 containers — pls confirm 4.

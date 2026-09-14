@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_edge_024",
+  "from": "ops@one.com",
+  "subject": "TO CONFIRM DOCS _ OC-2931 _ BUSAN _ BKG350161",
+  "body": "Attached draft BL with pending weight declaration.",
+  "attachments": [
+    "attachments/synth_edge_024_SI.txt",
+    "attachments/synth_edge_024_BL.txt"
+  ]
+}

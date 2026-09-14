@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: ONE
+Bill of Lading No.: BKG828498
+
+Shipper:
+PT RIAU ANDALAN PULP AND PAPER
+PANGKALAN KERINCI, PELALAWAN, RIAU, INDONESIA
+
+Consignee:
+HANWHA CORPORATION
+86 CHEONGGYECHEON-RO, JUNG-GU, SEOUL, KOREA
+
+Notify Party:
+N/A
+
+
+Port of Loading: BELAWAN, INDONESIA (IDBLW)
+Port of Discharge: BUSAN, SOUTH KOREA (KRPUS)
+Total Containers: 7 x 40'HC
+Gross Weight: TBD KGS
+Reference OC: OC-9428
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

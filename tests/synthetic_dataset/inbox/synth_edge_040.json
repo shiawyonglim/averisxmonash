@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_edge_040",
+  "from": "ops@maersk.com",
+  "subject": "TO CONFIRM DOCS _ OC-8405 _ ROTTERDAM _ BKG179184",
+  "body": "Attached draft BL with pending weight declaration.",
+  "attachments": [
+    "attachments/synth_edge_040_SI.txt",
+    "attachments/synth_edge_040_BL.txt"
+  ]
+}

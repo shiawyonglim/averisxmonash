@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: EVERGREEN
+Bill of Lading No.: BKG313647
+Shipper: GOLDEN AGRI-RESOURCES LTD
+Consignee: NIPPON PAPER INDUSTRIES CO., LTD
+Notify Party: OCEAN GATEWAY LOGISTICS INC
+Port of Loading: SINGAPORE, SINGAPORE (SGSIN)
+Port of Discharge: ROTTERDAM, NETHERLANDS (NLRTM)
+Total Containers: 8 x 40'HC
+Gross Weight: 19,007 KGS
+Remarks: Shipper verbally requested 6 containers — pls confirm 8.

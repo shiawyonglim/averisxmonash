@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: PIL
+Bill of Lading No.: BKG814039
+Shipper: APRIL FAR EAST (M) SDN BHD
+Consignee: INTERNATIONAL PAPER DO BRASIL LTDA
+Notify Party: TRANS-MED LOGISTICS GMBH
+Port of Loading: SINGAPORE, SINGAPORE (SGSIN)
+Port of Discharge: JEBEL ALI, UNITED ARAB EMIRATES (AEJEA)
+Total Containers: 5 x 40'HC
+Gross Weight: 29,244 KGS
+Remarks: Shipper verbally requested 3 containers — pls confirm 5.

@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_062",
+  "from": "agent@one.com",
+  "subject": "TO CONFIRM DOCS _ OC-8247 _ HO CHI MINH _ NIPPON PAPER INDUSTRIES CO., LTD _ BKG787836",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_062_SI.txt",
+    "attachments/synth_defect_062_BL.txt"
+  ]
+}

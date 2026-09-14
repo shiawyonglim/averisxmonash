@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_edge_013",
+  "from": "shipper@april.com",
+  "subject": "TO CONFIRM DOCS _ OC-2406 _ ROTTERDAM _ BKG221707",
+  "body": "Please find attached docs for your processing.",
+  "attachments": [
+    "attachments/synth_edge_013_SI.txt",
+    "attachments/synth_edge_013_PACKING_LIST.txt"
+  ]
+}

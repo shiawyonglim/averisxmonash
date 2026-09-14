@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_087",
+  "from": "agent@one.com",
+  "subject": "TO CONFIRM DOCS _ OC-1924 _ JEBEL ALI _ MOORIM SP CO., LTD _ BKG246942",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_087_SI.txt",
+    "attachments/synth_defect_087_BL.txt"
+  ]
+}

@@ -1,0 +1,9 @@
+DRAFT BILL OF LADING
+========================================
+Despatching Firm: VELUM PAPER MILLS LTD
+Order Party: TO THE ORDER OF HSBC BANK PLC
+Notify To: MERIDIAN LOGISTICS LTD
+Loading Wharf: PORT KLANG, MALAYSIA (MYPKG)
+Unload Port: CALLAO, PERU (PECLL)
+Qty of Cntrs: 5 x 20'FCL
+G.W.: 92,100 KG

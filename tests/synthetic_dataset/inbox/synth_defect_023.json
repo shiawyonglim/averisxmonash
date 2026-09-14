@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_023",
+  "from": "agent@maersk.com",
+  "subject": "TO CONFIRM DOCS _ OC-6438 _ BUSAN _ NIPPON PAPER INDUSTRIES CO., LTD _ BKG386488",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_023_SI.txt",
+    "attachments/synth_defect_023_BL.txt"
+  ]
+}

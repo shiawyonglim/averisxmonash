@@ -1,0 +1,10 @@
+{
+  "email_id": "ood_007",
+  "from": "export-ops@velum-logistics.example",
+  "subject": "INVOICE enclosed — please action urgently",
+  "body": "Dear team,\n\nPlease compare the attached SI and draft BL for booking TPEB-00919 and confirm. (The subject line refers to a separate invoice thread.)\n\nRegards,\nDocs Desk",
+  "attachments": [
+    "attachments/ood_007_SI.txt",
+    "attachments/ood_007_BL.txt"
+  ]
+}

@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: MSC
+Bill of Lading No.: BKG170568
+
+Shipper:
+ASIA PACIFIC RAYON PTE LTD
+80 ROBINSON ROAD #02-00, SINGAPORE 068898
+
+Consignee:
+PAPELERÍA NACIONAL S.A. DE C.V.
+AV. INSURGENTES SUR 1602, CDMX, MÉXICO
+
+Notify Party:
+NIPPON EXPRESS CO., LTD
+TOKYO, JAPAN
+
+Port of Loading: PENANG, MALAYSIA (MYPEN)
+Port of Discharge: BUSAN, SOUTH KOREA (KRPUS)
+Total Containers: 5 x 40'HC
+Gross Weight: 36,230 KGS
+Reference OC: OC-8962
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

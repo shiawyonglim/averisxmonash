@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_edge_020",
+  "from": "ops@maersk.com",
+  "subject": "TO CONFIRM DOCS _ OC-2025 _ HO CHI MINH _ BKG705393",
+  "body": "Attached draft BL with pending weight declaration.",
+  "attachments": [
+    "attachments/synth_edge_020_SI.txt",
+    "attachments/synth_edge_020_BL.txt"
+  ]
+}

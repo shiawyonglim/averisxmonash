@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_050",
+  "from": "agent@maersk.com",
+  "subject": "TO CONFIRM DOCS _ OC-5582 _ ROTTERDAM _ AL BUSTAN PACKAGING FACTORY LLC _ BKG965401",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_050_SI.txt",
+    "attachments/synth_defect_050_BL.txt"
+  ]
+}

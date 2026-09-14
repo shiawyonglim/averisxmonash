@@ -1,0 +1,9 @@
+{
+  "email_id": "stress_missC_052",
+  "from": "ops@evergreen.com",
+  "subject": "DRAFT BL FOR REVIEW // OC-9866 // JEBEL ALI // BKG346732",
+  "body": "Please review the attached draft BL. (Attachment missing in email payload)",
+  "attachments": [
+    "attachments/stress_missC_052_BL.txt"
+  ]
+}

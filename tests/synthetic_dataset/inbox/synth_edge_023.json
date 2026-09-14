@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_edge_023",
+  "from": "desk@one.com",
+  "subject": "TO CONFIRM DOCS _ OC-3826 _ ROTTERDAM _ BKG953266",
+  "body": "Attached please find the draft bill of lading PDF.",
+  "attachments": [
+    "attachments/synth_edge_023_SI.txt",
+    "attachments/synth_edge_023_BL.pdf"
+  ]
+}

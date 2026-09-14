@@ -1,0 +1,10 @@
+{
+  "email_id": "stress_mvalA_070",
+  "from": "ops@oocl.com",
+  "subject": "TO CONFIRM DOCS _ OC-VERIFY _ DRAFT BL ATTACHED",
+  "body": "Draft BL attached — some SI fields were left blank by the customer, please review.",
+  "attachments": [
+    "attachments/stress_mvalA_070_SI.txt",
+    "attachments/stress_mvalA_070_BL.txt"
+  ]
+}

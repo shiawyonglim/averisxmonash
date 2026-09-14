@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: MSC
+Bill of Lading No.: BKG247938
+
+Shipper:
+SÜD PAPIER GMBH
+HAFENSTRASSE 12, 20457 HAMBURG, GERMANY
+
+Consignee:
+MÜLLER LOGISTIK AG
+BAHNHOFSTRASSE 45, ZÜRICH, SWITZERLAND
+
+Notify Party:
+NIPPON EXPRESS CO., LTD
+TOKYO, JAPAN
+
+Port of Loading: SINGAPORE, SINGAPORE (SGSIN)
+Port of Discharge: HO CHI MINH, VIETNAM (VNSGN)
+Total Containers: 2 x 40'HC
+Gross Weight: 47,062 KGS
+Reference OC: OC-2930
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_033",
+  "from": "agent@one.com",
+  "subject": "TO CONFIRM DOCS _ OC-9882 _ HO CHI MINH _ SAICA PACK IBERIA S.L. _ BKG404466",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_033_SI.txt",
+    "attachments/synth_defect_033_BL.txt"
+  ]
+}

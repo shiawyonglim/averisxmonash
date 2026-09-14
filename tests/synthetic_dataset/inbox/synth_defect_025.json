@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_025",
+  "from": "agent@maersk.com",
+  "subject": "TO CONFIRM DOCS _ OC-5813 _ BARCELONA _ INTERNATIONAL PAPER DO BRASIL LTDA _ BKG436814",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_025_SI.txt",
+    "attachments/synth_defect_025_BL.txt"
+  ]
+}

@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: PIL
+Bill of Lading No.: BKG596976
+
+Shipper:
+CELLULOSE TRADING S.A.
+AVENIDA PAULISTA 1000, SÃO PAULO, BRAZIL
+
+Consignee:
+PAPELERÍA NACIONAL S.A. DE C.V.
+AV. INSURGENTES SUR 1602, CDMX, MÉXICO
+
+Notify Party:
+UAB NOVAKOPA
+VILNIUS, LITHUANIA
+
+Port of Loading: TANJUNG PELEPAS, MALAYSIA (MYTPP)
+Port of Discharge: CALLAO, PERU (PECLL)
+Total Containers: 7 x 40'HC
+Gross Weight: 52,205 KGS
+Reference OC: OC-4993
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

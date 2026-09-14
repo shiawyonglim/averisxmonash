@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: CMA CGM
+Bill of Lading No.: BKG732228
+
+Shipper:
+ASIA PACIFIC RAYON PTE LTD
+80 ROBINSON ROAD #02-00, SINGAPORE 068898
+
+Consignee:
+PAPELERÍA NACIONAL S.A. DE C.V., AV. INSURGENTES SUR 1602, CDMX, MÉXICO
+
+
+Notify Party:
+NIPPON EXPRESS CO., LTD
+TOKYO, JAPAN
+
+Port of Loading: SINGAPORE, SINGAPORE (SGSIN)
+Port of Discharge: HO CHI MINH, VIETNAM (VNSGN)
+Total Containers: 9 x 40'HC
+Gross Weight: 16,621 KGS
+Reference OC: OC-5420
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_026",
+  "from": "agent@pil.com",
+  "subject": "TO CONFIRM DOCS _ OC-7981 _ ROTTERDAM _ SAICA PACK IBERIA S.L. _ BKG274739",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_026_SI.txt",
+    "attachments/synth_defect_026_BL.txt"
+  ]
+}

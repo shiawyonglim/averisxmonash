@@ -1,0 +1,11 @@
+{
+  "email_id": "stress_strB_001",
+  "from": "ops@pil.com",
+  "subject": "TO CONFIRM DOCS _ OC-VERIFY _ DRAFT BL ATTACHED",
+  "body": "Please find attached SI and draft BL for confirmation.\n\nBest regards,\nOperations Desk",
+  "attachments": [
+    "attachments/stress_strB_001_SI.txt",
+    "attachments/stress_strB_001_BL.txt",
+    "attachments/stress_strB_001_PACKING.txt"
+  ]
+}

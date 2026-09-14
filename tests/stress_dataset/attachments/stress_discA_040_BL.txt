@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: PIL
+Bill of Lading No.: BKG591894
+
+Shipper:
+CELLULOSE TRADING S.A.
+AVENIDA PAULISTA 1000, SÃO PAULO, BRAZIL
+
+Consignee:
+PAPELERÍA NACIONAL S.A. DE C.V.
+AV. INSURGENTES SUR 1602, CDMX, MÉXICO
+
+Notify Party:
+NIPPON EXPRESS CO., LTD
+TOKYO, JAPAN
+
+Port of Loading: TANJUNG PELEPAS, MALAYSIA (MYTPP)
+Port of Discharge: BARCELONA, SPAIN (ESBCN)
+Total Containers: 8 x 40'HC
+Gross Weight: 42,917 KGS
+Reference OC: OC-5104
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

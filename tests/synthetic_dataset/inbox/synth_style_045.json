@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_style_045",
+  "from": "docs@one.com",
+  "subject": "DRAFT BL FOR REVIEW // OC-8242 // HO CHI MINH // BKG534303",
+  "body": "Kindly verify draft BL details against your SI instructions.\n\nThanks,\nDoc Control",
+  "attachments": [
+    "attachments/synth_style_045_SI.txt",
+    "attachments/synth_style_045_BL.txt"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "email_id": "ood_008",
+  "from": "export-ops@velum-logistics.example",
+  "subject": "Please verify SI vs draft BL — TPEB-00920",
+  "body": "Dear team,\n\nPlease compare the attached Shipping Instruction and draft Bill of Lading for TPEB-00920 and advise on any differences.\n\nRegards,\nOps",
+  "attachments": []
+}

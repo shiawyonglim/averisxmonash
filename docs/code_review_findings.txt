@@ -1,0 +1,226 @@
+====================================================================
+SYSTEM REVIEW — Averis x Monash Shipping Document Verification
+Files reviewed: server.py, pipeline/*.py, frontend/src/App.jsx,
+supabase_schema.sql, submission.json, basicTechStack.md
+Data verified against: sdoc-hackathon-bundle (520 real emails)
+====================================================================
+
+DATA FACTS (grounded against the actual bundle)
+--------------------------------------------------------------------
+- 520 emails: 394 with 0 attachments, 124 with exactly 2,
+  2 with exactly 1 (email_507, email_509 — SI only). Never >2.
+- Attachments are always [SI, BL] in that order. No missing or
+  zero-byte files. Edge cases live in emails 501–520:
+  wrong doc type (501), two truncated PDFs (~770 bytes, 511/515),
+  three scanned PDFs with no text layer (512/513/514).
+
+
+====================================================================
+1. LOGICAL ISSUES (pipeline / scoring-critical)
+====================================================================
+
+A. email_501 (the wrong_doc_type case) is misclassified and never
+   reaches the wrong-doc check.
+   File: pipeline/ai_engine.py (classify_email), pipeline/main.py
+   The rule "INVOICE" in text -> INVOICE_QUERY fires because the body
+   says "attached the SI and the Commercial Invoice". process_email
+   then returns early with status OK, so check_wrong_doc_type is dead
+   code for the one email it was written for. Confirmed: email_501 is
+   the only 2-attachment email not rule-classified as BL_COMPARISON.
+
+B. pipeline/main.py crashes on every BL_COMPARISON email.
+   File: pipeline/main.py line ~87
+   compare_fields returns 3 values (defect_fields, is_missing_value,
+   comparisons) but main.py unpacks only 2 -> ValueError. The batch
+   runner cannot currently produce a submission. (server.py unpacks
+   correctly.) The existing submission.json has only 3 entries; the
+   sample requires all 520.
+
+C. Classification rules are unreachable for 381/520 emails.
+   The rule block is gated on has_attachments, but nearly every
+   INVOICE_QUERY ("LOCAL CHARGES", "Total Freight", "D & D charges")
+   and SI_REQUEST ("REQUEST SI", "SI NEEDED") has NO attachment.
+   All 381 no-attachment emails go to the LLM with max_tokens=10,
+   sequential, 30s timeout, no cache — and on any API error they
+   silently become GENERAL. This is 30% of the score (Stage-1
+   macro-F1) riding on the flakiest path.
+
+D. "SI" in text / "BL" in text are substring checks, not word matches.
+   "SI" matches SINGAPORE, SIN525534192, MISSING, BILLING, BUSINESS;
+   carrier "ONE" matches PAPERONE, ZONE. Root cause of the filter
+   problems in section 3.
+
+E. SI/BL role detection is fragile.
+   File: server.py line ~126
+   "SI" in path1.upper() is true for any path containing "SI" — fine
+   for this bundle, but "SHIPPING INSTRUCTION" in text1 would also
+   match a BL that mentions "as per shipping instruction". Since the
+   bundle's attachment order is reliable, use the filename suffix
+   _SI / _BL explicitly.
+
+F. is_blank_or_missing flags ANY value containing "?".
+   File: pipeline/comparator.py line ~19
+   Reasonable for "???" but sends legit OCR artefacts like
+   "BALL & DOGGETT (AUST?) PTY" to NEEDS_REVIEW. Also "none" in
+   BLANK_PATTERNS could flag a company literally named NONE.
+   clean_gross_weight replaces 'kg' before 'kgs' and 'mt' before
+   'mts', leaving a stray 's' ("113,970 KGS" -> "113970s") — the
+   digit regex saves it by accident, but order matters.
+
+G. AI extraction failures produce "ERROR" in all 7 fields.
+   If SI and BL extraction both fail, all fields compare equal ->
+   status OK with zero defects. A transient API failure yields a
+   false "all fields match". "ERROR" should be treated as
+   unreadable / NEEDS_REVIEW.
+
+H. /api/verify runs the AI reasoning call even when is_missing_val
+   is already decided — wasted latency (2 extraction calls +
+   1 reasoning call, up to ~90s worst case).
+
+
+====================================================================
+2. DATA SYNC ISSUES (frontend <-> backend state)
+====================================================================
+
+A. Verification results are never persisted anywhere.
+   /api/verify is stateless and takes only si_text/bl_text — no
+   email_id. RESOLUTIONS_STORE is keyed by whatever selectedEmail the
+   frontend happened to have, with no server-side link to the verdict
+   being resolved. When Supabase is added there is nothing to insert
+   into `verifications` — the schema expects si_data, bl_data,
+   discrepancies, status per email_id, but the backend never
+   associates those with an email.
+
+B. Discrepancy Center state is purely client-side and lost on
+   navigation. It renders from the in-memory `result`; pick another
+   email and the mismatch disappears. /api/resolutions exists but the
+   frontend never calls it, so a reload shows nothing resolved.
+
+C. Search-as-you-type races.
+   File: frontend/src/App.jsx (inbox + missing-bills onChange)
+   Every keystroke fires a fetch with no debounce or cancellation.
+   A slow earlier response for "a" can land after the response for
+   "abc" and overwrite the list.
+
+D. The three in-memory stores (RESOLUTIONS_STORE, CORRUPTED_STORE,
+   CHASERS_STORE) reset on every backend restart — expected pre-DB,
+   but the frontend shows "Resolution Approved & Logged!" with no
+   indication it is ephemeral.
+
+E. Stale state leaks between emails.
+   loadEmailData resets result/resolveSuccess but NOT resolutions,
+   resolutionNotes, chaseSuccess, corruptSuccess. Notes typed for
+   email A can be submitted with email B.
+
+F. /api/email/{id} blocks the whole server.
+   It is async def but calls the synchronous OpenAI client
+   (classify_email) inline -> the event loop stalls up to 30s per
+   click, and other panel fetches queue behind it. Use plain `def`
+   (FastAPI threadpool) or run_in_threadpool.
+
+
+====================================================================
+3. DATA FILTER ISSUES
+====================================================================
+
+A. Missing Bills flags 272 of 520 emails (52%).
+   File: server.py (/api/missing-bills)
+   Because of substring 'SI' in subj, it catches "MISSING GR",
+   "RAK BILLING", "Total Freight" etc. The tracker is effectively
+   "every email without a BL attachment". Carrier detection labels
+   many as ONE via PAPERONE.
+
+B. Inbox Explorer silently caps at 100.
+   /api/inbox defaults limit=100; the frontend never passes `page`,
+   so the header reads "Inbox Explorer (100 Emails)" under a line
+   saying 520 emails. `total` is returned but ignored.
+
+C. /api/corrupted misses email_507/509 (1 attachment, SI only)
+   unless "BL" appears in the subject — 509's subject is
+   "AFRT - CALLAO_PERU - YM(...)" (no "BL") -> not flagged.
+   Meanwhile /api/email/{id} DOES flag them as missing_attachment.
+   Two endpoints, two different definitions of "corrupted".
+
+D. /api/corrupted uses "SCANNED COPY" / "NO OCR TEXT LAYER" string
+   checks that never match anything (scanned PDFs just extract 0
+   chars); they are caught by the <10-char fallback instead. Harmless
+   but produces misleading labels.
+
+E. check_wrong_doc_type tests "PACKING LIST" / "COMMERCIAL INVOICE"
+   on the concatenated text, gated on neither doc containing
+   "BILL OF LADING" or "SHIPPING INSTRUCTION". Works for this bundle
+   but brittle if doc headers change. Low priority.
+
+
+====================================================================
+4. DATA STORING ISSUES
+====================================================================
+
+A. CORRUPTED_STORE.updated_at is the mtime of the inbox JSON file,
+   not the time of the action. Also payload: dict is unvalidated —
+   a missing email_id -> os.path.join(..., "None.json") ->
+   FileNotFoundError -> 500.
+   File: server.py (/api/corrupted/resolve)
+
+B. /api/corrupted re-parses every PDF/XLSX/DOCX on every call
+   (and iterates hardcoded range(1, 521)). Called on app load.
+   Should be computed once and cached / stored.
+
+C. Timestamps are local strings (time.strftime), not ISO/UTC —
+   will mismatch Supabase TIMESTAMPTZ columns.
+
+D. Status vocabularies do not agree across layers:
+   - backend /api/verify:      OK | MISMATCH | NEEDS_REVIEW
+   - frontend adds:            RESOLVED
+   - schema comments:          AUTO_VERIFIED | NEEDS_REVIEW |
+                               FLAGGED_MISMATCH | PENDING
+   - schema human_verdict:     APPROVED | REJECTED | RESOLVED
+   - corrupted store:          CARRIER_RE_REQUESTED | MANUAL_OVERRIDE
+   - chasers store:            AWAITING_DRAFT_BL | CHASER_DISPATCHED
+   Pick one set NOW, before the DB locks it in.
+
+E. Schema RLS policy FOR ALL USING (true) on verifications makes the
+   anon key a full read/write/delete key — and VITE_SUPABASE_* vars
+   mean it ships to the browser. Fine for a demo; risky beyond it.
+
+
+====================================================================
+5. OTHER
+====================================================================
+
+- Hardcoded absolute Windows paths (r"c:\averis hackathon\...") in
+  server.py, main.py, ai_engine.py — will break on Render/Linux.
+  Use Path(__file__).parent.
+- Frontend hardcodes http://localhost:8000 in 9 places — needs
+  import.meta.env.VITE_API_URL for Vercel.
+- Duplicate imports in server.py (lines ~8–13 and ~317–320);
+  import os twice.
+- Tech stack mismatch: basicTechStack.md and the sidebar claim
+  Gemini / Kimi K3 / Muse Glimmer; the code uses only
+  meta/llama-3.2-11b-vision-instruct. .env has KIMI_MODEL/MUSE_MODEL
+  that are never read.
+- No requirements.txt — Render cannot build. Needed: fastapi,
+  uvicorn, openai, python-dotenv, pdfplumber, openpyxl,
+  python-docx, tqdm.
+- Git: server.py, pipeline/, supabase_schema.sql are untracked; the
+  root docs were moved to docs/ but the deletions/additions are not
+  staged. .env is correctly ignored.
+
+
+====================================================================
+SUGGESTED PRIORITY ORDER
+====================================================================
+
+1. Fix main.py unpacking (1B) and the email_501 classification order
+   (1A) — both directly affect score; testable against the bundle
+   without any API calls.
+2. Make classification rule-first for ALL emails with word-boundary
+   matching (1C, 1D); treat "ERROR" extraction as NEEDS_REVIEW (1G).
+3. Add email_id to /api/verify and persist the verdict server-side;
+   have the Discrepancy Center read from /api/resolutions — this is
+   the seam Supabase will plug into.
+4. Fix filters: word-boundary in Missing Bills, unify the "corrupted"
+   definition across endpoints, wire up inbox pagination/total.
+5. Debounce searches, reset stale state on email change, make
+   /api/email non-blocking.
+6. Paths / env vars / requirements.txt for deployment.

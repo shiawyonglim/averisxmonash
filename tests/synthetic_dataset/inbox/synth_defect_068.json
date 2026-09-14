@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_068",
+  "from": "agent@one.com",
+  "subject": "TO CONFIRM DOCS _ OC-2758 _ BUSAN _ NIPPON PAPER INDUSTRIES CO., LTD _ BKG451317",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_068_SI.txt",
+    "attachments/synth_defect_068_BL.txt"
+  ]
+}

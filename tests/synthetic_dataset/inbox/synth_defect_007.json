@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_007",
+  "from": "agent@pil.com",
+  "subject": "TO CONFIRM DOCS _ OC-3712 _ JEBEL ALI _ AL BUSTAN PACKAGING FACTORY LLC _ BKG856215",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_007_SI.txt",
+    "attachments/synth_defect_007_BL.txt"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_096",
+  "from": "agent@one.com",
+  "subject": "TO CONFIRM DOCS _ OC-6886 _ ROTTERDAM _ AL BUSTAN PACKAGING FACTORY LLC _ BKG423404",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_096_SI.txt",
+    "attachments/synth_defect_096_BL.txt"
+  ]
+}

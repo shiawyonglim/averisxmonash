@@ -1,0 +1,76 @@
+# Environment & Secrets
+.env
+.env.*
+*.env
+!.env.example
+kimik3.txt
+muse-glimmer.txt
+glm5-3.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+.venv/
+ENV/
+
+# Node / Frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+dist/
+dist-ssr/
+*.local
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Windows reserved-name artifact (cannot be opened by git)
+frontend/nul.css
+
+# Local smoke-test logs
+server_smoke.log
+*.log
+
+# LLM response cache
+.cache/
+
+# Organizers' answer key + data generator (kept on disk for local scoring,
+# never committed to a public submission repo)
+sdoc-hackathon-docker/data_v2/ground_truth.json
+sdoc-hackathon-docker/data_v2/generate.py
+sdoc-hackathon-docker/data_v2/edgecases.py
+sdoc-hackathon-docker/data_v2/pools.py
+sdoc-hackathon-docker/data_v2/render.py
+sdoc-hackathon-docker/data_v2/emails.py
+sdoc-hackathon-docker/data_v2/shipment.py
+sdoc-hackathon-docker/data_v2/README.md
+
+
+# Runtime document-edit backups (server.py writes snapshots here)
+sdoc-hackathon-bundle/_backups/

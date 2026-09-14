@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_edge_025",
+  "from": "shipper@april.com",
+  "subject": "TO CONFIRM DOCS _ OC-7364 _ BARCELONA _ BKG538555",
+  "body": "Please find attached docs for your processing.",
+  "attachments": [
+    "attachments/synth_edge_025_SI.txt",
+    "attachments/synth_edge_025_PACKING_LIST.txt"
+  ]
+}

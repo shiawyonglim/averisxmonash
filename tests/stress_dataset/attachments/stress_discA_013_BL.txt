@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: ONE
+Bill of Lading No.: BKG243531
+
+Shipper:
+CELLULOSE TRADING S.A.
+AVENIDA PAULISTA 1000, SÃO PAULO, BRAZIL
+
+Consignee:
+PAPELERÍA NACIONAL S.A. DE C.V.
+AV. INSURGENTES SUR 1602, CDMX, MÉXICO
+
+Notify Party:
+NIPPON EXPRESS CO., LTD
+TOKYO, JAPAN
+
+Port of Loading: PORT KLANG (WESTPORT), MALAYSIA (MYPKG)
+Port of Discharge: BUSAN, SOUTH KOREA (KRPUS)
+Total Containers: 10 x 40'HC
+Gross Weight: 35,226 KGS
+Reference OC: OC-9156
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

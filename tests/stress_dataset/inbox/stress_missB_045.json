@@ -1,0 +1,9 @@
+{
+  "email_id": "stress_missB_045",
+  "from": "ops@pil.com",
+  "subject": "TO CONFIRM DOCS _ OC-1635 _ ROTTERDAM _ BKG491504",
+  "body": "Please review the attached draft BL. (Attachment missing in email payload)",
+  "attachments": [
+    "attachments/stress_missB_045_SI.txt"
+  ]
+}

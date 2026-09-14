@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: OOCL
+Bill of Lading No.: BKG185561
+
+Shipper:
+SÜD PAPIER GMBH
+HAFENSTRASSE 12, 20457 HAMBURG, GERMANY
+
+Consignee:
+MÜLLER LOGISTIK AG
+BAHNHOFSTRASSE 45, ZÜRICH, SWITZERLAND
+
+Notify Party:
+UAB NOVAKOPA
+VILNIUS, LITHUANIA
+
+Port of Loading: BELAWAN, INDONESIA (IDBLW)
+Port of Discharge: BARCELONA, SPAIN (ESBCN)
+Total Containers: 2 x 40'HC
+Gross Weight: 18,354 KGS
+Reference OC: OC-5680
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

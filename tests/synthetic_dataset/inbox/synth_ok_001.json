@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_ok_001",
+  "from": "ops@maersk.com",
+  "subject": "TO CONFIRM DOCS _ OC-2679 _ JEBEL ALI _ MOORIM SP CO., LTD _ BKG809570",
+  "body": "Please find attached SI and draft BL for confirmation.\n\nBest regards,\nOperations Desk",
+  "attachments": [
+    "attachments/synth_ok_001_SI.txt",
+    "attachments/synth_ok_001_BL.txt"
+  ]
+}

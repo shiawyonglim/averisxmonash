@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: MAERSK
+Bill of Lading No.: BKG212306
+Shipper: PT RIAU ANDALAN PULP AND PAPER
+Consignee: AL BUSTAN PACKAGING FACTORY LLC
+Notify Party: UAB NOVAKOPA
+Port of Loading: PENANG, MALAYSIA (MYPEN)
+Port of Discharge: JEBEL ALI, UNITED ARAB EMIRATES (AEJEA)
+Total Containers: 3 x 40'HC
+Gross Weight: 36,258 KGS
+Remarks: Shipper verbally requested 1 containers — pls confirm 3.

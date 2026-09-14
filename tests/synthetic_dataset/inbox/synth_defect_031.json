@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_031",
+  "from": "agent@one.com",
+  "subject": "TO CONFIRM DOCS _ OC-2929 _ BARCELONA _ MOORIM SP CO., LTD _ BKG374492",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_031_SI.txt",
+    "attachments/synth_defect_031_BL.txt"
+  ]
+}

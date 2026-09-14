@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: HAPAG-LLOYD
+Bill of Lading No.: BKG797670
+
+Shipper:
+CELLULOSE TRADING S.A.
+AVENIDA PAULISTA 1000, SÃO PAULO, BRAZIL
+
+Consignee:
+PAPELERÍA NACIONAL S.A. DE C.V.
+AV. INSURGENTES SUR 1602, CDMX, MÉXICO
+
+Notify Party:
+N/A
+
+
+Port of Loading: PORT KLANG (WESTPORT), MALAYSIA (MYPKG)
+Port of Discharge: BARCELONA, SPAIN (ESBCN)
+Total Containers: 8 x 40'HC
+Gross Weight: TBD KGS
+Reference OC: OC-2760
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: MSC
+Bill of Lading No.: BKG642762
+
+Shipper:
+CELLULOSE TRADING S.A.
+AVENIDA PAULISTA 1000, SÃO PAULO, BRAZIL
+
+Consignee:
+MÜLLER LOGISTIK AG
+BAHNHOFSTRASSE 45, ZÜRICH, SWITZERLAND
+
+Notify Party:
+NIPPON EXPRESS CO., LTD
+TOKYO, JAPAN
+
+Port of Loading: SINGAPORE, SINGAPORE (SGSIN)
+Port of Discharge: CALLAO, PERU (PECLL)
+Total Containers: 10 x 40'HC
+Gross Weight: 46,314 KGS
+Reference OC: OC-2785
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

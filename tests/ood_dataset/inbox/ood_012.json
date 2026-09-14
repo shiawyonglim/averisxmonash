@@ -1,0 +1,7 @@
+{
+  "email_id": "ood_012",
+  "from": "export-ops@velum-logistics.example",
+  "subject": "Action required — shipment file for TPEB-00924",
+  "body": "Hello,\n\nCould you please file the shipping instruction with the carrier for booking TPEB-00924? The vessel cutoff is Friday.\n\nThanks,\nExport Ops",
+  "attachments": []
+}
