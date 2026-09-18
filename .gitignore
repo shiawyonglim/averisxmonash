@@ -4,6 +4,7 @@
 *.env
 kimik3.txt
 muse-glimmer.txt
+glm5-3.txt
 
 # Python
 __pycache__/
@@ -47,3 +48,9 @@ dist-ssr/
 *.swo
 .DS_Store
 Thumbs.db
+
+# Windows reserved-name artifact (cannot be opened by git)
+frontend/nul.css
+
+# Local smoke-test logs
+server_smoke.log

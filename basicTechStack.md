@@ -10,16 +10,15 @@
 - **Cloud Host:** Render
 - **Job:** Runs the AI pipeline, handles API requests, and manages database operations. Render keeps this code running on the internet all day.
 
-## AI Engine (The Multi-Model Brain)
-- **Primary Vision & Text:** Google Gemini (Gemini 2.5 Flash / Flash-Lite)
-- **NVIDIA NIM Multimodal:** Moonshot AI `kimi-k3` (Long-context visual reasoning for complex PDF scans & tables)
-- **NVIDIA NIM Fast Inference:** Meta `muse-glimmer-30b` (High-speed document entity extraction & discrepancy reasoning)
+## AI Engine (The Brain)
+- **Current implementation:** NVIDIA NIM `meta/llama-3.2-11b-vision-instruct` handles all three AI tasks — email classification, seven-field document extraction, and discrepancy reasoning.
+- **Model is swappable:** select a different model via the `AI_MODEL` or `MUSE_MODEL` env var. Google Gemini, Moonshot `kimi-k3`, and `muse-glimmer` keys exist in `.env` but are not yet wired into the pipeline.
 - **Job:** Reads messy PDF scans, Excel tables, Word docs, and plain text; extracts the seven shipping fields; classifies emails into categories; and compares SI vs BL with strict discrepancy verification.
 
 ## Database (Data Storage)
 - **Tool:** Supabase (managed PostgreSQL)
 - **Cloud Host:** Supabase Cloud (free tier)
-- **Job:** Stores email processing results, comparison outcomes, audit trail of all verifications, and user review decisions. Provides a REST API out of the box.
+- **Job:** Stores email processing results, comparison outcomes, audit trail of all verifications, and user review decisions. (Not yet wired up — frontend and backend are being tested against the local bundle first.) Provides a REST API out of the box.
 
 ## Document Parsing (File Readers)
 - **Tools:**
