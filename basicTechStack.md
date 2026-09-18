@@ -10,9 +10,11 @@
 - **Cloud Host:** Render
 - **Job:** Runs the AI pipeline, handles API requests, and manages database operations. Render keeps this code running on the internet all day.
 
-## AI Engine (The Brain)
-- **Tool:** Google Gemini (Vision LLM)
-- **Job:** Reads messy PDF scans and structured documents, extracts the seven shipping fields, classifies emails into categories, and compares SI vs BL for mismatches.
+## AI Engine (The Multi-Model Brain)
+- **Primary Vision & Text:** Google Gemini (Gemini 2.5 Flash / Flash-Lite)
+- **NVIDIA NIM Multimodal:** Moonshot AI `kimi-k3` (Long-context visual reasoning for complex PDF scans & tables)
+- **NVIDIA NIM Fast Inference:** Meta `muse-glimmer-30b` (High-speed document entity extraction & discrepancy reasoning)
+- **Job:** Reads messy PDF scans, Excel tables, Word docs, and plain text; extracts the seven shipping fields; classifies emails into categories; and compares SI vs BL with strict discrepancy verification.
 
 ## Database (Data Storage)
 - **Tool:** Supabase (managed PostgreSQL)
