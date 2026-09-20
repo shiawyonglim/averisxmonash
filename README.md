@@ -22,7 +22,11 @@ For every email in `sdoc-hackathon-bundle/inbox/`:
    BL) short-circuit to `NEEDS_REVIEW` with a `review_reason`.
 3. **Extract** — an LLM (NVIDIA NIM, `meta/llama-3.2-11b-vision-instruct` by
    default, swappable via env vars) reads `.txt` / `.pdf` / `.xlsx` / `.docx`
-   attachments and extracts the 7 fields.
+   attachments and extracts the 7 fields. Camera photos / scans of paper
+   documents (`.png` / `.jpg` / `.jpeg` / `.webp` / `.gif` / `.bmp` / `.tif`)
+   go through the same model's vision pass — handwriting, stamps, skew and
+   poor lighting included — which also reports document type, legibility and
+   a transcription.
 4. **Compare** — SI vs BL with per-field normalization (company-name
    punctuation, UN/LOCODE stripping, weight/count numeric extraction).
    Writing-style variations are accepted; value differences are flagged.
@@ -45,7 +49,8 @@ pipeline/
   comparator.py         7-field normalization + comparison logic
   edge_cases.py         Attachment/doc-type/unreadable checks
   parsers.py            Text extraction for txt/pdf/xlsx/docx
-frontend/               React 19 + Vite UI (dashboard, queue, verify, audit)
+frontend/               React 19 + Vite UI (dashboard, queue, verify,
+                        paper scan, audit)
 sdoc-hackathon-bundle/  Dataset: inbox/ (520 emails) + attachments/
 supabase_schema.sql     Postgres schema (verifications + audit_logs)
 submission.json         Pipeline output for all 520 emails
@@ -111,6 +116,7 @@ by the organizers' `score_cli.py`.
 |---|---|
 | `GET /api/inbox`, `/api/emails`, `/api/email/{id}` | Browse the inbox |
 | `POST /api/verify`, `GET /api/compare` | Run/inspect verification |
+| `POST /api/verify/scan` | Paper mode: multipart upload of SI + BL photos/scans (`si_file`, `bl_file`) — vision extraction + same 7-field audit |
 | `GET /api/queue`, `/api/stats` | Work queue + dashboard stats |
 | `POST /api/resolve`, `GET /api/resolutions` | Human resolution workflow |
 | `GET /api/corrupted`, `POST /api/corrupted/resolve` | Corrupted-attachment handling |
