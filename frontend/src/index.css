@@ -373,3 +373,406 @@ button:disabled {
   border-color: var(--primary-color);
   background: rgba(89, 121, 40, 0.08);
 }
+
+/* ============================================================ */
+/* NEW WORKFLOW & UX STYLES                                     */
+/* ============================================================ */
+
+/* Status & Diff Chips */
+.diff-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.diff-chip-match {
+  background: #e8f5e9;
+  color: #1b5e20;
+  border: 1px solid #c8e6c9;
+}
+
+.diff-chip-style {
+  background: #fff8e1;
+  color: #b78103;
+  border: 1px solid #ffe082;
+}
+
+.diff-chip-defect {
+  background: #ffebee;
+  color: #c62828;
+  border: 1px solid #ffcdd2;
+}
+
+/* Queue Navigator Widget */
+.queue-nav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 10px 18px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+
+.queue-nav-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.queue-nav-btn {
+  background: #f4efe6;
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+  box-shadow: none;
+}
+
+.queue-nav-btn:hover:not(:disabled) {
+  background: var(--primary-color);
+  color: #ffffff;
+  border-color: var(--primary-color);
+}
+
+.queue-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Operational Cutoff Progress Meter */
+.progress-card {
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+}
+
+.progress-bar-bg {
+  width: 100%;
+  height: 10px;
+  background: #f0eae1;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-light-green), var(--primary-color));
+  border-radius: 6px;
+  transition: width 0.4s ease;
+}
+
+/* Contextual Action Cards */
+.action-card {
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.action-card.chaser {
+  border-top: 5px solid #e07a5f;
+}
+
+.action-card.corrupt {
+  border-top: 5px solid #c62828;
+}
+
+.email-preview-box {
+  background: #f9f8f6;
+  border: 1px solid #e6dfd5;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: #333;
+}
+
+.btn-primary-next {
+  background: var(--primary-color);
+  color: #ffffff;
+  font-size: 0.92rem;
+  font-weight: 700;
+  padding: 12px 24px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.btn-primary-next:hover {
+  background: #465f1f;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(89, 121, 40, 0.25);
+}
+
+/* ============================================================ */
+/* Auto-Draft Email & Google SMTP Modal                         */
+/* ============================================================ */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modal-container {
+  background: #ffffff;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 680px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color);
+  animation: modalSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.modal-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fbf9f6;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  color: var(--primary-color);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+  color: #777;
+  padding: 0;
+  box-shadow: none;
+  line-height: 1;
+}
+
+.modal-close-btn:hover {
+  color: #111;
+  background: transparent;
+}
+
+.modal-body {
+  padding: 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.email-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.email-form-group label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.email-input {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  font-size: 0.95rem;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.email-input:focus, .email-textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(89, 121, 40, 0.15);
+}
+
+.email-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  font-size: 0.92rem;
+  font-family: inherit;
+  line-height: 1.6;
+  resize: vertical;
+  min-height: 180px;
+  box-sizing: border-box;
+}
+
+.smtp-accordion {
+  border: 1px solid #ebd9c8;
+  border-radius: 8px;
+  background: #fdfaf6;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.smtp-accordion-header {
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-brown);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  user-select: none;
+}
+
+.smtp-accordion-content {
+  padding: 14px;
+  border-top: 1px solid #ebd9c8;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  background: #ffffff;
+}
+
+.modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-color);
+  background: #fbf9f6;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ============================================================ */
+/* Cloud Repository ("Differentiate Emails") Styles            */
+/* ============================================================ */
+.cloud-header-banner {
+  background: linear-gradient(135deg, #2b580c 0%, #466b1a 100%);
+  color: #ffffff;
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  box-shadow: 0 4px 16px rgba(43, 88, 12, 0.15);
+}
+
+.cloud-metrics-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.cloud-badge-synced {
+  background: #e6f4ea;
+  color: #137333;
+  border: 1px solid #ceead6;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cloud-badge-pending {
+  background: #f1f3f4;
+  color: #5f6368;
+  border: 1px solid #dadce0;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cloud-badge-resolved {
+  background: #e8f0fe;
+  color: #1a73e8;
+  border: 1px solid #d2e3fc;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cloud-cache-banner {
+  background: #e8f5e9;
+  border: 1px solid #a5d6a7;
+  color: #1b5e20;
+  padding: 10px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 0.88rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+
