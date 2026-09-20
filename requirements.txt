@@ -7,3 +7,5 @@ openpyxl
 python-docx
 tqdm
 pydantic
+pillow
+python-multipart
