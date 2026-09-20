@@ -18,18 +18,28 @@ STOPWORDS = {
 }
 
 _EMAIL_ID_RX = re.compile(r"email_(\d{1,4})", re.IGNORECASE)
-_BARE_NUM_RX = re.compile(r"\b(\d{1,4})\b")
+_PREFIXED_NUM_RX = re.compile(r"(?:\b(?:email|mail|record|id)|#)[\s_#]*(\d{1,4})", re.IGNORECASE)
 
 _DOCS_CACHE = {}
+_INDEX_CACHE = {}
 
 
 def invalidate_cache():
     _DOCS_CACHE.clear()
+    _INDEX_CACHE.clear()
+
+
+def _signature(verdicts, classifications, resolutions):
+    v_sig = tuple(sorted(
+        (k, (v or {}).get("status"), tuple((v or {}).get("defect_fields") or ()))
+        for k, v in verdicts.items()
+    ))
+    return (v_sig, tuple(sorted(classifications.items())), tuple(sorted(resolutions.keys())))
 
 
 def build_documents(inbox_dir, verdicts, classifications, resolutions):
     files = sorted([f for f in os.listdir(inbox_dir) if f.endswith('.json')])
-    key = (len(files), len(verdicts), len(classifications), len(resolutions))
+    key = (len(files),) + _signature(verdicts, classifications, resolutions)
     if _DOCS_CACHE.get("key") == key and _DOCS_CACHE.get("docs") is not None:
         return _DOCS_CACHE["docs"]
 
@@ -62,6 +72,7 @@ def build_documents(inbox_dir, verdicts, classifications, resolutions):
         })
 
     _DOCS_CACHE.clear()
+    _INDEX_CACHE.clear()
     _DOCS_CACHE["key"] = key
     _DOCS_CACHE["docs"] = docs
     return docs
@@ -157,7 +168,7 @@ def retrieve(query, docs, k=8):
     forced_ids = set()
     for m in _EMAIL_ID_RX.finditer(q_lower):
         forced_ids.add(f"email_{int(m.group(1)):03d}")
-    for m in _BARE_NUM_RX.finditer(q_lower):
+    for m in _PREFIXED_NUM_RX.finditer(q_lower):
         forced_ids.add(f"email_{int(m.group(1)):03d}")
 
     boost_predicates = [pred for kws, pred in _STATUS_CATEGORY_BOOSTS if any(kw in q_lower for kw in kws)]
@@ -166,17 +177,21 @@ def retrieve(query, docs, k=8):
     if N == 0:
         return []
 
-    doc_tokens = []
-    df = Counter()
-    for d in docs:
-        subj = _tokenize(d["subject"])
-        meta = _tokenize(_meta_text(d))
-        body = _tokenize(d["body"])
-        doc_tokens.append((subj, meta, body))
-        for t in set(subj + meta + body):
-            df[t] += 1
-
-    idf = {t: math.log(1 + N / (1 + cnt)) for t, cnt in df.items()}
+    idx = _INDEX_CACHE.get(id(docs))
+    if idx is None:
+        doc_tokens = []
+        df = Counter()
+        for d in docs:
+            subj = _tokenize(d["subject"])
+            meta = _tokenize(_meta_text(d))
+            body = _tokenize(d["body"])
+            doc_tokens.append((subj, meta, body))
+            for t in set(subj + meta + body):
+                df[t] += 1
+        idf = {t: math.log(1 + N / (1 + cnt)) for t, cnt in df.items()}
+        idx = (doc_tokens, idf)
+        _INDEX_CACHE[id(docs)] = idx
+    doc_tokens, idf = idx
 
     scored = []
     for i, d in enumerate(docs):

@@ -461,8 +461,14 @@ function App() {
   const [cloudPage, setCloudPage] = useState(1)
   const [cloudSyncInfo, setCloudSyncInfo] = useState(null)
 
-  // ---- Navigation: 'dashboard' | 'queue' | 'verify' | 'cloud' | 'scan' | 'audit' | 'pipeline' ----
+  // ---- Navigation: 'dashboard' | 'chat' | 'queue' | 'verify' | 'cloud' | 'scan' | 'audit' | 'pipeline' ----
   const [view, setView] = useState('dashboard')
+
+  // ---- Chat Assistant ----
+  const [chatMessages, setChatMessages] = useState([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
+  const chatEndRef = useRef(null)
 
   // ---- Dashboard ----
   const [stats, setStats] = useState(null)
@@ -644,6 +650,23 @@ function App() {
       .catch(err => console.error('Failed to fetch pipeline status:', err))
   }, [view])
 
+  // Submission records for the export table — cached, selectable per-email
+  const loadSubmissionRecords = useCallback(async () => {
+    setSubLoading(true)
+    try {
+      const res = await fetch(`${API}/api/pipeline/submission`)
+      if (!res.ok) throw new Error(`Server error: ${res.status}`)
+      const data = await res.json()
+      const sub = data.submission ?? data
+      setSubmissionData(sub)
+      setSelectedEmails(new Set(Object.keys(sub)))
+    } catch (err) {
+      setPipelineMsg(`Could not load submission records: ${err.message}`)
+    } finally {
+      setSubLoading(false)
+    }
+  }, [])
+
   // Pipeline polling — every 2s while running, cleaned up on stop/unmount
   useEffect(() => {
     if (!pipelineRunning) return undefined
@@ -683,23 +706,6 @@ function App() {
       setCompareError(err.message)
     } finally {
       setCompareLoading(false)
-    }
-  }, [])
-
-  // Submission records for the export table — cached, selectable per-email
-  const loadSubmissionRecords = useCallback(async () => {
-    setSubLoading(true)
-    try {
-      const res = await fetch(`${API}/api/pipeline/submission`)
-      if (!res.ok) throw new Error(`Server error: ${res.status}`)
-      const data = await res.json()
-      const sub = data.submission ?? data
-      setSubmissionData(sub)
-      setSelectedEmails(new Set(Object.keys(sub)))
-    } catch (err) {
-      setPipelineMsg(`Could not load submission records: ${err.message}`)
-    } finally {
-      setSubLoading(false)
     }
   }, [])
 
@@ -927,6 +933,49 @@ function App() {
     setQueueSearch('')
     setView('queue')
   }
+
+  // ============================================================
+  // CHAT ASSISTANT HANDLERS
+  // ============================================================
+
+  const sendChat = async (text) => {
+    const message = (text !== undefined ? text : chatInput).trim()
+    if (!message || chatLoading) return
+    const history = chatMessages.map(m => ({ role: m.role, content: m.content }))
+    setChatMessages(prev => [...prev, { role: 'user', content: message }])
+    setChatInput('')
+    setChatLoading(true)
+    try {
+      const res = await fetch(`${API}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, history }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.detail || `Server error: ${res.status}`)
+      setChatMessages(prev => [...prev, {
+        role: 'assistant',
+        content: data.answer,
+        sources: data.sources || [],
+        degraded: data.degraded,
+      }])
+    } catch (err) {
+      setChatMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `⚠️ Failed to reach the assistant: ${err.message}`,
+        sources: [],
+        degraded: true,
+      }])
+    } finally {
+      setChatLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (view === 'chat' && chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [chatMessages, chatLoading, view])
 
   const handleVerify = async () => {
     if (!selectedEmail) {
@@ -1283,6 +1332,13 @@ function App() {
           </button>
 
           <button
+            className={`sidebar-btn ${view === 'chat' ? 'active' : ''}`}
+            onClick={() => setView('chat')}
+          >
+            <span>💬 Assistant</span>
+          </button>
+
+          <button
             className={`sidebar-btn ${view === 'queue' ? 'active' : ''}`}
             onClick={() => setView('queue')}
           >
@@ -1491,6 +1547,96 @@ function App() {
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* ========================================================== */}
+        {/* VIEW: CHAT ASSISTANT                                       */}
+        {/* ========================================================== */}
+        {view === 'chat' && (
+          <div className="chat-shell">
+            <div className="page-header">
+              <h1>Assistant</h1>
+              <p>Ask questions about the 520-email inbox, verification verdicts, and resolutions — answers are grounded in the knowledge base.</p>
+            </div>
+
+            <div className="chat-messages">
+              {chatMessages.length === 0 && (
+                <div className="chat-empty">
+                  <h3>What would you like to know?</h3>
+                  <p>Ask about counts, statuses, defect fields, or a specific email.</p>
+                  <div className="chat-suggestions">
+                    {[
+                      'How many emails have mismatches?',
+                      'What are the most common defect fields?',
+                      'Show me the emails that need human review',
+                      'What went wrong with email_042?',
+                    ].map(q => (
+                      <button key={q} className="chat-chip" onClick={() => sendChat(q)}>
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {chatMessages.map((m, i) => (
+                <div key={i} className={`chat-row ${m.role}`}>
+                  <div className={`chat-bubble ${m.role}`}>
+                    {m.degraded && <div className="chat-degraded-tag">degraded mode</div>}
+                    <div className="chat-text">{m.content}</div>
+                    {m.role === 'assistant' && m.sources && m.sources.length > 0 && (
+                      <div className="chat-sources">
+                        {m.sources.map(s => (
+                          <button
+                            key={s.email_id}
+                            className="chat-source-chip"
+                            title={`${s.subject || ''} — ${s.status || ''}`}
+                            onClick={() => openEmail(s.email_id)}
+                          >
+                            {s.email_id} · {s.status}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {chatLoading && (
+                <div className="chat-row assistant">
+                  <div className="chat-bubble assistant">
+                    <div className="chat-typing">
+                      <span></span><span></span><span></span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            <div className="chat-composer">
+              <textarea
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    sendChat()
+                  }
+                }}
+                placeholder="Ask about the inbox… (Enter to send, Shift+Enter for a new line)"
+                disabled={chatLoading}
+                rows={2}
+              />
+              <button
+                className="chat-send"
+                onClick={() => sendChat()}
+                disabled={chatLoading || !chatInput.trim()}
+              >
+                Send
+              </button>
+            </div>
           </div>
         )}
 
