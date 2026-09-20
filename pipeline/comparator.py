@@ -10,13 +10,15 @@ FIELDS_TO_COMPARE = [
     "gross_weight_kg"
 ]
 
-BLANK_PATTERNS = ["???", "_______", "tba", "tbc", "n/a", "____mt", "none", "unknown", ""]
+BLANK_PATTERNS = ["???", "_______", "tba", "tbc", "tbd", "n/a", "____mt", "none", "unknown", ""]
 
 def is_blank_or_missing(val):
     if not val:
         return True
     s = str(val).strip().lower()
     if s in BLANK_PATTERNS or s.startswith("___") or "??" in s:
+        return True
+    if any(k in s for k in ["tbd", "pending", "not determined", "weight not determined", "to be advised", "unassigned"]):
         return True
     return False
 
@@ -26,6 +28,11 @@ def clean_company_name(text):
     text = re.sub(r'^(to the order of|consignee \(non-negotiable\):|consignee:|notify party:|shipper:|shipper/exporter:?)\s*', '', text)
     # Strip address after semicolon if present
     text = text.split(';')[0]
+    # Normalize common corporate entity legal suffixes
+    text = re.sub(r'\bcompany\b', 'co', text)
+    text = re.sub(r'\blimited\b', 'ltd', text)
+    text = re.sub(r'\bcorporation\b', 'corp', text)
+    text = re.sub(r'\bincorporated\b', 'inc', text)
     # Strip common trailing address signposts
     text = re.sub(r'\b(p\.?o\.?\s*box|suite|level|floor|#\d+|road|street|avenue|bldg|building)\b.*$', '', text)
     # Remove punctuation
@@ -49,8 +56,20 @@ def clean_container_count(text):
     return str(text).strip()
 
 def clean_gross_weight(text):
-    # Order matters: replace 'kgs' before 'kg', 'mts' before 'mt'
-    s = str(text).lower().replace('kgs', '').replace('kg', '').replace('mts', '').replace('mt', '')
+    s = str(text).lower().strip()
+    # Check for Metric Tonnes (MT / MTS)
+    if re.search(r'\b(?:mt|mts|metric\s*tonn?es?)\b', s):
+        num_m = re.search(r'(\d+(?:[.,]\d+)?)', s)
+        if num_m:
+            try:
+                val_str = num_m.group(1).replace(',', '.')
+                kg_val = float(val_str) * 1000.0
+                return str(int(round(kg_val)))
+            except ValueError:
+                pass
+
+    # Standard KG
+    s = s.replace('kgs', '').replace('kg', '')
     cleaned = re.sub(r'[,.\s]', '', s)
     match = re.search(r'(\d+)', cleaned)
     if match:
@@ -102,6 +121,17 @@ def compare_fields(si_data, bl_data):
             continue
 
         is_match = (norm_si == norm_bl)
+
+        # Maritime Weight Tolerance: allow <= 1% rounding or tare variance
+        if not is_match and field == "gross_weight_kg":
+            try:
+                w1 = float(norm_si)
+                w2 = float(norm_bl)
+                if max(w1, w2) > 0 and abs(w1 - w2) / max(w1, w2) <= 0.01:
+                    is_match = True
+            except (ValueError, TypeError):
+                pass
+
         # For company names, allow prefix matching if address was included in one
         if not is_match and field in ["shipper", "consignee", "notify_party"]:
             shorter = norm_si if len(norm_si) <= len(norm_bl) else norm_bl

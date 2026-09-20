@@ -135,6 +135,7 @@ def extract_shipping_fields_fast(text):
     """
     Rapid deterministic extraction of the 7 core fields.
     Returns a dict with all 7 fields populated (or empty strings if missing).
+    Supports both inline 'Header: Value' and multi-line 'Header:\nValue'.
     """
     import re
     res = {}
@@ -143,11 +144,33 @@ def extract_shipping_fields_fast(text):
         for pat in pat_list:
             m = re.search(pat, text, re.IGNORECASE | re.MULTILINE)
             if m:
-                val = m.group(1).strip()
-                # Clean up any trailing table cells
-                if '|' in val:
-                    parts = [p.strip() for p in val.split('|') if p.strip()]
-                    val = " ".join(parts)
-                break
+                matched_val = m.group(1).strip()
+                if '|' in matched_val:
+                    parts = [p.strip() for p in matched_val.split('|') if p.strip()]
+                    matched_val = " ".join(parts)
+                if matched_val:
+                    val = matched_val
+                    break
+
+        # Fallback: if value is on the subsequent line (e.g. "Shipper:\nACME CORP")
+        if not val:
+            header_keys = {
+                'shipper': r'(?:shipper(?:/exporter)?|exporter)',
+                'consignee': r'(?:consignee(?:\s*\(non-negotiable\))?|to\s*the\s*order\s*of|to\s*order\s*of)',
+                'notify_party': r'(?:notify\s*party|notify)',
+                'port_of_loading': r'(?:port\s*of\s*loading|load\s*port|\bpol\b)',
+                'port_of_discharge': r'(?:port\s*of\s*discharge|discharge\s*port|\bpod\b)',
+                'container_count': r'(?:total\s*containers?|no\.?\s*of\s*containers?|container\s*count|containers?)',
+                'gross_weight_kg': r'(?:(?:total\s+)?gross\s*weight|(?:total\s+)?gross\s*wt|weight)'
+            }
+            if fld in header_keys:
+                hdr = header_keys[fld]
+                next_line_m = re.search(rf'(?:^|\|)[ \t]*{hdr}[ \t]*[:|]?[ \t]*\n+[ \t]*([^\n|]+)', text, re.IGNORECASE | re.MULTILINE)
+                if next_line_m:
+                    candidate = next_line_m.group(1).strip()
+                    # Don't pick up the next section header as the value
+                    if not any(re.match(rf'^{h}[ \t]*[:|]?', candidate, re.IGNORECASE) for h in header_keys.values()):
+                        val = candidate
+
         res[fld] = val
     return res

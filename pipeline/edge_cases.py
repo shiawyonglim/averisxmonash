@@ -28,7 +28,14 @@ def check_attachments(email_data, bundle_dir):
     # Needs exactly 2 attachments for comparison.
     # If fewer, escalate to missing_attachment only if body notes dropped attachments or still missing BL
     if len(atts) < 2:
-        if any(k in body for k in ["attachments appear to have been dropped", "the draft bl is still missing"]):
+        if any(k in body for k in [
+            "attachments appear to have been dropped",
+            "the draft bl is still missing",
+            "attachment missing",
+            "missing in email",
+            "dropped attachment",
+            "missing attachment"
+        ]):
             return ("NEEDS_REVIEW", "missing_attachment")
         return None
     

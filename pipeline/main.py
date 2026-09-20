@@ -13,7 +13,7 @@ BUNDLE_DIR = os.path.join(BASE_DIR, "sdoc-hackathon-bundle")
 INBOX_DIR = os.path.join(BUNDLE_DIR, "inbox")
 SUBMISSION_PATH = os.path.join(BASE_DIR, "submission.json")
 
-def process_email(email_data):
+def process_email(email_data, bundle_dir=BUNDLE_DIR):
     eid = email_data["email_id"]
     subj = email_data.get("subject", "")
     body = email_data.get("body", "")
@@ -34,7 +34,7 @@ def process_email(email_data):
         }, {}, {}
         
     # 2. Check Edge Cases (Attachments)
-    att_err = check_attachments(email_data, BUNDLE_DIR)
+    att_err = check_attachments(email_data, bundle_dir)
     if att_err:
         return {
             "category": category,
@@ -44,7 +44,7 @@ def process_email(email_data):
             "defect_fields": []
         }, {}, {}
         
-    read_err = check_unreadable(email_data, BUNDLE_DIR)
+    read_err = check_unreadable(email_data, bundle_dir)
     if read_err:
         return {
             "category": category,
@@ -65,8 +65,8 @@ def process_email(email_data):
         
     # Read documents — text parsers for office files, a single vision pass
     # for camera photos/scans of paper documents (incl. handwritten bills).
-    path1 = os.path.join(BUNDLE_DIR, atts[0])
-    path2 = os.path.join(BUNDLE_DIR, atts[1])
+    path1 = os.path.join(bundle_dir, atts[0])
+    path2 = os.path.join(bundle_dir, atts[1])
 
     docs = []
     for p in (path1, path2):
