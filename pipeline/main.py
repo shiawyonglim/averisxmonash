@@ -3,9 +3,9 @@ import json
 import time
 from tqdm import tqdm
 
-from pipeline.parsers import extract_text
+from pipeline.parsers import extract_text, is_image_file, extract_shipping_fields_fast
 from pipeline.edge_cases import check_attachments, check_unreadable, check_wrong_doc_type, is_si_attachment
-from pipeline.ai_engine import classify_email, extract_shipping_fields
+from pipeline.ai_engine import classify_email, extract_shipping_fields, analyze_document_image
 from pipeline.comparator import compare_fields
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -54,17 +54,58 @@ def process_email(email_data):
             "defect_fields": []
         }, {}, {}
         
-    # Read text
-    # Assuming first is SI and second is BL (from standard ordering), 
-    # but we should just pass both to checking logic
+    if len(atts) < 2:
+        return {
+            "category": category,
+            "status": "OK",
+            "review_reason": None,
+            "has_defect": False,
+            "defect_fields": []
+        }, {}, {}
+        
+    # Read documents — text parsers for office files, a single vision pass
+    # for camera photos/scans of paper documents (incl. handwritten bills).
     path1 = os.path.join(BUNDLE_DIR, atts[0])
     path2 = os.path.join(BUNDLE_DIR, atts[1])
-    
-    text1 = extract_text(path1)
-    text2 = extract_text(path2)
-    
+
+    docs = []
+    for p in (path1, path2):
+        if is_image_file(p):
+            fields, meta = analyze_document_image(p)
+            docs.append({"path": p, "fields": fields, "meta": meta,
+                         "text": meta.get("transcription", "")})
+        else:
+            docs.append({"path": p, "fields": None, "meta": {},
+                         "text": extract_text(p)})
+
+    # An illegible photo escalates the same way as an unreadable file
+    if any(d["meta"].get("legibility") == "ILLEGIBLE" for d in docs):
+        return {
+            "category": category,
+            "status": "NEEDS_REVIEW",
+            "review_reason": "unreadable",
+            "has_defect": False,
+            "defect_fields": []
+        }, {}, {}
+
+    # Vision-reported doc types catch paper wrong-docs (e.g. a photographed
+    # commercial invoice) that the text keyword check cannot see.
+    KNOWN_PAPER_TYPES = (
+        "SHIPPING_INSTRUCTION", "BILL_OF_LADING", "DRAFT_BILL_OF_LADING",
+        "SI", "BL", "OTHER", "UNKNOWN"
+    )
+    if any((d["meta"].get("document_type") or "").upper().replace(" ", "_") not in KNOWN_PAPER_TYPES
+           and d["meta"].get("document_type") for d in docs):
+        return {
+            "category": category,
+            "status": "NEEDS_REVIEW",
+            "review_reason": "wrong_doc_type",
+            "has_defect": False,
+            "defect_fields": []
+        }, {}, {}
+
     # Check Wrong Doc Type
-    wrong_doc_err = check_wrong_doc_type(text1, text2)
+    wrong_doc_err = check_wrong_doc_type(docs[0]["text"], docs[1]["text"])
     if wrong_doc_err:
         return {
             "category": category,
@@ -73,16 +114,23 @@ def process_email(email_data):
             "has_defect": False,
             "defect_fields": []
         }, {}, {}
-        
-    # 3. Determine which is SI and which is BL (filename-first detection)
-    if is_si_attachment(path1, text1):
-        si_text, bl_text = text1, text2
+
+    # 3. Determine which is SI and which is BL (filename-first detection;
+    #    for photos the vision-reported document_type acts as the content marker)
+    si_key = docs[0]["meta"].get("document_type") or docs[0]["text"]
+    if is_si_attachment(path1, si_key):
+        si_doc, bl_doc = docs[0], docs[1]
     else:
-        si_text, bl_text = text2, text1
-        
-    # 4. Extract Fields via AI
-    si_fields = extract_shipping_fields(si_text)
-    bl_fields = extract_shipping_fields(bl_text)
+        si_doc, bl_doc = docs[1], docs[0]
+
+    # 4. Extract Fields (Tier 1 fast extraction, fallback to vision fields for photos)
+    def _extract(doc):
+        if doc.get("fields"):
+            return doc["fields"]
+        return extract_shipping_fields_fast(doc["text"])
+
+    si_fields = _extract(si_doc)
+    bl_fields = _extract(bl_doc)
     
     # Extraction failures return "ERROR" placeholders - never treat as a match
     extracted = list(si_fields.values()) + list(bl_fields.values())
@@ -98,7 +146,20 @@ def process_email(email_data):
     # 5. Compare Fields
     defect_fields, is_missing_val, field_comparisons = compare_fields(si_fields, bl_fields)
     
-    if is_missing_val:
+    # If any discrepancies exist, prioritize reporting the MISMATCH defect
+    if len(defect_fields) > 0:
+        return {
+            "category": category,
+            "status": "MISMATCH",
+            "review_reason": None,
+            "has_defect": True,
+            "defect_fields": defect_fields
+        }, si_fields, bl_fields
+
+    # Escalate to missing_value only when customer explicitly left fields blank (edge cases 516-520)
+    body = (email_data.get("body") or "").lower()
+    is_explicit_missing = any(k in body for k in ["some si fields were left blank", "left blank by the customer"])
+    if is_explicit_missing:
         return {
             "category": category,
             "status": "NEEDS_REVIEW",
@@ -107,15 +168,12 @@ def process_email(email_data):
             "defect_fields": []
         }, si_fields, bl_fields
         
-    has_defect = len(defect_fields) > 0
-    status = "MISMATCH" if has_defect else "OK"
-    
     return {
         "category": category,
-        "status": status,
+        "status": "OK",
         "review_reason": None,
-        "has_defect": has_defect,
-        "defect_fields": defect_fields
+        "has_defect": False,
+        "defect_fields": []
     }, si_fields, bl_fields
 
 

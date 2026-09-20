@@ -1,5 +1,24 @@
 import os
 
+IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.tif', '.tiff'}
+
+def is_image_file(path):
+    return os.path.splitext(path)[1].lower() in IMAGE_EXTENSIONS
+
+def validate_image(path):
+    """
+    Integrity check for photos/scans of paper documents. Returns
+    (ok, reason). A decodable image is NOT 'unreadable' — the vision
+    model handles transcription downstream.
+    """
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            im.verify()
+        return True, None
+    except Exception as e:
+        return False, f"Undecodable image file ({e})"
+
 def parse_txt(path):
     with open(path, 'r', encoding='utf-8', errors='replace') as f:
         return f.read()
@@ -60,7 +79,12 @@ def extract_text(path):
         return ""
         
     ext = os.path.splitext(path)[1].lower()
-    
+
+    # Photos/scans carry no embedded text — they are read by the vision
+    # model (analyze_document_image), never by the text parsers.
+    if ext in IMAGE_EXTENSIONS:
+        return ""
+
     if ext == '.txt':
         return parse_txt(path)
     elif ext == '.pdf':
@@ -71,3 +95,59 @@ def extract_text(path):
         return parse_xlsx(path)
     else:
         return parse_txt(path)
+
+
+# ---------------------------------------------------------------------------
+# Tier 1: Fast Deterministic Field Extractor
+# Extracts the 7 core fields from layout-parsed text (.txt, .pdf, .docx, .xlsx)
+# ---------------------------------------------------------------------------
+FIELD_PATTERNS = {
+    'shipper': [
+        r'(?:^|\|)[ \t]*(?:shipper(?:[^\n:|]+)?)[ \t]*(?:[:|]|[ \t]{2,})[ \t]*([^\n|]*(?:\s*\|\s*on\s*behalf\s*of\s*[^|\n;]+)?)',
+    ],
+    'consignee': [
+        r'(?:^|\|)[ \t]*(?:consignee(?:[^\n:|]+)?|to\s*the\s*order\s*of(?:[^\n:|]+)?|to\s*order\s*of(?:[^\n:|]+)?)[ \t]*(?:[:|]|[ \t]{2,})[ \t]*([^\n|]*)',
+    ],
+    'notify_party': [
+        r'(?:^|\|)[ \t]*(?:notify\s*party(?:[^\n:|]+)?|notify(?:[^\n:|]+)?)[ \t]*(?:[:|]|[ \t]{2,})[ \t]*([^\n|]*)',
+    ],
+    'port_of_loading': [
+        r'(?:^|\|)[ \t]*(?:port\s*of\s*loading|load\s*port|\bpol\b)(?:\s*\([^)]*\))?[ \t]*(?:[:|]|[ \t]{2,})[ \t]*([^\n|]+)',
+        r'(?:^|\|)[ \t]*(?:port\s*of\s*loading|load\s*port)[ \t]+([A-Z][^\n|]+)',
+        r'(?:^|\|)[ \t]*(?:port\s*of\s*loading(?:[^\n:|]+)?|load\s*port(?:[^\n:|]+)?|pol(?:[^\n:|]+)?)[ \t]*(?:[:|]|[ \t]{2,})[ \t]*([^\n|]*)',
+    ],
+    'port_of_discharge': [
+        r'(?:^|\|)[ \t]*(?:port\s*of\s*discharge|discharge\s*port|\bpod\b)(?:\s*\([^)]*\))?[ \t]*(?:[:|]|[ \t]{2,})[ \t]*([^\n|]+)',
+        r'(?:^|\|)[ \t]*(?:port\s*of\s*discharge|discharge\s*port)[ \t]+([A-Z][^\n|]+)',
+        r'(?:^|\|)[ \t]*(?:port\s*of\s*discharge(?:[^\n:|]+)?|discharge\s*port(?:[^\n:|]+)?|pod(?:[^\n:|]+)?)[ \t]*(?:[:|]|[ \t]{2,})[ \t]*([^\n|]*)',
+    ],
+    'container_count': [
+        r'(?:^|\|)[ \t]*(?:total\s*(?:no\.?\s*of\s*)?containers?|no\.?\s*of\s*containers?|container\s*count|containers?)(?!\s*no\b)(?:[^\n:|]*?)[ \t]*(?:[:|]|[ \t]{2,})[ \t]*([^\n|]+)',
+        r'(?:^|\|)[ \t]*total\s*containers?[ \t]*[:|][ \t]*([^\n|]+)',
+        r'(?:^|\|)[ \t]*containers?[ \t]*[:|][ \t]*([^\n|]+)',
+    ],
+    'gross_weight_kg': [
+        r'(?:^|\|)[ \t]*(?:(?:total\s+)?gross\s*weight(?:[^\n:|]+)?|(?:total\s+)?gross\s*wt(?:[^\n:|]+)?|total\s*gross\s*weight(?:[^\n:|]+)?|weight(?:[^\n:|]+)?)[ \t]*(?:[:|]|[ \t]{2,})[ \t]*([^\n|]*)',
+    ]
+}
+
+def extract_shipping_fields_fast(text):
+    """
+    Rapid deterministic extraction of the 7 core fields.
+    Returns a dict with all 7 fields populated (or empty strings if missing).
+    """
+    import re
+    res = {}
+    for fld, pat_list in FIELD_PATTERNS.items():
+        val = ''
+        for pat in pat_list:
+            m = re.search(pat, text, re.IGNORECASE | re.MULTILINE)
+            if m:
+                val = m.group(1).strip()
+                # Clean up any trailing table cells
+                if '|' in val:
+                    parts = [p.strip() for p in val.split('|') if p.strip()]
+                    val = " ".join(parts)
+                break
+        res[fld] = val
+    return res

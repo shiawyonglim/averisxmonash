@@ -23,9 +23,11 @@ def is_blank_or_missing(val):
 def clean_company_name(text):
     text = str(text).lower()
     # Strip common prefixes like 'to the order of', 'consignee:', etc.
-    text = re.sub(r'^(to the order of|consignee \(non-negotiable\):|consignee:|notify party:|shipper:)\s*', '', text)
+    text = re.sub(r'^(to the order of|consignee \(non-negotiable\):|consignee:|notify party:|shipper:|shipper/exporter:?)\s*', '', text)
     # Strip address after semicolon if present
     text = text.split(';')[0]
+    # Strip common trailing address signposts
+    text = re.sub(r'\b(p\.?o\.?\s*box|suite|level|floor|#\d+|road|street|avenue|bldg|building)\b.*$', '', text)
     # Remove punctuation
     text = re.sub(r'[^\w\s]', ' ', text)
     return " ".join(text.split())
@@ -34,8 +36,8 @@ def clean_port(text):
     text = str(text).lower()
     # Strip 'pol', 'pod', 'port of loading', etc.
     text = re.sub(r'^(pol|pod|port of loading:|port of discharge:|load port:|discharge port:)\s*', '', text)
-    # Strip UN/LOCODE in parentheses like (mypkg), (usnyc)
-    text = re.sub(r'\([a-z0-9]+\)', '', text)
+    # Strip UN/LOCODE in parentheses like (mypkg), (usnyc), (vnsgn)
+    text = re.sub(r'\([a-z0-9\s/]+\)', '', text)
     text = re.sub(r'[^\w\s]', ' ', text)
     return " ".join(text.split())
 
@@ -44,16 +46,16 @@ def clean_container_count(text):
     match = re.search(r'(\d+)', str(text))
     if match:
         return match.group(1)
-    return text
+    return str(text).strip()
 
 def clean_gross_weight(text):
-    # Extract only numeric digits before KG/KGS/MTS
-    # e.g. "113,970 KG" -> "113970"
-    cleaned = re.sub(r'[,.\s]', '', str(text).lower().replace('kgs', '').replace('kg', '').replace('mts', '').replace('mt', ''))
+    # Order matters: replace 'kgs' before 'kg', 'mts' before 'mt'
+    s = str(text).lower().replace('kgs', '').replace('kg', '').replace('mts', '').replace('mt', '')
+    cleaned = re.sub(r'[,.\s]', '', s)
     match = re.search(r'(\d+)', cleaned)
     if match:
         return match.group(1)
-    return cleaned
+    return cleaned.strip()
 
 def normalize_field(field, val):
     if is_blank_or_missing(val):
@@ -98,8 +100,20 @@ def compare_fields(si_data, bl_data):
                 "reason": f"Required field is blank or missing (SI: '{si_raw}', BL: '{bl_raw}')"
             }
             continue
+
+        is_match = (norm_si == norm_bl)
+        # For company names, allow prefix matching if address was included in one
+        if not is_match and field in ["shipper", "consignee", "notify_party"]:
+            shorter = norm_si if len(norm_si) <= len(norm_bl) else norm_bl
+            longer = norm_bl if len(norm_si) <= len(norm_bl) else norm_si
             
-        if norm_si != norm_bl:
+            # Check for different legal branch entity (e.g. MIDDLE EAST, FZE, BRANCH, SUBSIDIARY)
+            has_branch_diff = any(b in longer and b not in shorter for b in ["middle east", "fze", "branch", "subsidiary"])
+            
+            if not has_branch_diff and len(shorter) >= 6 and longer.startswith(shorter):
+                is_match = True
+            
+        if not is_match:
             defect_fields.append(field)
             comparisons[field] = {
                 "match": False,
