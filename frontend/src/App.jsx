@@ -54,6 +54,80 @@ function BarRow({ label, value, max }) {
   )
 }
 
+function FormattedChatContent({ content, onOpenEmail }) {
+  if (!content) return null
+
+  const renderInline = (text) => {
+    const emailRegex = /\b(email_\d{3}|synth_[a-z]+_\d{3})\b/g
+    const parts = text.split(emailRegex)
+    return parts.map((part, idx) => {
+      if (part.match(/^(email_\d{3}|synth_[a-z]+_\d{3})$/)) {
+        return (
+          <span
+            key={idx}
+            className="chat-email-pill"
+            onClick={() => onOpenEmail(part)}
+            title={`Click to open ${part} in Verification Hub`}
+          >
+            📧 {part}
+          </span>
+        )
+      }
+      const boldParts = part.split(/(\*\*[^*]+\*\*)/g)
+      return boldParts.map((bp, bidx) => {
+        if (bp.startsWith('**') && bp.endsWith('**')) {
+          return <strong key={`${idx}-${bidx}`}>{bp.slice(2, -2)}</strong>
+        }
+        return bp
+      })
+    })
+  }
+
+  if (content.includes('```')) {
+    const segments = content.split(/(```[\s\S]*?```)/g)
+    return (
+      <div className="formatted-chat-body">
+        {segments.map((seg, sIdx) => {
+          if (seg.startsWith('```') && seg.endsWith('```')) {
+            const raw = seg.slice(3, -3)
+            const firstLineBreak = raw.indexOf('\n')
+            const lang = firstLineBreak > 0 ? raw.slice(0, firstLineBreak).trim() : ''
+            const code = firstLineBreak > 0 ? raw.slice(firstLineBreak + 1) : raw
+            return (
+              <pre key={sIdx} className="chat-code-block">
+                {lang && <div className="code-lang-tag">{lang}</div>}
+                <code>{code}</code>
+              </pre>
+            )
+          }
+          return <div key={sIdx} style={{ margin: '4px 0' }}>{renderInline(seg)}</div>
+        })}
+      </div>
+    )
+  }
+
+  const lines = content.split('\n')
+  return (
+    <div className="formatted-chat-body">
+      {lines.map((line, lIdx) => {
+        if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
+          return (
+            <div key={lIdx} className="chat-bullet-line">
+              <span className="bullet-dot">•</span>
+              <span>{renderInline(line.replace(/^[-*]\s*/, ''))}</span>
+            </div>
+          )
+        }
+        return (
+          <div key={lIdx} style={{ minHeight: line ? undefined : '8px', margin: '2px 0' }}>
+            {renderInline(line)}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function VerdictPanel({ result, loading, error, verdictSource, idleHint, loadingHint }) {
   return (
     <div className="result-panel">
@@ -232,11 +306,14 @@ function detectCarrier(email) {
 
 function CutoffProgressBar({ stats, onFilter }) {
   if (!stats) return null
-  const total = stats.total_emails || 520
-  const cleared = (stats.match_count || 0) + (stats.resolved_count || 0)
-  const pendingMismatch = Math.max(0, (stats.mismatch_count || 0) - (stats.resolved_count || 0))
-  const missingBL = stats.missing_bl_count || 0
-  const corrupted = stats.corrupted_count || 0
+  const total = stats.emails_total || stats.total_emails || 520
+  const okCount = stats.status_counts?.OK || stats.match_count || 0
+  const resolvedCount = stats.status_counts?.RESOLVED || stats.resolved_count || stats.resolutions || 0
+  const cleared = okCount + resolvedCount
+  const mismatchCount = stats.status_counts?.MISMATCH || stats.mismatch_count || 0
+  const pendingMismatch = Math.max(0, mismatchCount - resolvedCount)
+  const missingBL = stats.missing_bl_total || stats.missing_bl_count || 0
+  const corrupted = stats.corrupted_total || stats.corrupted_count || 0
   const pct = Math.min(100, Math.round((cleared / (total || 1)) * 100))
 
   return (
@@ -468,6 +545,7 @@ function App() {
   const [chatMessages, setChatMessages] = useState([])
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
+  const [chatSessionId, setChatSessionId] = useState('')
   const chatEndRef = useRef(null)
 
   // ---- Dashboard ----
@@ -598,6 +676,32 @@ function App() {
     }, 300)
     return () => clearTimeout(t)
   }, [queueFilter, queueSearch, queuePage, fetchQueue])
+
+  // Keyboard navigation shortcuts in Verification Hub ([J] Next, [K] Prev, [E] Auto-Draft)
+  useEffect(() => {
+    if (view !== 'verify') return
+    const handleKeyDown = (e) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return
+      if (e.key === 'ArrowRight' || e.key === 'j' || e.key === 'J') {
+        if (adjacentInfo?.next) {
+          e.preventDefault()
+          openEmail(adjacentInfo.next)
+        }
+      } else if (e.key === 'ArrowLeft' || e.key === 'k' || e.key === 'K') {
+        if (adjacentInfo?.prev) {
+          e.preventDefault()
+          openEmail(adjacentInfo.prev)
+        }
+      } else if (e.key === 'e' || e.key === 'E') {
+        if (selectedEmail && !emailModalOpen) {
+          e.preventDefault()
+          openDraftEmail(selectedEmail)
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [view, adjacentInfo, selectedEmail, emailModalOpen])
 
   // Dashboard stats — on entering the view
   useEffect(() => {
@@ -941,24 +1045,34 @@ function App() {
   const sendChat = async (text) => {
     const message = (text !== undefined ? text : chatInput).trim()
     if (!message || chatLoading) return
-    const history = chatMessages.map(m => ({ role: m.role, content: m.content }))
     setChatMessages(prev => [...prev, { role: 'user', content: message }])
     setChatInput('')
     setChatLoading(true)
     try {
-      const res = await fetch(`${API}/api/chat`, {
+      const res = await fetch(`${API}/api/agent/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, history }),
+        body: JSON.stringify({ session_id: chatSessionId, message }),
       })
       const data = await res.json().catch(() => null)
       if (!res.ok) throw new Error(data?.detail || `Server error: ${res.status}`)
-      setChatMessages(prev => [...prev, {
-        role: 'assistant',
-        content: data.answer,
-        sources: data.sources || [],
-        degraded: data.degraded,
-      }])
+      if (data.session_id) setChatSessionId(data.session_id)
+      setChatMessages(prev => {
+        const next = prev.map(m =>
+          m.pendingAction && !m.pendingAction.decided
+            ? { ...m, pendingAction: { ...m.pendingAction, decided: 'superseded' } }
+            : m
+        )
+        next.push({
+          role: 'assistant',
+          content: data.answer,
+          sources: data.sources || [],
+          steps: data.steps || [],
+          pendingAction: data.pending_action || null,
+          degraded: data.degraded,
+        })
+        return next
+      })
     } catch (err) {
       setChatMessages(prev => [...prev, {
         role: 'assistant',
@@ -969,6 +1083,85 @@ function App() {
     } finally {
       setChatLoading(false)
     }
+  }
+
+  const confirmAgentAction = async (msgIndex, approved) => {
+    const action = chatMessages[msgIndex]?.pendingAction
+    if (!action || chatLoading) return
+    setChatLoading(true)
+    try {
+      const res = await fetch(`${API}/api/agent/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: chatSessionId,
+          action_id: action.action_id,
+          approved,
+        }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        if (res.status === 409) {
+          setChatMessages(prev => {
+            const next = [...prev]
+            next[msgIndex] = { ...next[msgIndex], pendingAction: { ...action, decided: 'superseded' } }
+            next.push({
+              role: 'assistant',
+              content: 'That action expired — it was superseded by a newer instruction and is no longer live. Ask me again if you still want it done.',
+              sources: [],
+              steps: [],
+            })
+            return next
+          })
+          return
+        }
+        throw new Error(data?.detail || `Server error: ${res.status}`)
+      }
+      if (data.session_id) setChatSessionId(data.session_id)
+      setChatMessages(prev => {
+        const next = [...prev]
+        next[msgIndex] = {
+          ...next[msgIndex],
+          pendingAction: { ...action, decided: approved ? 'approved' : 'rejected' },
+        }
+        next.push({
+          role: 'assistant',
+          content: data.answer,
+          sources: data.sources || [],
+          steps: data.steps || [],
+          pendingAction: data.pending_action || null,
+          degraded: data.degraded,
+        })
+        return next
+      })
+    } catch (err) {
+      setChatMessages(prev => {
+        const next = [...prev]
+        next[msgIndex] = { ...next[msgIndex], pendingAction: { ...action, decided: 'error' } }
+        next.push({
+          role: 'assistant',
+          content: `⚠️ Confirmation failed: ${err.message}`,
+          sources: [],
+          degraded: true,
+        })
+        return next
+      })
+    } finally {
+      setChatLoading(false)
+    }
+  }
+
+  const resetChat = async () => {
+    if (chatSessionId) {
+      fetch(`${API}/api/agent/reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: chatSessionId }),
+      }).catch(() => {})
+    }
+    setChatSessionId('')
+    setChatMessages([])
+    setChatInput('')
   }
 
   useEffect(() => {
@@ -1555,22 +1748,29 @@ function App() {
         {/* ========================================================== */}
         {view === 'chat' && (
           <div className="chat-shell">
-            <div className="page-header">
-              <h1>Assistant</h1>
-              <p>Ask questions about the 520-email inbox, verification verdicts, and resolutions — answers are grounded in the knowledge base.</p>
+            <div className="page-header chat-header-row">
+              <div>
+                <h1>Assistant</h1>
+                <p>An operations agent for the inbox — it can look things up, verify emails, draft chasers and run the pipeline. Write actions ask for your approval first.</p>
+              </div>
+              {chatMessages.length > 0 && (
+                <button className="chat-reset-btn" onClick={resetChat}>
+                  New conversation
+                </button>
+              )}
             </div>
 
             <div className="chat-messages">
               {chatMessages.length === 0 && (
                 <div className="chat-empty">
-                  <h3>What would you like to know?</h3>
-                  <p>Ask about counts, statuses, defect fields, or a specific email.</p>
+                  <h3>What would you like me to do?</h3>
+                  <p>Ask questions, or let me take actions — I'll always ask before writing or sending anything.</p>
                   <div className="chat-suggestions">
                     {[
-                      'How many emails have mismatches?',
-                      'What are the most common defect fields?',
-                      'Show me the emails that need human review',
-                      'What went wrong with email_042?',
+                      'Verify the next 25 unverified emails',
+                      'Which carriers owe us the most draft BLs?',
+                      'Run the pipeline and report my score',
+                      'Summarise today\'s mismatches',
                     ].map(q => (
                       <button key={q} className="chat-chip" onClick={() => sendChat(q)}>
                         {q}
@@ -1584,7 +1784,64 @@ function App() {
                 <div key={i} className={`chat-row ${m.role}`}>
                   <div className={`chat-bubble ${m.role}`}>
                     {m.degraded && <div className="chat-degraded-tag">degraded mode</div>}
-                    <div className="chat-text">{m.content}</div>
+                    {m.steps && m.steps.length > 0 && (
+                      <details className="chat-steps">
+                        <summary>{m.steps.length} tool{m.steps.length !== 1 ? 's' : ''} used</summary>
+                        {m.steps.map((s, j) => (
+                          <div key={j} className={`chat-step ${s.ok ? '' : 'step-failed'}`}>
+                            🔧 {s.tool} → {s.summary}
+                          </div>
+                        ))}
+                      </details>
+                    )}
+                    <div className="chat-text">
+                      <FormattedChatContent content={m.content} onOpenEmail={eid => openEmail(eid)} />
+                    </div>
+                    {m.pendingAction && (
+                      <div className={`chat-approval ${m.pendingAction.decided ? 'decided' : ''}`}>
+                        <div className="chat-approval-title">
+                          ⚠️ Approval required — <strong>{m.pendingAction.tool}</strong>
+                        </div>
+                        <div className="chat-approval-summary">{m.pendingAction.summary}</div>
+                        {m.pendingAction.args && Object.keys(m.pendingAction.args).length > 0 && (
+                          <div className="chat-approval-args">
+                            {Object.entries(m.pendingAction.args).map(([k, v]) => (
+                              <div key={k} className="chat-approval-arg">
+                                <span className="arg-key">{k}</span>
+                                <span className="arg-val">
+                                  {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {m.pendingAction.decided ? (
+                          <div className={`chat-approval-decision ${m.pendingAction.decided}`}>
+                            {m.pendingAction.decided === 'approved' ? '✓ Approved' :
+                             m.pendingAction.decided === 'rejected' ? '✗ Rejected' :
+                             m.pendingAction.decided === 'superseded' ? '⊘ Superseded — not executed' :
+                             '⚠ Confirmation failed'}
+                          </div>
+                        ) : (
+                          <div className="chat-approval-btns">
+                            <button
+                              className="chat-approve-btn"
+                              disabled={chatLoading}
+                              onClick={() => confirmAgentAction(i, true)}
+                            >
+                              Approve
+                            </button>
+                            <button
+                              className="chat-reject-btn"
+                              disabled={chatLoading}
+                              onClick={() => confirmAgentAction(i, false)}
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {m.role === 'assistant' && m.sources && m.sources.length > 0 && (
                       <div className="chat-sources">
                         {m.sources.map(s => (
@@ -1957,6 +2214,11 @@ function App() {
                 >
                   ✉️ Auto-Draft Email
                 </button>
+                <div className="keyboard-shortcuts-hint">
+                  <span title="Keyboard shortcuts: Press [K] for Previous, [J] for Next, [E] to Auto-Draft">
+                    ⚡ <kbd>K</kbd> Prev · <kbd>J</kbd> Next · <kbd>E</kbd> Draft
+                  </span>
+                </div>
                 <button
                   onClick={() => setView('queue')}
                   style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-color)', boxShadow: 'none', padding: '7px 14px', fontSize: '0.85rem' }}

@@ -1500,3 +1500,254 @@
   cursor: not-allowed;
 }
 
+/* --- Chat header row / new-conversation button --- */
+.chat-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.chat-reset-btn {
+  padding: 7px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-color);
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.chat-reset-btn:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+  transform: none;
+}
+
+/* --- Tool trace (agent steps) --- */
+.chat-steps {
+  font-size: 0.78rem;
+  font-family: monospace;
+  margin-bottom: 8px;
+  border-left: 3px solid var(--border-color);
+  padding-left: 10px;
+  opacity: 0.85;
+}
+
+.chat-steps summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--primary-color);
+  font-family: inherit;
+  margin-bottom: 4px;
+}
+
+.chat-step {
+  padding: 2px 0;
+  color: var(--text-color);
+  word-break: break-word;
+}
+
+.chat-step.step-failed {
+  color: #a33;
+}
+
+/* --- Approval card (gated write actions) --- */
+.chat-approval {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid #e6c766;
+  border-left: 4px solid #d9a521;
+  border-radius: 8px;
+  background: #fff8e1;
+}
+
+.chat-approval.decided {
+  opacity: 0.75;
+}
+
+.chat-approval-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #856404;
+}
+
+.chat-approval-summary {
+  font-size: 0.85rem;
+  margin-top: 4px;
+  color: var(--text-color);
+}
+
+.chat-approval-args {
+  margin-top: 8px;
+  font-size: 0.78rem;
+  font-family: monospace;
+  border-top: 1px dashed #e6c766;
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chat-approval-arg {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-approval-arg .arg-key {
+  min-width: 110px;
+  font-weight: 700;
+  color: #856404;
+}
+
+.chat-approval-arg .arg-val {
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.chat-approval-btns {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.chat-approve-btn,
+.chat-reject-btn {
+  padding: 7px 18px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: 8px;
+}
+
+.chat-approve-btn {
+  background: var(--primary-color);
+  color: #ffffff;
+  border: 1px solid var(--primary-color);
+}
+
+.chat-reject-btn {
+  background: transparent;
+  color: #856404;
+  border: 1px solid #d9a521;
+  box-shadow: none;
+}
+
+.chat-reject-btn:hover {
+  background: #f8d7da;
+  color: #721c24;
+  border-color: #f5c6cb;
+  transform: none;
+}
+
+.chat-approve-btn:disabled,
+.chat-reject-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chat-approval-decision {
+  margin-top: 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.chat-approval-decision.approved {
+  color: var(--primary-color);
+}
+
+.chat-approval-decision.rejected,
+.chat-approval-decision.error {
+  color: #a33;
+}
+
+.chat-approval-decision.superseded {
+  color: #777;
+}
+
+/* --- Interactive Chat Elements & Markdown Enhancements --- */
+.chat-email-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #eef4e6;
+  color: var(--primary-color);
+  border: 1px solid #c9deb3;
+  padding: 1px 8px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+  margin: 0 3px;
+  transition: all 0.15s ease;
+  vertical-align: middle;
+}
+
+.chat-email-pill:hover {
+  background: var(--primary-color);
+  color: #ffffff;
+  border-color: var(--primary-color);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(89, 121, 40, 0.3);
+}
+
+.chat-bullet-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.bullet-dot {
+  color: var(--primary-color);
+  font-weight: bold;
+}
+
+.chat-code-block {
+  background: #1e1e1e;
+  color: #dcdcdc;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 0.82rem;
+  overflow-x: auto;
+  position: relative;
+  margin: 8px 0;
+}
+
+.code-lang-tag {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  font-size: 0.68rem;
+  color: #888;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+/* --- Keyboard Shortcuts Toolbar Badge --- */
+.keyboard-shortcuts-hint {
+  display: inline-flex;
+  align-items: center;
+  background: #f8f6f2;
+  border: 1px solid var(--border-color);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.76rem;
+  color: #666;
+}
+
+.keyboard-shortcuts-hint kbd {
+  background: #ffffff;
+  border: 1px solid #ccc;
+  border-bottom: 2px solid #aaa;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  margin: 0 2px;
+}
+
