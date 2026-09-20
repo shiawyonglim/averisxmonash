@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: CMA CGM
+Bill of Lading No.: BKG203422
+Shipper: ASIA PACIFIC RAYON PTE LTD
+Consignee: INTERNATIONAL PAPER DO BRASIL LTDA
+Notify Party: NIPPON EXPRESS CO., LTD
+Port of Loading: PENANG, MALAYSIA (MYPEN)
+Port of Discharge: BUSAN, SOUTH KOREA (KRPUS)
+Total Containers: 5 x 40'HC
+Gross Weight: 45,341 KGS
+Remarks: Shipper verbally requested 3 containers — pls confirm 5.

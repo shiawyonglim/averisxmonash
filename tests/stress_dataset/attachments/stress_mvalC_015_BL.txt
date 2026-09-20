@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: ONE
+Bill of Lading No.: BKG396250
+
+Shipper:
+GOLDEN AGRI-RESOURCES LTD
+108 PASIR PANJANG ROAD, SINGAPORE 118535
+
+Consignee:
+PAPELERÍA NACIONAL S.A. DE C.V.
+AV. INSURGENTES SUR 1602, CDMX, MÉXICO
+
+Notify Party:
+UAB NOVAKOPA
+VILNIUS, LITHUANIA
+
+Port of Loading: PENANG, MALAYSIA (MYPEN)
+Port of Discharge: CALLAO, PERU (PECLL)
+Total Containers: 6 x 40'HC
+Gross Weight: 24,267 KGS
+Reference OC: OC-4813
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

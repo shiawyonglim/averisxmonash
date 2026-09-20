@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: EVERGREEN
+Bill of Lading No.: BKG196167
+
+Shipper:
+SÜD PAPIER GMBH
+HAFENSTRASSE 12, 20457 HAMBURG, GERMANY
+
+Consignee:
+PAPELERÍA NACIONAL S.A. DE C.V.
+AV. INSURGENTES SUR 1602, CDMX, MÉXICO
+
+Notify Party:
+NIPPON EXPRESS CO., LTD
+TOKYO, JAPAN
+
+Port of Loading: BELAWAN, INDONESIA (IDBLW)
+Port of Discharge: BARCELONA, SPAIN (ESBCN)
+Total Containers: 3 x 40'HC
+Gross Weight: 20,549 KGS
+Reference OC: OC-5694
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

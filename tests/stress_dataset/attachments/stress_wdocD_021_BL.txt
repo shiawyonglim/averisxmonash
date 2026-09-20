@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: ONE
+Bill of Lading No.: BKG138332
+
+Shipper:
+CELLULOSE TRADING S.A.
+AVENIDA PAULISTA 1000, SÃO PAULO, BRAZIL
+
+Consignee:
+MÜLLER LOGISTIK AG
+BAHNHOFSTRASSE 45, ZÜRICH, SWITZERLAND
+
+Notify Party:
+NIPPON EXPRESS CO., LTD
+TOKYO, JAPAN
+
+Port of Loading: PORT KLANG (WESTPORT), MALAYSIA (MYPKG)
+Port of Discharge: CALLAO, PERU (PECLL)
+Total Containers: 6 x 40'HC
+Gross Weight: 50,831 KGS
+Reference OC: OC-2590
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

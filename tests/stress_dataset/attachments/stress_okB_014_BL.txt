@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: HAPAG-LLOYD
+Bill of Lading No.: BKG167315
+
+Shipper:
+CELLULOSE TRADING S.A.
+AVENIDA PAULISTA 1000, SÃO PAULO, BRAZIL
+
+Consignee:
+PAPELERÍA NACIONAL S.A. DE C.V.
+AV. INSURGENTES SUR 1602, CDMX, MÉXICO
+
+Notify Party:
+NIPPON EXPRESS CO., LTD
+TOKYO, JAPAN
+
+Port of Loading: PORT KLANG (WESTPORT), MALAYSIA (MYPKG)
+Port of Discharge: CALLAO, PERU (PECLL)
+Total Containers: 4 x 40'HC
+Gross Weight: 45.4 MT KGS
+Reference OC: OC-4977
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

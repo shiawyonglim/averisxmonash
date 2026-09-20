@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: OOCL
+Bill of Lading No.: BKG284036
+
+Shipper:
+GOLDEN AGRI-RESOURCES LTD
+108 PASIR PANJANG ROAD, SINGAPORE 118535
+
+Consignee:
+PAPELERÍA NACIONAL S.A. DE C.V.
+AV. INSURGENTES SUR 1602, CDMX, MÉXICO
+
+Notify Party:
+NIPPON EXPRESS CO., LTD
+TOKYO, JAPAN
+
+Port of Loading: PENANG
+Port of Discharge: HO CHI MINH, VIETNAM
+Total Containers: 3 x 40'HC
+Gross Weight: 24,643 KGS
+Reference OC: OC-8386
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

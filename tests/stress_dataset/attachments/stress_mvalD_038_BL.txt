@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: HAPAG-LLOYD
+Bill of Lading No.: BKG100607
+
+Shipper:
+CELLULOSE TRADING S.A.
+AVENIDA PAULISTA 1000, SÃO PAULO, BRAZIL
+
+Consignee:
+INTERNATIONAL PAPER DO BRASIL LTDA
+RODOVIA SP 340, KM 171, MOGI GUACU, SP, BRAZIL
+
+Notify Party:
+N/A
+
+
+Port of Loading: BELAWAN, INDONESIA (IDBLW)
+Port of Discharge: BUSAN, SOUTH KOREA (KRPUS)
+Total Containers: 3 x 40'HC
+Gross Weight: TBD KGS
+Reference OC: OC-7449
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

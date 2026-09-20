@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: ONE
+Bill of Lading No.: BKG719818
+
+Shipper:
+SÜD PAPIER GMBH
+HAFENSTRASSE 12, 20457 HAMBURG, GERMANY
+
+Consignee:
+PAPELERÍA NACIONAL S.A. DE C.V.
+AV. INSURGENTES SUR 1602, CDMX, MÉXICO
+
+Notify Party:
+EASTERN MARITIME AGENCIES LLC
+DUBAI, UAE
+
+Port of Loading: BELAWAN, INDONESIA (IDBLW)
+Port of Discharge: BARCELONA, SPAIN (ESBCN)
+Total Containers: 2 x 40'HC
+Gross Weight: 33,242 KGS
+Reference OC: OC-4302
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

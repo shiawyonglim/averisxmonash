@@ -1,5 +1,5 @@
 - [x] 1. Stress test with real world amount of data (gather requirements and research papers)
-  - Research & requirements doc: `docs/real_world_requirements_and_research.md` (citing UN/CEFACT, DCSA eBL 3.0, BIMCO 25x25, Wang et al. 2023, Korpela et al. 2022).
+  - Research & requirements doc: `docs/real_world_requirements_and_research.md` (citing UN/CEFACT, DCSA eBL 3.0, BIMCO 25x25, UNCTAD 2023, Tijan et al. 2021).
   - Throughput benchmark: >1,450 emails/sec (>5.2M emails/hr) with sub-millisecond local latency.
 
 - [x] 2. Create 200 more data following rules + 200 not following rules (overfit/underfit testing)

@@ -1,0 +1,226 @@
+====================================================================
+STRICT CODE & SUBMISSION REVIEW — Averis x Monash Hackathon 2026
+Shipping Document Verification Project
+Reviewed against: hackathon rules + regulations docx, use-case PDF,
+workshop slides, scoring rubric (image.png), and the actual codebase.
+====================================================================
+
+RUBRIC RECAP (100 points, 7 dimensions)
+- Working Core Prototype           25%
+- System Design & Architecture     15%
+- Technology Integration (TBC)     15%
+- Technical Feasibility & Validation 15%
+- Problem Statement Understanding  10%
+- Innovation & Solution Approach   10%
+- Practical Value & Potential      10%
+
+====================================================================
+HEADLINE PROBLEM: THE "AI PIPELINE" THAT PRODUCES submission.json USES ZERO AI
+====================================================================
+
+This is the single biggest risk to the score. It cuts across four rubric
+rows at once (Core Prototype 25, Tech Integration 15, Feasibility 15,
+Problem Understanding 10).
+
+- pipeline/main.py calls classify_email -> _rules_category ->
+  _rules_category_detailed, which ALWAYS returns a category (final
+  fallback GENERAL). So `if cat: return cat` is always true and the LLM
+  classification block (pipeline/ai_engine.py lines 282-316) is DEAD
+  CODE. Never executes.
+- Extraction in the batch path is extract_shipping_fields_fast (regex) —
+  pipeline/main.py lines 127-133. The LLM extract_shipping_fields is
+  imported and never called in main.py.
+- The only AI in the submission path is analyze_document_image, which
+  only fires for image attachments — and the 520-email bundle contains
+  ZERO image attachments (the scanned edge cases are PDFs with no text
+  layer, and they get routed to `unreadable` before any model sees them).
+
+So the README's "An AI-powered pipeline that ... classifies ... extracts
+..." describes /api/verify (the interactive UI path, which does call the
+LLM), not the batch that produces the 99.77%. The rule "AI must be a key
+component" is satisfied only by the chat agent, the paper-scan mode, and
+the post-hoc reason_and_verify_with_ai explanation writer. A judge who
+reads main.py will conclude the AI is decorative. A judge who doesn't
+read it but asks in Q&A "what does the model do when a document uses a
+label you haven't seen?" gets an honest answer of "nothing" — and that is
+exactly the problem Averis put in bold on slide 2 ("Port of Loading" vs
+"Load Port").
+
+WHAT AVERIS ACTUALLY WANTS (real-world context):
+Averis is RGE Group's shared services centre — the shippers in the
+dataset (APRIL, Asia Pacific Rayon, PT Riau Andalan Pulp and Paper) are
+RGE companies. Their real inbox is not generated from generate.py. A
+regex-only tier will break the first week on a new carrier's BL template.
+The winning design is the one half-built: deterministic fast path ->
+LLM fallback when any of the 7 fields is empty / low-confidence /
+label unrecognized. Right now the fallback doesn't exist in the batch
+path.
+
+====================================================================
+THE 99.77% IS FIT TO THE GENERATOR, NOT TO THE PROBLEM
+====================================================================
+
+The answer key and generator are in the repo:
+sdoc-hackathon-docker/data_v2/ground_truth.json, generate.py,
+edgecases.py — all tracked by git and pushed. The submission matches
+ground truth 520/520. Then the rules contain things like:
+
+- "some si fields were left blank" / "left blank by the customer" —
+  pipeline/main.py lines 159-169 — that string is verbatim from
+  generate.py line 266. missing_value detection is keyed on THE EMAIL
+  BODY SAYING SO, not on the fields actually being blank. is_missing_val
+  from compare_fields is computed and then DISCARDED in main.py
+  (line 147 -> unused).
+- "attachments appear to have been dropped" — verbatim from
+  generate.py line 232. A BL_COMPARISON email with 0 attachments and no
+  such phrase is reported OK (pipeline/edge_cases.py lines 30-42). In the
+  real world that's a missing document, not OK.
+- Spam tokens like "PREMIUM LOGISTICS SOFTWARE THIS WEEK ONLY",
+  "AFEMY", "AFPTME", subject-order hacks like "check RPA before
+  BILLING".
+
+Averis's own PDF says the scoreboard "is not the final assessment" and
+explicitly warns about this. Judges from a shared-services org know what
+overfitting to a synthetic generator looks like. The docs/conditions.md
+scorecard ("Baseline 17.47% -> 99.77%") invites the question "how?", and
+the honest answer is "I read the generator."
+
+RECOMMENDED: remove the ground truth and generator from the public repo,
+and stop leading with the number. Lead with generalization evidence
+instead.
+
+====================================================================
+THE SYNTHETIC "GENERALIZATION" BENCHMARK DOESN'T TEST GENERALIZATION
+====================================================================
+
+tests/generate_synthetic_dataset.py emits SI/BL text in exactly the
+`Header: Value` shapes the regexes already handle. 100% F1 on data
+generated to match the parser is circular. The "1.0000 F1 / PASS
+GENERALIZATION VERIFIED" banner in eval_synthetic_benchmark.py will hurt
+if a judge opens it. A real OOD test would be: take 10 real-format BL
+templates (Maersk, ONE, Evergreen PDFs are easy to find), or simply
+hand-write 20 attachments with labels the regex doesn't know ("Cnee",
+"Load Port", "POD", "Qty of Cntrs", "G.W."), and report the actual
+number — even if it's 60%.
+
+====================================================================
+BUSINESS-RULE ERRORS A SHIPPING PERSON WILL CATCH
+====================================================================
+
+- 1% weight tolerance (pipeline/comparator.py lines 125-133). The SI is
+  the REFERENCE; the BL is transcribed from it. 22,000 vs 22,150 kg is a
+  real discrepancy that must be flagged, not "tare variance". This is a
+  false-negative generator by design. Remove it, or make it a per-tenant
+  config defaulting to 0.
+- Company prefix matching (longer.startswith(shorter)) means
+  "PT RIAU ANDALAN" == "PT RIAU ANDALAN PULP AND PAPER". Acceptable
+  heuristic, but it should downgrade to a LOW-CONFIDENCE match surfaced
+  to the reviewer, not a silent OK.
+- Ports: no UN/LOCODE <-> name mapping. "SGSIN" vs "SINGAPORE" is a
+  mismatch in the comparator even though the research doc claims it's
+  handled.
+- edge_cases.diagnose_attachment: any PDF under 1000 bytes is
+  "corrupted". Real one-page text PDFs can be that small.
+
+====================================================================
+RESEARCH DOC: THE CITATIONS LOOK FABRICATED
+====================================================================
+
+docs/real_world_requirements_and_research.md cites:
+- "Wang, Zhang & Chen (2023), Journal of International Logistics and
+  Transport" — could not be verified to exist.
+- "Korpela et al. (2022), Int. J. Production Economics 248, 108492" —
+  could not be verified to exist.
+- "Perez & Tan (2024), Supply Chain Analytics Review" — could not be
+  verified to exist.
+- The DCSA eBL "7 core mandatory compliance blocks" claim doesn't match
+  DCSA's actual data model.
+
+If one judge Googles one citation, credibility on the whole submission
+collapses. Either replace with sources actually read (DCSA eBL standard,
+BIMCO 25by25 announcement, IMO SOLAS VGM rules are all real and
+relevant) or delete the section.
+
+====================================================================
+HACKATHON-RULE COMPLIANCE GAPS
+====================================================================
+
+- LIVE PROTOTYPE LINK IS MANDATORY. vercel.json deploys the frontend
+  only; API defaults to localhost:8000 and there is no hosted backend
+  anywhere in the repo. A Vercel frontend pointing at localhost is a
+  broken demo for judges. Host the FastAPI (Render/Railway/Fly) and set
+  VITE_API_URL.
+- CLOUD INFRASTRUCTURE "meaningfully integrated" or "significantly
+  reduced scores". Supabase is optional and the app runs fully without
+  it; NIM is cloud but (see above) not on the critical path. Make
+  persistence actually go through Supabase for the demo, and make the
+  LLM do real work.
+- .env exists locally with keys; hardcoded Supabase project URL in
+  server.py line 131. Fine for demo but rotate the anon key before the
+  repo goes public if RLS is USING (true) (the code_review_findings.txt
+  notes flag this).
+- Video <= 5 min with 1 mark per 30s overage — plan the demo to 4:30.
+
+====================================================================
+SCOPE VS. DEPTH (System Design 15, Practical Value 10)
+====================================================================
+
+- server.py is 2,169 lines; App.jsx is 3,642 lines in one file, one
+  component. That's a maintainability red flag under the "well-designed
+  architecture / long-term potential" language in the rules.
+- Feature sprawl: SMTP chaser dispatch, Supabase cloud registry, agentic
+  chat with approval gates, cutoff velocity monitor, keyboard shortcuts,
+  paper-scan mode. Each is individually nice; together they dilute the
+  25-point "Working Core Prototype" row. The core the judge will test is:
+  pick an email -> see SI vs BL side-by-side -> see exactly which field
+  differs with both values -> escalate with evidence -> human corrects ->
+  report updates. Make that path flawless before anything else.
+- The "Ask for help" capability from the slide is the one Averis is most
+  interested in (their PDF spends a whole section on it) — and it is the
+  weakest here: NEEDS_REVIEW carries only a reason enum, not the source
+  evidence (which page, which extracted value, which line). Attach the
+  raw text snippet / field-level confidence to the escalation.
+
+====================================================================
+CONCRETE PRIORITY LIST (before the Monday-noon deadline)
+====================================================================
+
+1. MAKE AI LOAD-BEARING IN THE BATCH PIPELINE: regex tier -> if any
+   field empty or label unknown -> extract_shipping_fields LLM tier;
+   classification: rules -> LLM when rules fall through to the default
+   GENERAL. Log which tier decided each field; show it in the UI
+   ("extracted by rule / by model"). This alone fixes four rubric rows.
+2. USE REAL SIGNALS, NOT GENERATOR PHRASES: is_missing_val from the
+   comparator drives missing_value; <2 attachments on a BL_COMPARISON
+   drives missing_attachment. Re-run against ground truth; accept a
+   lower score if it's honest and explain the deltas in the README
+   (their PDF literally tells you to do this).
+3. Remove the 1% weight tolerance; add UN/LOCODE mapping for the ~15
+   ports in the dataset.
+4. Remove ground_truth.json and generate.py from the public repo
+   (git rm --cached, add to .gitignore). Remove or rewrite the
+   citations.
+5. Deploy the backend; wire VITE_API_URL; verify the Vercel URL works
+   from an incognito window.
+6. Build a small honest OOD test (20 hand-written attachments with
+   unfamiliar labels), report the real number.
+7. Cut features from the demo video, not the code: intro -> problem ->
+   one MISMATCH email end-to-end -> one NEEDS_REVIEW escalation with
+   evidence -> human resolves -> report updates -> architecture slide.
+
+====================================================================
+WHERE THE PROJECT IS GENUINELY STRONG
+====================================================================
+
+- The comparator's normalization design is right.
+- The edge-case taxonomy matches the organizer's review_reason
+  vocabulary exactly.
+- The agent's write-gating with approval cards (pipeline/agent.py) is
+  well-engineered and shows real product thinking.
+- The _write_submission regression test shows a real data-loss bug was
+  found and fixed.
+- The UI scope shows understanding of the operations desk workflow
+  (chasers, cutoffs, audit).
+
+These are worth keeping — they just need to sit on top of a core that
+actually does what the README says it does.

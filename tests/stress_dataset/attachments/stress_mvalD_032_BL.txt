@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: MSC
+Bill of Lading No.: BKG930439
+
+Shipper:
+GOLDEN AGRI-RESOURCES LTD
+108 PASIR PANJANG ROAD, SINGAPORE 118535
+
+Consignee:
+SAICA PACK IBERIA S.L.
+POLIGONO INDUSTRIAL MALPICA, CALLE D, 50016 ZARAGOZA, SPAIN
+
+Notify Party:
+N/A
+
+
+Port of Loading: BELAWAN, INDONESIA (IDBLW)
+Port of Discharge: BUSAN, SOUTH KOREA (KRPUS)
+Total Containers: 7 x 40'HC
+Gross Weight: TBD KGS
+Reference OC: OC-4883
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

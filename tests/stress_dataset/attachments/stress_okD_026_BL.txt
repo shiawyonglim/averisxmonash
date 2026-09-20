@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: EVERGREEN
+Bill of Lading No.: BKG460364
+
+Shipper:
+CELLULOSE TRADING S.A.
+AVENIDA PAULISTA 1000, SÃO PAULO, BRAZIL
+
+Consignee:
+MOORIM SP CO., LTD
+656 GANGNAM-DAERO, GANGNAM-GU, SEOUL, SOUTH KOREA
+
+Notify Party:
+NIPPON EXPRESS CO., LTD
+TOKYO, JAPAN
+
+Port of Loading: PORT KLANG
+Port of Discharge: CALLAO, PERU
+Total Containers: 5 x 40'HC
+Gross Weight: 40,564 KGS
+Reference OC: OC-6641
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

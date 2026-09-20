@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: PIL
+Bill of Lading No.: BKG310973
+
+Shipper:
+EVERGREEN AGRO EXPORTS SDN BHD
+PORT KLANG FREE TRADE ZONE, SELANGOR, MALAYSIA
+
+Consignee:
+MÜLLER LOGISTIK AG
+BAHNHOFSTRASSE 45, ZÜRICH, SWITZERLAND
+
+Notify Party:
+N/A
+
+
+Port of Loading: SINGAPORE, SINGAPORE (SGSIN)
+Port of Discharge: BUSAN, SOUTH KOREA (KRPUS)
+Total Containers: 1 x 40'HC
+Gross Weight: TBD KGS
+Reference OC: OC-7293
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

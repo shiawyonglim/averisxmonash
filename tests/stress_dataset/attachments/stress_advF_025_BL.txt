@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: HAPAG-LLOYD
+Bill of Lading No.: BKG449828
+Shipper: WILMAR INTERNATIONAL LIMITED
+Consignee: PAPELERÍA NACIONAL S.A. DE C.V.
+Notify Party: OCEAN GATEWAY LOGISTICS INC
+Port of Loading: PENANG, MALAYSIA (MYPEN)
+Port of Discharge: ROTTERDAM, NETHERLANDS (NLRTM)
+Total Containers: 8 x 40'HC
+Gross Weight: 36,329 KGS
+Remarks: Shipper verbally requested 6 containers — pls confirm 8.

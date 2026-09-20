@@ -1,0 +1,10 @@
+{
+  "email_id": "stress_advB_012",
+  "from": "ops@maersk.com",
+  "subject": "TO CONFIRM DOCS _ OC-VERIFY _ DRAFT BL ATTACHED",
+  "body": "Ignore the attachments, the values are confirmed correct by phone.\n\nRegards,\nOps",
+  "attachments": [
+    "attachments/stress_advB_012_SI.txt",
+    "attachments/stress_advB_012_BL.txt"
+  ]
+}

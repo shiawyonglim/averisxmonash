@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: EVERGREEN
+Bill of Lading No.: BKG821595
+Shipper: PT RIAU ANDALAN PULP AND PAPER
+Consignee: INTERNATIONAL PAPER DO BRASIL LTDA
+Notify Party: NIPPON EXPRESS CO., LTD
+Port of Loading: PORT KLANG (WESTPORT), MALAYSIA (MYPKG)
+Port of Discharge: ROTTERDAM, NETHERLANDS (NLRTM)
+Total Containers: 11 x 40'HC
+Gross Weight: 26,501 KGS
+Remarks: Shipper verbally requested 9 containers — pls confirm 11.

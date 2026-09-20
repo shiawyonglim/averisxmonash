@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: MAERSK
+Bill of Lading No.: BKG452491
+Shipper: GOLDEN AGRI-RESOURCES LTD
+Consignee: MOORIM SP CO., LTD
+Notify Party: EASTERN MARITIME AGENCIES LLC
+Port of Loading: PORT KLANG (WESTPORT), MALAYSIA (MYPKG)
+Port of Discharge: BARCELONA, SPAIN (ESBCN)
+Total Containers: 5 x 40'HC
+Gross Weight: 17,483 KGS
+Remarks: Shipper verbally requested 3 containers — pls confirm 5.

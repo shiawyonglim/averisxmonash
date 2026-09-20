@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: CMA CGM
+Bill of Lading No.: BKG651216
+Shipper: EVERGREEN AGRO EXPORTS SDN BHD
+Consignee: PAPELERÍA NACIONAL S.A. DE C.V.
+Notify Party: UAB NOVAKOPA
+Port of Loading: PENANG, MALAYSIA (MYPEN)
+Port of Discharge: BUSAN, SOUTH KOREA (KRPUS)
+Total Containers: 11 x 40'HC
+Gross Weight: 27,584 KGS
+Remarks: Shipper verbally requested 9 containers — pls confirm 11.

@@ -18,6 +18,6 @@ TOKYO, JAPAN
 Port of Loading: TANJUNG PELEPAS, MALAYSIA (MYTPP)
 Port of Discharge: CALLAO, PERU (PECLL)
 Total Containers: 1x40HC
-Gross Weight: 50.55 MT KGS
+Gross Weight: 50.553 MT KGS
 Reference OC: OC-5689
 Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

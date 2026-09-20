@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: CMA CGM
+Bill of Lading No.: BKG604146
+
+Shipper:
+CELLULOSE TRADING S.A.
+AVENIDA PAULISTA 1000, SÃO PAULO, BRAZIL
+
+Consignee:
+HANWHA CORPORATION
+86 CHEONGGYECHEON-RO, JUNG-GU, SEOUL, KOREA
+
+Notify Party:
+N/A
+
+
+Port of Loading: PORT KLANG (WESTPORT), MALAYSIA (MYPKG)
+Port of Discharge: ROTTERDAM, NETHERLANDS (NLRTM)
+Total Containers: 2 x 40'HC
+Gross Weight: TBD KGS
+Reference OC: OC-9139
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: HAPAG-LLOYD
+Bill of Lading No.: BKG672703
+Shipper: GOLDEN AGRI-RESOURCES LTD
+Consignee: AL BUSTAN PACKAGING FACTORY LLC
+Notify Party: EASTERN MARITIME AGENCIES LLC
+Port of Loading: SINGAPORE, SINGAPORE (SGSIN)
+Port of Discharge: JEBEL ALI, UNITED ARAB EMIRATES (AEJEA)
+Total Containers: 12 x 40'HC
+Gross Weight: 33,875 KGS
+Remarks: Shipper verbally requested 10 containers — pls confirm 12.

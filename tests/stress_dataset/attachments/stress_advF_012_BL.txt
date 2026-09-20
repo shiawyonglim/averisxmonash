@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: HAPAG-LLOYD
+Bill of Lading No.: BKG816443
+Shipper: CELLULOSE TRADING S.A.
+Consignee: HANWHA CORPORATION
+Notify Party: NIPPON EXPRESS CO., LTD
+Port of Loading: SINGAPORE, SINGAPORE (SGSIN)
+Port of Discharge: BARCELONA, SPAIN (ESBCN)
+Total Containers: 8 x 40'HC
+Gross Weight: 29,731 KGS
+Remarks: Shipper verbally requested 6 containers — pls confirm 8.

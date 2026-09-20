@@ -18,6 +18,6 @@ TOKYO, JAPAN
 Port of Loading: PORT KLANG (WESTPORT), MALAYSIA (MYPKG)
 Port of Discharge: CALLAO, PERU (PECLL)
 Total Containers: 4x40HC
-Gross Weight: 26,889 KGS
+Gross Weight: 26890 KGS
 Reference OC: OC-7367
 Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

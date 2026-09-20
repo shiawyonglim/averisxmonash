@@ -279,6 +279,7 @@ button:disabled {
 .status-mismatch { background: #f8d7da; color: #721c24; }
 .status-needs-review { background: #fff3cd; color: #856404; }
 .status-resolved { background: #cce5ff; color: #004085; }
+.status-reply-received { background: #d6e4ff; color: #004085; }
 
 .field-comparison {
   margin-bottom: 12px;

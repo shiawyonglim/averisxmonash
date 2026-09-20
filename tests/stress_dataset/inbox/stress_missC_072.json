@@ -1,0 +1,9 @@
+{
+  "email_id": "stress_missC_072",
+  "from": "ops@oocl.com",
+  "subject": "DRAFT BL FOR REVIEW // OC-4942 // BARCELONA // BKG623498",
+  "body": "Please review the attached draft BL. (Attachment missing in email payload)",
+  "attachments": [
+    "attachments/stress_missC_072_BL.txt"
+  ]
+}

@@ -11,9 +11,18 @@ if PROJECT_ROOT not in sys.path:
 from pipeline.main import process_email
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATASET_DIR = os.path.join(BASE_DIR, "synthetic_dataset")
+
+# Optional CLI override: python tests/eval_synthetic_benchmark.py [dataset_dir] [gt_filename]
+# Defaults to the 400-case synthetic benchmark; pass the stress dataset dir to
+# evaluate the 2,000-case edge/stress suite instead.
+DATASET_DIR = sys.argv[1] if len(sys.argv) > 1 else os.path.join(BASE_DIR, "synthetic_dataset")
+if not os.path.isabs(DATASET_DIR):
+    DATASET_DIR = os.path.join(BASE_DIR, DATASET_DIR)
 INBOX_DIR = os.path.join(DATASET_DIR, "inbox")
-GT_PATH = os.path.join(DATASET_DIR, "synthetic_ground_truth.json")
+GT_PATH = os.path.join(DATASET_DIR,
+                       sys.argv[2] if len(sys.argv) > 2 else "synthetic_ground_truth.json")
+if not os.path.exists(GT_PATH):
+    GT_PATH = os.path.join(DATASET_DIR, "stress_ground_truth.json")
 
 def run_synthetic_benchmark():
     with open(GT_PATH, "r", encoding="utf-8") as f:
@@ -114,7 +123,7 @@ def run_synthetic_benchmark():
     print(f"\n2. CATEGORY CLASSIFICATION:")
     print(f"   - Accuracy: {cat_correct / total_emails * 100:.2f}% ({cat_correct}/{total_emails})")
 
-    print(f"\n3. IN-DISTRIBUTION (200 Rule-Following Emails) -> OVERFITTING TEST:")
+    print(f"\n3. IN-DISTRIBUTION ({rf_total} Rule-Following Emails) -> OVERFITTING TEST:")
     print(f"   - Rule Adherence Accuracy: {rf_acc:.2f}% ({rf_correct}/{rf_total})")
     print(f"   - False Alarm / Over-trigger Rate: {rf_fp_rate:.2f}% ({rf_false_positives}/{rf_total})")
     if rf_fp_rate == 0:
@@ -122,7 +131,7 @@ def run_synthetic_benchmark():
     else:
         print(f"   - OVERFITTING VERDICT: ALERT ({rf_false_positives} false positives)")
 
-    print(f"\n4. OUT-OF-DISTRIBUTION (200 Non-Rule / Defect Emails) -> UNDERFITTING TEST:")
+    print(f"\n4. OUT-OF-DISTRIBUTION ({nrf_total} Non-Rule / Defect Emails) -> UNDERFITTING TEST:")
     print(f"   - Defect Detection Recall: {defect_recall:.2f}% ({nrf_defects_caught}/{nrf_defects_total})")
     print(f"   - Edge-Case Escalation Recall: {edge_recall:.2f}% ({nrf_edge_caught}/{nrf_edge_total})")
     print(f"   - Total Violation Catch Rate: {nrf_recall:.2f}% ({nrf_caught}/{nrf_total})")
@@ -135,7 +144,7 @@ def run_synthetic_benchmark():
         print(f"   - UNDERFITTING VERDICT: ALERT (Missed defects)")
 
     print(f"\n==============================================================")
-    print(f"  FINAL VERDICT: GENERALIZATION VERIFIED ACROSS 400 TEST CASES")
+    print(f"  FINAL VERDICT: GENERALIZATION VERIFIED ACROSS {total_emails} TEST CASES")
     print(f"==============================================================")
 
     return {

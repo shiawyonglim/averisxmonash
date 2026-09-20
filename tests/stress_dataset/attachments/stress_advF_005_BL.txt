@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: EVERGREEN
+Bill of Lading No.: BKG359941
+Shipper: WILMAR INTERNATIONAL LIMITED
+Consignee: INTERNATIONAL PAPER DO BRASIL LTDA
+Notify Party: EASTERN MARITIME AGENCIES LLC
+Port of Loading: SINGAPORE, SINGAPORE (SGSIN)
+Port of Discharge: ROTTERDAM, NETHERLANDS (NLRTM)
+Total Containers: 3 x 40'HC
+Gross Weight: 16,144 KGS
+Remarks: Shipper verbally requested 1 containers — pls confirm 3.

@@ -50,8 +50,14 @@ pipeline/
   edge_cases.py         Attachment/doc-type/unreadable checks
   parsers.py            Text extraction for txt/pdf/xlsx/docx
 frontend/               React 19 + Vite UI (dashboard, queue, verify,
-                        paper scan, audit)
+                        paper scan, audit, stress lab)
 sdoc-hackathon-bundle/  Dataset: inbox/ (520 emails) + attachments/
+tests/
+  generate_synthetic_dataset.py   400-case generalization benchmark
+  generate_stress_dataset.py      2,020-case edge/stress suite ->
+                                  tests/stress_dataset/ (ground truth
+                                  in stress_ground_truth.json)
+  eval_synthetic_benchmark.py     CLI scorer; accepts a dataset dir arg
 supabase_schema.sql     Postgres schema (verifications + audit_logs)
 submission.json         Pipeline output for all 520 emails
 docs/                   Hackathon info pack, rules, use case PDF
@@ -123,6 +129,9 @@ by the organizers' `score_cli.py`.
 | `GET /api/missing-bills`, `POST /api/missing-bills/chase`, `/batch-chase` | Chase missing BLs |
 | `GET /api/audit` | Audit trail of all decisions |
 | `POST /api/pipeline/run`, `/cancel`, `GET /status`, `/submission` | Batch pipeline control |
+| `GET /api/stress/dataset`, `/cases` | Stress dataset info + case browser |
+| `POST /api/stress/run`, `/cancel`, `GET /status`, `/results` | Batch stress test over `tests/stress_dataset` |
+| `POST /api/stress/run-one` | Run a single stress case vs ground truth |
 | `GET /api/config` | Runtime config |
 
 ## Tech stack

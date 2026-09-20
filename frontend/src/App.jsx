@@ -18,6 +18,7 @@ const QUEUE_FILTERS = [
   { key: 'corrupted', label: 'Corrupted' },
   { key: 'resolved', label: 'Resolved' },
   { key: 'chaser_sent', label: 'Chaser Sent' },
+  { key: 'reply_received', label: 'Replies' },
 ]
 
 const AUDIT_DOT_COLORS = {
@@ -26,6 +27,8 @@ const AUDIT_DOT_COLORS = {
   CARRIER_RE_REQUESTED: '#6c757d',
   MANUAL_OVERRIDE: '#fd7e14',
   CHASER_DISPATCHED: '#6f42c1',
+  EMAIL_DISPATCHED: '#6f42c1',
+  INBOUND_REPLY_RECEIVED: '#0d6efd',
 }
 
 const EMAIL_STATUS_META = {
@@ -35,10 +38,21 @@ const EMAIL_STATUS_META = {
   RESOLVED:     { label: 'Resolved',     color: '#1a73e8', bg: '#e8f0fe' },
   CORRUPTED:    { label: 'Corrupted',    color: '#8e24aa', bg: '#f3e5f5' },
   MISSING_BL:   { label: 'Missing BL',   color: '#e07a5f', bg: '#fdeee7' },
+  REPLY_RECEIVED: { label: 'Reply received', color: '#004085', bg: '#d6e4ff' },
   UNVERIFIED:   { label: 'Unverified',   color: '#777777', bg: '#f1f1f1' },
 }
 
 const emailStatusMeta = s => EMAIL_STATUS_META[s] || EMAIL_STATUS_META.UNVERIFIED
+
+const CHAT_SUGGESTIONS = [
+  { icon: '🔍', text: 'Verify the next 25 unverified emails' },
+  { icon: '🚢', text: 'Which carriers owe us the most draft BLs?' },
+  { icon: '📦', text: 'Run the pipeline and report my score' },
+  { icon: '📋', text: "Summarise today's mismatches" },
+]
+
+const formatChatTime = ts =>
+  new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
 
 function BarRow({ label, value, max }) {
@@ -58,10 +72,11 @@ function FormattedChatContent({ content, onOpenEmail }) {
   if (!content) return null
 
   const renderInline = (text) => {
-    const emailRegex = /\b(email_\d{3}|synth_[a-z]+_\d{3})\b/g
-    const parts = text.split(emailRegex)
+    const parts = text.split(
+      /(\bemail_\d{3}\b|\bsynth_[a-z]+_\d{3}\b|\*\*[^*\n]+\*\*|`[^`\n]+`|\*[^*\n]+\*)/g
+    )
     return parts.map((part, idx) => {
-      if (part.match(/^(email_\d{3}|synth_[a-z]+_\d{3})$/)) {
+      if (/^(email_\d{3}|synth_[a-z]+_\d{3})$/.test(part)) {
         return (
           <span
             key={idx}
@@ -73,56 +88,124 @@ function FormattedChatContent({ content, onOpenEmail }) {
           </span>
         )
       }
-      const boldParts = part.split(/(\*\*[^*]+\*\*)/g)
-      return boldParts.map((bp, bidx) => {
-        if (bp.startsWith('**') && bp.endsWith('**')) {
-          return <strong key={`${idx}-${bidx}`}>{bp.slice(2, -2)}</strong>
-        }
-        return bp
-      })
+      if (part.length > 4 && part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={idx}>{part.slice(2, -2)}</strong>
+      }
+      if (part.length > 2 && part.startsWith('`') && part.endsWith('`')) {
+        return <code key={idx} className="chat-inline-code">{part.slice(1, -1)}</code>
+      }
+      if (part.length > 2 && part.startsWith('*') && part.endsWith('*')) {
+        return <em key={idx}>{part.slice(1, -1)}</em>
+      }
+      return part
     })
   }
 
-  if (content.includes('```')) {
-    const segments = content.split(/(```[\s\S]*?```)/g)
+  const renderTable = (rows, key) => {
+    const parsed = rows.map(r =>
+      r.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim())
+    )
+    const isSep = cells => cells.every(c => /^:?-{2,}:?$/.test(c))
+    const header = parsed.length && !isSep(parsed[0]) ? parsed[0] : null
+    const body = parsed.slice(header ? 1 : 0).filter(c => !isSep(c))
     return (
-      <div className="formatted-chat-body">
-        {segments.map((seg, sIdx) => {
-          if (seg.startsWith('```') && seg.endsWith('```')) {
-            const raw = seg.slice(3, -3)
-            const firstLineBreak = raw.indexOf('\n')
-            const lang = firstLineBreak > 0 ? raw.slice(0, firstLineBreak).trim() : ''
-            const code = firstLineBreak > 0 ? raw.slice(firstLineBreak + 1) : raw
-            return (
-              <pre key={sIdx} className="chat-code-block">
-                {lang && <div className="code-lang-tag">{lang}</div>}
-                <code>{code}</code>
-              </pre>
-            )
-          }
-          return <div key={sIdx} style={{ margin: '4px 0' }}>{renderInline(seg)}</div>
-        })}
+      <div key={key} className="chat-table-wrap">
+        <table className="chat-table">
+          {header && (
+            <thead>
+              <tr>{header.map((c, i) => <th key={i}>{renderInline(c)}</th>)}</tr>
+            </thead>
+          )}
+          <tbody>
+            {body.map((r, i) => (
+              <tr key={i}>{r.map((c, j) => <td key={j}>{renderInline(c)}</td>)}</tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     )
   }
 
-  const lines = content.split('\n')
-  return (
-    <div className="formatted-chat-body">
-      {lines.map((line, lIdx) => {
-        if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
-          return (
-            <div key={lIdx} className="chat-bullet-line">
-              <span className="bullet-dot">•</span>
-              <span>{renderInline(line.replace(/^[-*]\s*/, ''))}</span>
-            </div>
-          )
+  const renderTextSegment = (seg, keyPrefix) => {
+    const lines = seg.split('\n')
+    const out = []
+    let i = 0
+    let k = 0
+    while (i < lines.length) {
+      const t = lines[i].trim()
+
+      if (t.startsWith('|')) {
+        const rows = []
+        while (i < lines.length && lines[i].trim().startsWith('|')) {
+          rows.push(lines[i])
+          i += 1
         }
-        return (
-          <div key={lIdx} style={{ minHeight: line ? undefined : '8px', margin: '2px 0' }}>
-            {renderInline(line)}
+        out.push(renderTable(rows, `${keyPrefix}-t${k++}`))
+        continue
+      }
+      i += 1
+
+      if (!t) {
+        out.push(<div key={`${keyPrefix}-${k++}`} style={{ height: '8px' }} />)
+        continue
+      }
+      const h = t.match(/^(#{1,4})\s+(.*)$/)
+      if (h) {
+        out.push(
+          <div key={`${keyPrefix}-${k++}`} className={`chat-h chat-h${h[1].length}`}>
+            {renderInline(h[2])}
           </div>
         )
+        continue
+      }
+      if (/^(-{3,}|\*{3,}|_{3,})$/.test(t)) {
+        out.push(<div key={`${keyPrefix}-${k++}`} className="chat-hr" />)
+        continue
+      }
+      if (/^[-*•]\s+/.test(t)) {
+        out.push(
+          <div key={`${keyPrefix}-${k++}`} className="chat-bullet-line">
+            <span className="bullet-dot">•</span>
+            <span>{renderInline(t.replace(/^[-*•]\s+/, ''))}</span>
+          </div>
+        )
+        continue
+      }
+      const num = t.match(/^(\d+)[.)]\s+(.*)$/)
+      if (num) {
+        out.push(
+          <div key={`${keyPrefix}-${k++}`} className="chat-num-line">
+            <span className="chat-num">{num[1]}.</span>
+            <span>{renderInline(num[2])}</span>
+          </div>
+        )
+        continue
+      }
+      out.push(
+        <div key={`${keyPrefix}-${k++}`} style={{ margin: '2px 0' }}>
+          {renderInline(t)}
+        </div>
+      )
+    }
+    return out
+  }
+
+  return (
+    <div className="formatted-chat-body">
+      {content.split(/(```[\s\S]*?```)/g).map((seg, sIdx) => {
+        if (seg.startsWith('```') && seg.endsWith('```')) {
+          const raw = seg.slice(3, -3)
+          const firstLineBreak = raw.indexOf('\n')
+          const lang = firstLineBreak > 0 ? raw.slice(0, firstLineBreak).trim() : ''
+          const code = firstLineBreak > 0 ? raw.slice(firstLineBreak + 1) : raw
+          return (
+            <pre key={sIdx} className="chat-code-block">
+              {lang && <div className="code-lang-tag">{lang}</div>}
+              <code>{code}</code>
+            </pre>
+          )
+        }
+        return <div key={sIdx}>{renderTextSegment(seg, `s${sIdx}`)}</div>
       })}
     </div>
   )
@@ -538,7 +621,7 @@ function App() {
   const [cloudPage, setCloudPage] = useState(1)
   const [cloudSyncInfo, setCloudSyncInfo] = useState(null)
 
-  // ---- Navigation: 'dashboard' | 'chat' | 'queue' | 'verify' | 'cloud' | 'scan' | 'audit' | 'pipeline' ----
+  // ---- Navigation: 'dashboard' | 'chat' | 'queue' | 'verify' | 'cloud' | 'scan' | 'audit' | 'pipeline' | 'stress' ----
   const [view, setView] = useState('dashboard')
 
   // ---- Chat Assistant ----
@@ -547,6 +630,7 @@ function App() {
   const [chatLoading, setChatLoading] = useState(false)
   const [chatSessionId, setChatSessionId] = useState('')
   const chatEndRef = useRef(null)
+  const chatInputRef = useRef(null)
 
   // ---- Dashboard ----
   const [stats, setStats] = useState(null)
@@ -575,6 +659,30 @@ function App() {
 
   // ---- Chaser actions (Inbox, missing_bl filter) ----
   const [batchChasing, setBatchChasing] = useState(false)
+
+  // ---- Inbound Reply Ingestion / Email Conversation Threads ----
+  const [emailThreads, setEmailThreads] = useState([])
+  const [simulatingReply, setSimulatingReply] = useState(false)
+  const [pollingInbox, setPollingInbox] = useState(false)
+  const [replyNotice, setReplyNotice] = useState(null)
+
+  // ---- Stress Lab (edge-case dataset + batch runner) ----
+  const [stressDataset, setStressDataset] = useState(null)
+  const [stressStatus, setStressStatus] = useState(null)
+  const [stressRunning, setStressRunning] = useState(false)
+  const [stressMetrics, setStressMetrics] = useState(null)
+  const [stressFailures, setStressFailures] = useState([])
+  const [stressLimit, setStressLimit] = useState(0)
+  const [stressWorkers, setStressWorkers] = useState(8)
+  const [stressMsg, setStressMsg] = useState(null)
+  const [stressCaseSearch, setStressCaseSearch] = useState('')
+  const [stressCaseType, setStressCaseType] = useState('')
+  const [stressCases, setStressCases] = useState([])
+  const [stressCaseId, setStressCaseId] = useState('')
+  const [stressCaseResult, setStressCaseResult] = useState(null)
+  const [stressCaseLoading, setStressCaseLoading] = useState(false)
+  const [stressShowAllFailures, setStressShowAllFailures] = useState(false)
+  const [stressFailFilter, setStressFailFilter] = useState('')
 
   // ---- Score vs Ground Truth (Pipeline Run page) ----
   const [compareData, setCompareData] = useState(null)
@@ -797,6 +905,124 @@ function App() {
     return () => clearInterval(iv)
   }, [pipelineRunning, loadSubmissionRecords])
 
+  // ---- Stress Lab ----
+  const fetchStressResults = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/stress/results?limit=1000`)
+      if (!res.ok) return
+      const data = await res.json()
+      setStressMetrics(data.metrics)
+      setStressFailures(data.failures || [])
+    } catch (err) {
+      console.error('Failed to fetch stress results:', err)
+    }
+  }, [])
+
+  // Stress Lab — dataset info + any in-flight run on entering the view
+  useEffect(() => {
+    if (view !== 'stress') return
+    fetch(`${API}/api/stress/dataset`)
+      .then(res => res.json())
+      .then(data => setStressDataset(data))
+      .catch(err => console.error('Failed to fetch stress dataset info:', err))
+    fetch(`${API}/api/stress/status`)
+      .then(res => res.json())
+      .then(data => {
+        setStressStatus(data)
+        setStressRunning(Boolean(data.running) && !data.done)
+        if (data.metrics) setStressMetrics(data.metrics)
+      })
+      .catch(err => console.error('Failed to fetch stress status:', err))
+    fetchStressResults()
+  }, [view, fetchStressResults])
+
+  // Stress Lab — case picker list (debounced search)
+  useEffect(() => {
+    if (view !== 'stress') return
+    const t = setTimeout(() => {
+      const params = new URLSearchParams({ limit: '300' })
+      if (stressCaseSearch) params.set('search', stressCaseSearch)
+      if (stressCaseType) params.set('test_type', stressCaseType)
+      fetch(`${API}/api/stress/cases?${params}`)
+        .then(res => res.json())
+        .then(data => setStressCases(data.cases || []))
+        .catch(err => console.error('Failed to fetch stress cases:', err))
+    }, 250)
+    return () => clearTimeout(t)
+  }, [view, stressCaseSearch, stressCaseType])
+
+  // Stress polling — every 1s while running
+  useEffect(() => {
+    if (!stressRunning) return undefined
+    const iv = setInterval(() => {
+      fetch(`${API}/api/stress/status`)
+        .then(res => res.json())
+        .then(data => {
+          setStressStatus(data)
+          if (data.done || !data.running) {
+            setStressRunning(false)
+            fetchStressResults()
+            if (data.error === 'cancelled') setStressMsg('Run cancelled — partial results shown.')
+            else if (data.error) setStressMsg(`Error: ${data.error}`)
+            else setStressMsg(null)
+          }
+        })
+        .catch(err => console.error('Stress status poll failed:', err))
+    }, 1000)
+    return () => clearInterval(iv)
+  }, [stressRunning, fetchStressResults])
+
+  const handleStartStress = useCallback(async () => {
+    setStressMsg(null)
+    try {
+      const res = await fetch(`${API}/api/stress/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: Number(stressLimit) || 0, workers: Number(stressWorkers) || 8 }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || `Server error: ${res.status}`)
+      if (data.started) {
+        setStressRunning(true)
+        setStressMetrics(null)
+        setStressFailures([])
+        setStressStatus({ running: true, processed: 0, total: data.total, done: false })
+      } else {
+        setStressMsg(data.message || 'Could not start stress run')
+      }
+    } catch (err) {
+      setStressMsg(err.message)
+    }
+  }, [stressLimit, stressWorkers])
+
+  const handleCancelStress = useCallback(async () => {
+    try {
+      await fetch(`${API}/api/stress/cancel`, { method: 'POST' })
+    } catch (err) {
+      console.error('Failed to cancel stress run:', err)
+    }
+  }, [])
+
+  const handleRunStressCase = useCallback(async (eid) => {
+    if (!eid) return
+    setStressCaseLoading(true)
+    setStressCaseResult(null)
+    try {
+      const res = await fetch(`${API}/api/stress/run-one`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email_id: eid }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || `Server error: ${res.status}`)
+      setStressCaseResult(data)
+    } catch (err) {
+      setStressCaseResult({ email_id: eid, error: err.message, match: null })
+    } finally {
+      setStressCaseLoading(false)
+    }
+  }, [])
+
   // Score-vs-ground-truth fetcher — called on demand from the Pipeline Run page
   const fetchCompare = useCallback(async () => {
     setCompareLoading(true)
@@ -885,6 +1111,7 @@ function App() {
       const data = await res.json()
       setEmailSendResult(data)
       refreshQueue()
+      refreshThread(emailDraft.email_id)
       fetch(`${API}/api/audit`).then(r => r.json()).then(d => setAuditEvents(d.events || [])).catch(() => {})
     } catch (err) {
       setEmailSendResult({
@@ -976,6 +1203,8 @@ function App() {
     setCorruptWarning(null)
     setEmailInfo(null)
     setCloudSyncInfo(null)
+    setEmailThreads([])
+    setReplyNotice(null)
     setSiText('Loading attachment...')
     setBlText('Loading attachment...')
 
@@ -986,6 +1215,7 @@ function App() {
       setSiText(data.si_text || '')
       setBlText(data.bl_text || '')
       if (data.email) setEmailInfo(data.email)
+      setEmailThreads(data.threads || data.email?.threads || [])
       if (data.cloud_synced) setCloudSyncInfo(data.supabase_record)
       if (data.is_corrupted) {
         setCorruptWarning({
@@ -1042,11 +1272,19 @@ function App() {
   // CHAT ASSISTANT HANDLERS
   // ============================================================
 
+  const autogrowChatInput = () => {
+    const el = chatInputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+  }
+
   const sendChat = async (text) => {
     const message = (text !== undefined ? text : chatInput).trim()
     if (!message || chatLoading) return
-    setChatMessages(prev => [...prev, { role: 'user', content: message }])
+    setChatMessages(prev => [...prev, { role: 'user', content: message, ts: Date.now() }])
     setChatInput('')
+    if (chatInputRef.current) chatInputRef.current.style.height = 'auto'
     setChatLoading(true)
     try {
       const res = await fetch(`${API}/api/agent/chat`, {
@@ -1070,6 +1308,7 @@ function App() {
           steps: data.steps || [],
           pendingAction: data.pending_action || null,
           degraded: data.degraded,
+          ts: Date.now(),
         })
         return next
       })
@@ -1079,6 +1318,7 @@ function App() {
         content: `⚠️ Failed to reach the assistant: ${err.message}`,
         sources: [],
         degraded: true,
+        ts: Date.now(),
       }])
     } finally {
       setChatLoading(false)
@@ -1110,6 +1350,7 @@ function App() {
               content: 'That action expired — it was superseded by a newer instruction and is no longer live. Ask me again if you still want it done.',
               sources: [],
               steps: [],
+              ts: Date.now(),
             })
             return next
           })
@@ -1131,6 +1372,7 @@ function App() {
           steps: data.steps || [],
           pendingAction: data.pending_action || null,
           degraded: data.degraded,
+          ts: Date.now(),
         })
         return next
       })
@@ -1143,6 +1385,7 @@ function App() {
           content: `⚠️ Confirmation failed: ${err.message}`,
           sources: [],
           degraded: true,
+          ts: Date.now(),
         })
         return next
       })
@@ -1162,6 +1405,7 @@ function App() {
     setChatSessionId('')
     setChatMessages([])
     setChatInput('')
+    if (chatInputRef.current) chatInputRef.current.style.height = 'auto'
   }
 
   useEffect(() => {
@@ -1331,6 +1575,73 @@ function App() {
     }
   }
 
+  // ============================================================
+  // INBOUND REPLY INGESTION — thread refresh, simulate, IMAP poll
+  // ============================================================
+
+  const refreshThread = async (eid) => {
+    if (!eid) return
+    try {
+      const res = await fetch(`${API}/api/email/${eid}/thread`)
+      if (res.ok) {
+        const data = await res.json()
+        setEmailThreads(data.messages || [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch email thread:', err)
+    }
+  }
+
+  const handleSimulateReply = async (eid) => {
+    if (!eid) return
+    setSimulatingReply(true)
+    setReplyNotice(null)
+    try {
+      const res = await fetch(`${API}/api/email/${eid}/simulate-reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ has_attachment: true }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setReplyNotice(`📨 ${data.message}`)
+      await refreshThread(eid)
+      refreshQueue()
+      refreshEmailStatuses()
+      fetch(`${API}/api/audit`).then(r => r.json()).then(d => setAuditEvents(d.events || [])).catch(() => {})
+    } catch (err) {
+      setReplyNotice(`❌ Reply simulation failed: ${err.message}`)
+    } finally {
+      setSimulatingReply(false)
+    }
+  }
+
+  const handlePollInbox = async () => {
+    setPollingInbox(true)
+    setReplyNotice(null)
+    try {
+      const res = await fetch(`${API}/api/email/imap-poll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      if (data.status === 'LIVE_POLL_SUCCESS') {
+        setReplyNotice(`📥 Live inbox poll complete — checked ${data.messages_checked} unread message(s), matched ${data.replies_matched} repl${data.replies_matched === 1 ? 'y' : 'ies'} to active threads.`)
+      } else {
+        setReplyNotice(`📥 ${data.message || data.status}`)
+      }
+      if (selectedEmail) await refreshThread(selectedEmail)
+      refreshQueue()
+      refreshEmailStatuses()
+    } catch (err) {
+      setReplyNotice(`❌ Inbox poll failed: ${err.message}`)
+    } finally {
+      setPollingInbox(false)
+    }
+  }
+
   const handleCorruptAction = async (eid, action) => {
     try {
       const res = await fetch(`${API}/api/corrupted/resolve`, {
@@ -1480,6 +1791,10 @@ function App() {
     : 1
   const categoryEntries = stats ? Object.entries(stats.categories || {}) : []
   const categoryMax = Math.max(1, ...categoryEntries.map(([, n]) => n))
+  const subcategoryEntries = stats
+    ? Object.entries(stats.subcategories || {}).sort((a, b) => b[1] - a[1])
+    : []
+  const subcategoryMax = Math.max(1, ...subcategoryEntries.map(([, n]) => n))
   const carrierEntries = stats ? Object.entries(stats.missing_bl_by_carrier || {}) : []
 
   const totalPages = queueData
@@ -1596,6 +1911,21 @@ function App() {
           >
             <span>📦 Submission Builder</span>
           </button>
+
+          <button
+            className={`sidebar-btn ${view === 'stress' ? 'active' : ''}`}
+            onClick={() => setView('stress')}
+          >
+            <span>🧪 Stress Lab</span>
+            {stressDataset?.email_count > 0 && (
+              <span
+                className="sidebar-badge"
+                style={{ background: 'rgba(224, 122, 95, 0.15)', color: '#e07a5f' }}
+              >
+                {stressDataset.email_count}
+              </span>
+            )}
+          </button>
         </nav>
 
         <div className="sidebar-footer">
@@ -1689,6 +2019,31 @@ function App() {
 
                 <div className="item-card" style={{ marginTop: '20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                    <div>
+                      <h3 style={{ color: 'var(--primary-color)', margin: 0 }}>
+                        Operational Subcategory Taxonomy & Threat Classification
+                      </h3>
+                      <p style={{ fontSize: '0.82rem', color: '#666', margin: '2px 0 0' }}>
+                        Granular intent breakdown across phishing scams, security alerts, demurrage disputes, direct liner filings, and RPA automations.
+                      </p>
+                    </div>
+                    <span style={{ fontSize: '0.8rem', padding: '4px 10px', background: '#f0f4e8', color: 'var(--primary-color)', borderRadius: '6px', fontWeight: 'bold' }}>
+                      {subcategoryEntries.length} Distinct Subcategories
+                    </span>
+                  </div>
+                  {subcategoryEntries.length === 0 ? (
+                    <p style={{ opacity: 0.7, fontSize: '0.9rem' }}>No subcategory data recorded yet.</p>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px' }}>
+                      {subcategoryEntries.map(([subtag, n]) => (
+                        <BarRow key={subtag} label={subtag} value={n} max={subcategoryMax} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="item-card" style={{ marginTop: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                     <h3 style={{ color: 'var(--primary-color)', margin: 0 }}>
                       Missing Draft BL by Carrier
                     </h3>
@@ -1753,27 +2108,32 @@ function App() {
                 <h1>Assistant</h1>
                 <p>An operations agent for the inbox — it can look things up, verify emails, draft chasers and run the pipeline. Write actions ask for your approval first.</p>
               </div>
-              {chatMessages.length > 0 && (
-                <button className="chat-reset-btn" onClick={resetChat}>
-                  New conversation
-                </button>
-              )}
+              <div className="chat-header-actions">
+                {aiConfig && (
+                  <span className="chat-model-tag" title="Active AI backend">
+                    <span className="chat-model-dot" />
+                    {aiConfig.provider}{aiConfig.model ? ` · ${aiConfig.model}` : ''}
+                  </span>
+                )}
+                {chatMessages.length > 0 && (
+                  <button className="chat-reset-btn" onClick={resetChat}>
+                    New conversation
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="chat-messages">
               {chatMessages.length === 0 && (
                 <div className="chat-empty">
+                  <div className="chat-empty-icon">💬</div>
                   <h3>What would you like me to do?</h3>
                   <p>Ask questions, or let me take actions — I'll always ask before writing or sending anything.</p>
                   <div className="chat-suggestions">
-                    {[
-                      'Verify the next 25 unverified emails',
-                      'Which carriers owe us the most draft BLs?',
-                      'Run the pipeline and report my score',
-                      'Summarise today\'s mismatches',
-                    ].map(q => (
-                      <button key={q} className="chat-chip" onClick={() => sendChat(q)}>
-                        {q}
+                    {CHAT_SUGGESTIONS.map(s => (
+                      <button key={s.text} className="chat-chip" onClick={() => sendChat(s.text)}>
+                        <span className="chat-chip-icon">{s.icon}</span>
+                        <span>{s.text}</span>
                       </button>
                     ))}
                   </div>
@@ -1782,86 +2142,92 @@ function App() {
 
               {chatMessages.map((m, i) => (
                 <div key={i} className={`chat-row ${m.role}`}>
-                  <div className={`chat-bubble ${m.role}`}>
-                    {m.degraded && <div className="chat-degraded-tag">degraded mode</div>}
-                    {m.steps && m.steps.length > 0 && (
-                      <details className="chat-steps">
-                        <summary>{m.steps.length} tool{m.steps.length !== 1 ? 's' : ''} used</summary>
-                        {m.steps.map((s, j) => (
-                          <div key={j} className={`chat-step ${s.ok ? '' : 'step-failed'}`}>
-                            🔧 {s.tool} → {s.summary}
+                  {m.role === 'assistant' && <div className="chat-avatar">🤖</div>}
+                  <div className="chat-msg-col">
+                    <div className={`chat-bubble ${m.role}`}>
+                      {m.degraded && <div className="chat-degraded-tag">degraded mode</div>}
+                      {m.steps && m.steps.length > 0 && (
+                        <details className="chat-steps">
+                          <summary>{m.steps.length} tool{m.steps.length !== 1 ? 's' : ''} used</summary>
+                          {m.steps.map((s, j) => (
+                            <div key={j} className={`chat-step ${s.ok ? '' : 'step-failed'}`}>
+                              🔧 {s.tool} → {s.summary}
+                            </div>
+                          ))}
+                        </details>
+                      )}
+                      <div className="chat-text">
+                        <FormattedChatContent content={m.content} onOpenEmail={eid => openEmail(eid)} />
+                      </div>
+                      {m.pendingAction && (
+                        <div className={`chat-approval ${m.pendingAction.decided ? 'decided' : ''}`}>
+                          <div className="chat-approval-title">
+                            ⚠️ Approval required — <strong>{m.pendingAction.tool}</strong>
                           </div>
-                        ))}
-                      </details>
-                    )}
-                    <div className="chat-text">
-                      <FormattedChatContent content={m.content} onOpenEmail={eid => openEmail(eid)} />
-                    </div>
-                    {m.pendingAction && (
-                      <div className={`chat-approval ${m.pendingAction.decided ? 'decided' : ''}`}>
-                        <div className="chat-approval-title">
-                          ⚠️ Approval required — <strong>{m.pendingAction.tool}</strong>
+                          <div className="chat-approval-summary">{m.pendingAction.summary}</div>
+                          {m.pendingAction.args && Object.keys(m.pendingAction.args).length > 0 && (
+                            <div className="chat-approval-args">
+                              {Object.entries(m.pendingAction.args).map(([k, v]) => (
+                                <div key={k} className="chat-approval-arg">
+                                  <span className="arg-key">{k}</span>
+                                  <span className="arg-val">
+                                    {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {m.pendingAction.decided ? (
+                            <div className={`chat-approval-decision ${m.pendingAction.decided}`}>
+                              {m.pendingAction.decided === 'approved' ? '✓ Approved' :
+                               m.pendingAction.decided === 'rejected' ? '✗ Rejected' :
+                               m.pendingAction.decided === 'superseded' ? '⊘ Superseded — not executed' :
+                               '⚠ Confirmation failed'}
+                            </div>
+                          ) : (
+                            <div className="chat-approval-btns">
+                              <button
+                                className="chat-approve-btn"
+                                disabled={chatLoading}
+                                onClick={() => confirmAgentAction(i, true)}
+                              >
+                                Approve
+                              </button>
+                              <button
+                                className="chat-reject-btn"
+                                disabled={chatLoading}
+                                onClick={() => confirmAgentAction(i, false)}
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          )}
                         </div>
-                        <div className="chat-approval-summary">{m.pendingAction.summary}</div>
-                        {m.pendingAction.args && Object.keys(m.pendingAction.args).length > 0 && (
-                          <div className="chat-approval-args">
-                            {Object.entries(m.pendingAction.args).map(([k, v]) => (
-                              <div key={k} className="chat-approval-arg">
-                                <span className="arg-key">{k}</span>
-                                <span className="arg-val">
-                                  {typeof v === 'object' ? JSON.stringify(v) : String(v)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {m.pendingAction.decided ? (
-                          <div className={`chat-approval-decision ${m.pendingAction.decided}`}>
-                            {m.pendingAction.decided === 'approved' ? '✓ Approved' :
-                             m.pendingAction.decided === 'rejected' ? '✗ Rejected' :
-                             m.pendingAction.decided === 'superseded' ? '⊘ Superseded — not executed' :
-                             '⚠ Confirmation failed'}
-                          </div>
-                        ) : (
-                          <div className="chat-approval-btns">
+                      )}
+                      {m.role === 'assistant' && m.sources && m.sources.length > 0 && (
+                        <div className="chat-sources">
+                          {m.sources.map(s => (
                             <button
-                              className="chat-approve-btn"
-                              disabled={chatLoading}
-                              onClick={() => confirmAgentAction(i, true)}
+                              key={s.email_id}
+                              className="chat-source-chip"
+                              title={`${s.subject || ''} — ${s.status || ''}`}
+                              onClick={() => openEmail(s.email_id)}
                             >
-                              Approve
+                              {s.email_id} · {s.status}
                             </button>
-                            <button
-                              className="chat-reject-btn"
-                              disabled={chatLoading}
-                              onClick={() => confirmAgentAction(i, false)}
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {m.role === 'assistant' && m.sources && m.sources.length > 0 && (
-                      <div className="chat-sources">
-                        {m.sources.map(s => (
-                          <button
-                            key={s.email_id}
-                            className="chat-source-chip"
-                            title={`${s.subject || ''} — ${s.status || ''}`}
-                            onClick={() => openEmail(s.email_id)}
-                          >
-                            {s.email_id} · {s.status}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {m.ts && <div className="chat-ts">{formatChatTime(m.ts)}</div>}
                   </div>
+                  {m.role === 'user' && <div className="chat-avatar user">You</div>}
                 </div>
               ))}
 
               {chatLoading && (
                 <div className="chat-row assistant">
+                  <div className="chat-avatar">🤖</div>
                   <div className="chat-bubble assistant">
                     <div className="chat-typing">
                       <span></span><span></span><span></span>
@@ -1873,26 +2239,33 @@ function App() {
             </div>
 
             <div className="chat-composer">
-              <textarea
-                value={chatInput}
-                onChange={e => setChatInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    sendChat()
-                  }
-                }}
-                placeholder="Ask about the inbox… (Enter to send, Shift+Enter for a new line)"
-                disabled={chatLoading}
-                rows={2}
-              />
-              <button
-                className="chat-send"
-                onClick={() => sendChat()}
-                disabled={chatLoading || !chatInput.trim()}
-              >
-                Send
-              </button>
+              <div className="chat-input-wrap">
+                <textarea
+                  ref={chatInputRef}
+                  value={chatInput}
+                  onChange={e => { setChatInput(e.target.value); autogrowChatInput() }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      sendChat()
+                    }
+                  }}
+                  placeholder="Ask about the inbox…"
+                  disabled={chatLoading}
+                  rows={1}
+                />
+                <button
+                  className="chat-send"
+                  onClick={() => sendChat()}
+                  disabled={chatLoading || !chatInput.trim()}
+                  title="Send (Enter)"
+                >
+                  Send ➤
+                </button>
+              </div>
+              <div className="chat-composer-hint">
+                Enter to send · Shift+Enter for a new line · write actions require your approval
+              </div>
             </div>
           </div>
         )}
@@ -1989,8 +2362,11 @@ function App() {
                               {item.queue_status || 'UNVERIFIED'}
                             </span>
                             {item.category && (
-                              <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '10px', background: '#f0f4e8', color: 'var(--primary-color)', fontWeight: 'bold' }}>
-                                {item.category}
+                              <span
+                                className={`category-pill category-${(item.category || '').toLowerCase()}`}
+                                title={item.category_description || item.category}
+                              >
+                                {item.display_tag || item.category}
                               </span>
                             )}
                             <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '10px', background: '#f0f4e8', color: 'var(--primary-color)', fontWeight: 'bold' }}>
@@ -2014,6 +2390,12 @@ function App() {
                           {item.chaser_status && (
                             <p style={{ fontSize: '0.78rem', color: '#155724', fontStyle: 'italic', marginTop: '4px' }}>
                               📧 Chaser: {item.chaser_status}
+                            </p>
+                          )}
+                          {item.has_reply && item.latest_reply && (
+                            <p style={{ fontSize: '0.78rem', color: '#004085', fontWeight: 600, marginTop: '4px' }}>
+                              📨 Reply received from {item.latest_reply.from_addr || 'carrier'}
+                              {item.latest_reply.body ? ` — "${item.latest_reply.body.slice(0, 90)}${item.latest_reply.body.length > 90 ? '…' : ''}"` : ''}
                             </p>
                           )}
                           {item.corrupt_action && (
@@ -2357,9 +2739,20 @@ function App() {
                     <h3 style={{ color: 'var(--primary-color)', margin: '4px 0 2px' }}>{emailInfo.subject}</h3>
                     <p style={{ fontSize: '0.85rem', color: '#555' }}><strong>From:</strong> {emailInfo.from}</p>
                   </div>
-                  <span className="status-badge" style={{ background: 'rgba(89, 121, 40, 0.15)', color: 'var(--primary-color)' }}>
-                    Category: {emailInfo.category || 'CLASSIFYING'}
-                  </span>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                    <span
+                      className={`category-pill category-${(emailInfo.category || '').toLowerCase()}`}
+                      style={{ fontSize: '0.82rem', padding: '4px 12px' }}
+                      title={emailInfo.category_description || emailInfo.category}
+                    >
+                      {emailInfo.display_tag || `Category: ${emailInfo.category || 'CLASSIFYING'}`}
+                    </span>
+                    {emailInfo.category_description && (
+                      <span style={{ fontSize: '0.74rem', color: '#666', maxWidth: '320px', textAlign: 'right', fontStyle: 'italic' }}>
+                        {emailInfo.category_description}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Email Body preview */}
@@ -2397,6 +2790,80 @@ function App() {
                       {a.is_corrupt && <strong style={{ color: '#d32f2f' }}>[CORRUPT]</strong>}
                     </span>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* EMAIL CONVERSATION THREAD — outbound dispatches + inbound carrier replies */}
+            {emailInfo && (
+              <div className="glass-panel thread-panel">
+                <div className="thread-header">
+                  <div>
+                    <span className="thread-eyebrow">
+                      AUTOMATED INBOUND THREAD TRACKING &bull; {selectedEmail}
+                    </span>
+                    <h3 style={{ margin: '4px 0 0', color: 'var(--primary-color)' }}>
+                      📨 Carrier Correspondence ({emailThreads.length} message{emailThreads.length === 1 ? '' : 's'})
+                    </h3>
+                  </div>
+                  <div className="thread-actions">
+                    <button
+                      onClick={handlePollInbox}
+                      disabled={pollingInbox}
+                      title="Poll the connected inbox via IMAP for unread carrier replies and auto-link them to this thread"
+                    >
+                      {pollingInbox ? 'Polling Inbox…' : '📥 Poll Inbox (IMAP)'}
+                    </button>
+                    <button
+                      className="thread-sim-btn"
+                      onClick={() => handleSimulateReply(selectedEmail)}
+                      disabled={simulatingReply}
+                      title="Simulate an inbound carrier reply (with revised Draft BL attachment) for demo/testing"
+                    >
+                      {simulatingReply ? 'Receiving Reply…' : '⚡ Simulate Carrier Reply'}
+                    </button>
+                  </div>
+                </div>
+
+                {replyNotice && (
+                  <div className="thread-notice">{replyNotice}</div>
+                )}
+
+                <div className="thread-list">
+                  {emailThreads.length === 0 && (
+                    <p className="thread-empty">
+                      No correspondence yet. Dispatch an email via <strong>✉️ Auto-Draft Email</strong> (or a carrier chaser) and replies will be captured here automatically — matched by Message-ID / [REF] tag.
+                    </p>
+                  )}
+                  {emailThreads.map(m => {
+                    const inbound = m.direction === 'INBOUND'
+                    const ts = m.received_at || m.sent_at
+                    return (
+                      <div key={m.id} className={`thread-row ${inbound ? 'inbound' : 'outbound'}`}>
+                        <div className={`thread-bubble ${inbound ? 'inbound' : 'outbound'}`}>
+                          <div className="thread-meta">
+                            <strong>{inbound ? '📨 ' : '📤 '}{inbound ? (m.from_addr || 'Carrier') : `You → ${m.to_addr || 'carrier'}`}</strong>
+                            {ts && <span className="thread-ts">{new Date(ts).toLocaleString()}</span>}
+                          </div>
+                          {m.subject && <div className="thread-subject">{m.subject}</div>}
+                          {m.body && <div className="thread-body">{m.body}</div>}
+                          {m.attachments?.length > 0 && (
+                            <div className="thread-attach-row">
+                              {m.attachments.map((a, i) => (
+                                <span key={i} className={`thread-attach ${inbound ? 'inbound' : ''}`}>
+                                  📎 {a.filename || a.path || 'attachment'}
+                                  {a.size_kb ? ` (${a.size_kb} KB)` : ''}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <div className="thread-foot">
+                            {inbound ? 'INBOUND · AUTO-CAPTURED' : `OUTBOUND · ${m.mode || 'SMTP'}`}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}
@@ -3458,6 +3925,413 @@ function App() {
                       </div>
                     </div>
                   </>
+                )}
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* ========================================================== */}
+        {/* VIEW: STRESS LAB — edge-case dataset + batch stress runner  */}
+        {/* ========================================================== */}
+        {view === 'stress' && (() => {
+          const fmtPct = v => (v == null ? '—' : `${(v * 100).toFixed(1)}%`)
+          const stressPct =
+            stressStatus && stressStatus.total > 0
+              ? Math.round((stressStatus.processed / stressStatus.total) * 100)
+              : 0
+          const typeEntries = Object.entries(stressDataset?.by_test_type || {})
+          const m = stressMetrics
+          const kpiMeter = v => (
+            <div className="kpi-meter"><div style={{ width: `${Math.min(100, Math.max(0, (v ?? 0) * 100))}%` }} /></div>
+          )
+          const filteredFailures = stressFailFilter
+            ? stressFailures.filter(f =>
+                f.email_id.toLowerCase().includes(stressFailFilter.toLowerCase()) ||
+                f.test_type.toLowerCase().includes(stressFailFilter.toLowerCase()))
+            : stressFailures
+          const shownFailures = stressShowAllFailures ? filteredFailures : filteredFailures.slice(0, 15)
+          const verdictPill = (ok) =>
+            ok == null ? null : (
+              <span className="ep-status" style={ok
+                ? { color: '#2e7d32', background: 'rgba(52,168,83,0.12)' }
+                : { color: '#c62828', background: 'rgba(198,40,40,0.10)' }}>
+                {ok ? '✓ PASS' : '✗ FAIL'}
+              </span>
+            )
+
+          return (
+            <div className="card-container">
+              <div className="page-header">
+                <h1>Stress Lab</h1>
+                <p>Edge-case playground — run the pipeline over the 2,000-email stress dataset and probe individual cases.</p>
+              </div>
+
+              {/* DATASET OVERVIEW */}
+              <div className="item-card">
+                <div className="sub-card-head">
+                  <div>
+                    <h3>Stress dataset</h3>
+                    <p className="step-sub">
+                      Synthetic edge cases in <code>tests/stress_dataset/</code> — regenerate with
+                      <code> python tests/generate_stress_dataset.py</code>.
+                    </p>
+                  </div>
+                  <span className={`sub-file-pill ${stressDataset?.exists ? 'has-file' : ''}`}>
+                    {stressDataset?.exists ? `📁 ${stressDataset.email_count} emails` : '📁 dataset missing'}
+                  </span>
+                </div>
+                {stressDataset && !stressDataset.exists && (
+                  <div className="sub-warn">
+                    ⚠ No dataset found at <code>{stressDataset.dataset_dir}</code> — run the generator script first.
+                  </div>
+                )}
+                {stressDataset?.exists && (
+                  <>
+                    <div className="sub-export-chips" style={{ marginBottom: '10px' }}>
+                      {Object.entries(stressDataset.by_status || {}).map(([k, v]) => (
+                        <span key={k} className="chip">{k}: {v}</span>
+                      ))}
+                    </div>
+                    <div className="diff-table-wrap">
+                      <table className="diff-table">
+                        <thead>
+                          <tr><th>Test type</th><th style={{ width: '90px' }}>Cases</th></tr>
+                        </thead>
+                        <tbody>
+                          {typeEntries.map(([tt, n]) => (
+                            <tr key={tt}>
+                              <td className="mono">{tt}</td>
+                              <td>{n}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* RUN CONTROLS */}
+              <div className="item-card">
+                <div className="sub-card-head">
+                  <div>
+                    <h3>Run stress test</h3>
+                    <p className="step-sub">
+                      Runs the full pipeline (classify → edge-case checks → extract → compare) over
+                      every case and scores the verdicts against ground truth. Fully local — no LLM
+                      calls for text attachments.
+                    </p>
+                  </div>
+                </div>
+
+                {!stressRunning && (
+                  <>
+                    <div className="sub-cta-row">
+                      <button className="sub-primary-btn" onClick={handleStartStress}
+                        disabled={!stressDataset?.exists}>
+                        ▶ Run stress test
+                      </button>
+                      {stressStatus?.finished_at && (
+                        <span className="sub-last-run">Last run: {stressStatus.finished_at}</span>
+                      )}
+                    </div>
+                    <details className="sub-advanced">
+                      <summary>Advanced options</summary>
+                      <div className="sub-advanced-body">
+                        <div className="sub-option">
+                          <label htmlFor="stress-limit">Limit</label>
+                          <input id="stress-limit" type="number" min="0" value={stressLimit}
+                            onChange={(e) => setStressLimit(e.target.value)} />
+                          <span>emails (0 = all)</span>
+                        </div>
+                        <div className="sub-option">
+                          <label htmlFor="stress-workers">Workers</label>
+                          <input id="stress-workers" type="number" min="1" max="32" value={stressWorkers}
+                            onChange={(e) => setStressWorkers(e.target.value)} />
+                          <span>parallel (1–32)</span>
+                        </div>
+                      </div>
+                    </details>
+                  </>
+                )}
+
+                {stressRunning && (
+                  <div className="sub-progress-panel">
+                    <div className="sub-progress-meta">
+                      <span className="sub-progress-current">
+                        <span className="sub-pulse" />
+                        Processing stress cases…
+                      </span>
+                      <strong>{stressPct}%</strong>
+                    </div>
+                    <div className="progress-track">
+                      <div className="progress-fill animated" style={{ width: `${stressPct}%` }} />
+                    </div>
+                    <div className="sub-progress-foot">
+                      <span>{stressStatus?.processed ?? 0} / {stressStatus?.total ?? 0} cases</span>
+                      <button onClick={handleCancelStress} className="sub-cancel-btn">⏹ Cancel run</button>
+                    </div>
+                  </div>
+                )}
+
+                {stressMsg && !stressRunning && <div className="sub-msg">{stressMsg}</div>}
+                {stressStatus?.error && !stressRunning && stressStatus.error !== 'cancelled' && (
+                  <div className="sub-error">Error: {stressStatus.error}</div>
+                )}
+              </div>
+
+              {/* RESULTS */}
+              {m && (
+                <div className="item-card">
+                  <div className="sub-card-head">
+                    <div>
+                      <h3>Results</h3>
+                      <p className="step-sub">
+                        {m.processed}/{m.total} cases in {m.elapsed_seconds}s ·
+                        ~{m.throughput_eps} emails/sec{m.crashes ? ` · ⚠ ${m.crashes} pipeline crashes` : ''}
+                      </p>
+                    </div>
+                    <button onClick={fetchStressResults} className="sub-ghost-btn">↻ Refresh</button>
+                  </div>
+
+                  <div className="kpi-grid" style={{ marginTop: '4px' }}>
+                    <div className="kpi-card">
+                      <div className="kpi-value">{fmtPct(m.exact_verdict_accuracy)}</div>
+                      <div className="kpi-label">Exact Verdict</div>
+                      {kpiMeter(m.exact_verdict_accuracy)}
+                      <div className="kpi-sub">category + status + reason + fields all match</div>
+                    </div>
+                    <div className="kpi-card">
+                      <div className="kpi-value">{fmtPct(m.catch_rate)}</div>
+                      <div className="kpi-label">Catch Rate</div>
+                      {kpiMeter(m.catch_rate)}
+                      <div className="kpi-sub">{m.flagged_total} cases that should be flagged</div>
+                    </div>
+                    <div className="kpi-card">
+                      <div className="kpi-value">{fmtPct(m.clean_accuracy)}</div>
+                      <div className="kpi-label">Clean Pass Rate</div>
+                      {kpiMeter(m.clean_accuracy)}
+                      <div className="kpi-sub">
+                        {m.clean_total} expected-OK · {fmtPct(m.false_alarm_rate)} false alarms
+                      </div>
+                    </div>
+                    <div className="kpi-card">
+                      <div className="kpi-value">{fmtPct(m.field_f1)}</div>
+                      <div className="kpi-label">Defect Field F1</div>
+                      {kpiMeter(m.field_f1)}
+                      <div className="kpi-sub">
+                        P {fmtPct(m.field_precision)} · R {fmtPct(m.field_recall)}
+                      </div>
+                    </div>
+                    <div className="kpi-card">
+                      <div className="kpi-value">{fmtPct(m.category_accuracy)}</div>
+                      <div className="kpi-label">Category Accuracy</div>
+                      {kpiMeter(m.category_accuracy)}
+                      <div className="kpi-sub">status accuracy {fmtPct(m.status_accuracy)}</div>
+                    </div>
+                    <div className="kpi-card">
+                      <div className="kpi-value">{fmtPct(m.defect_recall)}</div>
+                      <div className="kpi-label">Mismatch Recall</div>
+                      {kpiMeter(m.defect_recall)}
+                      <div className="kpi-sub">review recall {fmtPct(m.review_recall)}</div>
+                    </div>
+                  </div>
+
+                  {/* Per-test-type breakdown */}
+                  {m.per_test_type && (
+                    <div className="sub-diffs" style={{ marginTop: '18px' }}>
+                      <div className="sub-diffs-head">
+                        <h4>Breakdown by test type</h4>
+                      </div>
+                      <div className="diff-table-wrap">
+                        <table className="diff-table">
+                          <thead>
+                            <tr>
+                              <th>Test type</th>
+                              <th>Expected</th>
+                              <th>Cases</th>
+                              <th>Exact</th>
+                              <th>Missed</th>
+                              <th>Accuracy</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {Object.entries(m.per_test_type).map(([tt, b]) => (
+                              <tr key={tt} className={b.missed ? 'stress-row-miss' : ''}>
+                                <td className="mono">{tt}</td>
+                                <td>{b.gt_status}</td>
+                                <td>{b.total}</td>
+                                <td>{b.exact}</td>
+                                <td>{b.missed || ''}</td>
+                                <td>{fmtPct(b.total ? b.exact / b.total : 0)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Failures */}
+                  {stressFailures.length > 0 && (
+                    <div className="sub-diffs">
+                      <div className="sub-diffs-head">
+                        <h4>
+                          Failures
+                          <span className="sub-diffs-count">
+                            {stressFailFilter ? `${filteredFailures.length} of ${stressFailures.length}` : stressFailures.length}
+                          </span>
+                        </h4>
+                        <input
+                          className="sub-diff-filter"
+                          placeholder="Filter by id or test type…"
+                          value={stressFailFilter}
+                          onChange={(e) => setStressFailFilter(e.target.value)}
+                        />
+                      </div>
+                      <div className="diff-table-wrap">
+                        <table className="diff-table">
+                          <thead>
+                            <tr>
+                              <th>Email</th>
+                              <th>Test type</th>
+                              <th>Status (expected → predicted)</th>
+                              <th>Differing fields</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {shownFailures.map(f => (
+                              <tr key={f.email_id}>
+                                <td className="mono">{f.email_id}</td>
+                                <td className="mono">{f.test_type}</td>
+                                <td>
+                                  <span className="truth-val">
+                                    {f.expected?.status}{f.expected?.review_reason ? `/${f.expected.review_reason}` : ''}
+                                  </span>
+                                  <span className="arrow">→</span>
+                                  <span className="sub-val bad">
+                                    {f.predicted?.status || '—'}{f.predicted?.review_reason ? `/${f.predicted.review_reason}` : ''}
+                                  </span>
+                                  {f.error && <div className="sub-error" style={{ marginTop: '4px' }}>{f.error}</div>}
+                                </td>
+                                <td>
+                                  <div className="diff-chips">
+                                    {(f.diffs || []).map(d => <span key={d} className="diff-field-chip">{d}</span>)}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {filteredFailures.length > 15 && (
+                          <button className="diff-toggle" onClick={() => setStressShowAllFailures(s => !s)}>
+                            {stressShowAllFailures ? '▲ Show less' : `▼ Show all ${filteredFailures.length} failures`}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* SINGLE CASE TESTER */}
+              <div className="item-card">
+                <div className="sub-card-head">
+                  <div>
+                    <h3>Test a single edge case</h3>
+                    <p className="step-sub">
+                      Pick a case from the stress dataset and run it through the pipeline —
+                      compares the verdict against ground truth.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="sub-export-tools">
+                  <input
+                    className="sub-diff-filter"
+                    placeholder="Search email id…"
+                    value={stressCaseSearch}
+                    onChange={(e) => setStressCaseSearch(e.target.value)}
+                  />
+                  <select
+                    className="sub-diff-filter stress-type-select"
+                    value={stressCaseType}
+                    onChange={(e) => setStressCaseType(e.target.value)}
+                  >
+                    <option value="">All test types</option>
+                    {typeEntries.map(([tt]) => <option key={tt} value={tt}>{tt}</option>)}
+                  </select>
+                </div>
+
+                <div className="stress-case-row">
+                  <select
+                    className="sub-diff-filter stress-case-select"
+                    value={stressCaseId}
+                    onChange={(e) => setStressCaseId(e.target.value)}
+                    size={Math.min(8, Math.max(3, stressCases.length))}
+                  >
+                    {stressCases.map(c => (
+                      <option key={c.email_id} value={c.email_id}>
+                        {c.email_id} — {c.test_type} → {c.status}{c.review_reason ? `/${c.review_reason}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="sub-primary-btn"
+                    disabled={!stressCaseId || stressCaseLoading}
+                    onClick={() => handleRunStressCase(stressCaseId)}
+                  >
+                    {stressCaseLoading ? 'Running…' : '▶ Run case'}
+                  </button>
+                </div>
+                {stressCases.length === 0 && (
+                  <p className="diff-more">No cases match the current filters.</p>
+                )}
+
+                {stressCaseResult && (
+                  <div className="stress-one-result">
+                    <div className="stress-one-head">
+                      <span className="mono">{stressCaseResult.email_id}</span>
+                      {verdictPill(stressCaseResult.match)}
+                    </div>
+                    {stressCaseResult.error && (
+                      <div className="sub-error">Pipeline error: {stressCaseResult.error}</div>
+                    )}
+                    <div className="diff-table-wrap">
+                      <table className="diff-table">
+                        <thead>
+                          <tr><th></th><th>Expected</th><th>Predicted</th></tr>
+                        </thead>
+                        <tbody>
+                          {['category', 'status', 'review_reason'].map(k => (
+                            <tr key={k}>
+                              <td className="mono">{k}</td>
+                              <td className="truth-val">{stressCaseResult.expected?.[k] ?? '—'}</td>
+                              <td className={`sub-val ${stressCaseResult.diffs?.includes(k) ? 'bad' : ''}`}>
+                                {stressCaseResult.predicted?.[k] ?? '—'}
+                              </td>
+                            </tr>
+                          ))}
+                          <tr>
+                            <td className="mono">defect_fields</td>
+                            <td className="truth-val">{(stressCaseResult.expected?.defect_fields || []).join(', ') || '—'}</td>
+                            <td className={`sub-val ${stressCaseResult.diffs?.includes('defect_fields') ? 'bad' : ''}`}>
+                              {(stressCaseResult.predicted?.defect_fields || []).join(', ') || '—'}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    {(stressCaseResult.si_fields && Object.keys(stressCaseResult.si_fields).length > 0) && (
+                      <details style={{ marginTop: '10px', fontSize: '0.82rem' }}>
+                        <summary style={{ cursor: 'pointer', opacity: 0.7 }}>Extracted fields</summary>
+                        <pre style={{ marginTop: '8px', background: '#faf8f5', padding: '12px', borderRadius: '8px', overflowX: 'auto' }}>
+                          {JSON.stringify({ si: stressCaseResult.si_fields, bl: stressCaseResult.bl_fields }, null, 2)}
+                        </pre>
+                      </details>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

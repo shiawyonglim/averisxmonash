@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: OOCL
+Bill of Lading No.: BKG440070
+Shipper: WILMAR INTERNATIONAL LIMITED
+Consignee: MÜLLER LOGISTIK AG
+Notify Party: NIPPON EXPRESS CO., LTD
+Port of Loading: BELAWAN, INDONESIA (IDBLW)
+Port of Discharge: ROTTERDAM, NETHERLANDS (NLRTM)
+Total Containers: 5 x 40'HC
+Gross Weight: 25,938 KGS
+Remarks: Shipper verbally requested 3 containers — pls confirm 5.

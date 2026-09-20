@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: CMA CGM
+Bill of Lading No.: BKG375472
+
+Shipper:
+SÜD PAPIER GMBH
+HAFENSTRASSE 12, 20457 HAMBURG, GERMANY
+
+Consignee:
+PAPELERÍA NACIONAL S.A. DE C.V.
+AV. INSURGENTES SUR 1602, CDMX, MÉXICO
+
+Notify Party:
+EASTERN MARITIME AGENCIES LLC
+DUBAI, UAE
+
+Port of Loading: SINGAPORE, SINGAPORE (SGSIN)
+Port of Discharge: HO CHI MINH, VIETNAM (VNSGN)
+Total Containers: 4 x 40'HC
+Gross Weight: ??? KGS
+Reference OC: OC-7409
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

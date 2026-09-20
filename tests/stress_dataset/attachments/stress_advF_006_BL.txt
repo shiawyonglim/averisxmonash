@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: EVERGREEN
+Bill of Lading No.: BKG272594
+Shipper: EVERGREEN AGRO EXPORTS SDN BHD
+Consignee: MOORIM SP CO., LTD
+Notify Party: NIPPON EXPRESS CO., LTD
+Port of Loading: TANJUNG PELEPAS, MALAYSIA (MYTPP)
+Port of Discharge: BUSAN, SOUTH KOREA (KRPUS)
+Total Containers: 6 x 40'HC
+Gross Weight: 39,930 KGS
+Remarks: Shipper verbally requested 4 containers — pls confirm 6.

@@ -17,28 +17,22 @@ def is_si_attachment(path, text=""):
     return "SHIPPING INSTRUCTION" in (text or "").upper().replace("_", " ")
 
 
-def check_attachments(email_data, bundle_dir):
+def check_attachments(email_data, bundle_dir, intent=None):
     """
     Returns None if attachments are OK, or an edge case tuple:
     (status, review_reason) if it needs review.
+
+    A comparison request carrying only the SI (1 attachment) is always
+    missing the draft BL. With 0 attachments we escalate only when the
+    sender's intent is a document comparison (COMPARE_NOW); "please send
+    the draft BL" requests carry nothing to compare and are not defects.
     """
     atts = email_data.get("attachments", [])
-    body = (email_data.get("body") or "").lower()
-    
-    # Needs exactly 2 attachments for comparison.
-    # If fewer, escalate to missing_attachment only if body notes dropped attachments or still missing BL
-    if len(atts) < 2:
-        if any(k in body for k in [
-            "attachments appear to have been dropped",
-            "the draft bl is still missing",
-            "attachment missing",
-            "missing in email",
-            "dropped attachment",
-            "missing attachment"
-        ]):
-            return ("NEEDS_REVIEW", "missing_attachment")
-        return None
-    
+
+    if len(atts) == 1:
+        return ("NEEDS_REVIEW", "missing_attachment")
+    if len(atts) == 0 and intent == "COMPARE_NOW":
+        return ("NEEDS_REVIEW", "missing_attachment")
     return None
 
 def diagnose_attachment(full_path):

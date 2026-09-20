@@ -55,3 +55,6 @@ frontend/nul.css
 # Local smoke-test logs
 server_smoke.log
 *.log
+
+# LLM response cache
+.cache/

@@ -5,7 +5,11 @@ import re
 import tempfile
 import threading
 import smtplib
+import imaplib
+import email
+from email.header import decode_header
 import uuid
+from typing import Optional, Dict, List, Any
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone
@@ -23,11 +27,11 @@ except ImportError:
     Client = None
 
 # Import our pipeline functions
-from pipeline.ai_engine import extract_shipping_fields, reason_and_verify_with_ai, classify_email, quick_classify, analyze_document_image, MODEL
+from pipeline.ai_engine import extract_shipping_fields, extract_fields_tiered, reason_and_verify_with_ai, classify_email, quick_classify, classify_email_detailed, analyze_document_image, MODEL
 from pipeline.comparator import compare_fields
 from pipeline.edge_cases import check_wrong_doc_type, diagnose_attachment, is_si_attachment
 from pipeline.parsers import extract_text, is_image_file, validate_image, IMAGE_EXTENSIONS, extract_shipping_fields_fast
-from pipeline.main import process_email
+from pipeline.main import process_email, submission_row
 from pipeline.knowledge_base import build_documents, compute_stats, answer_question, retrieve, invalidate_cache
 from pipeline.agent import run_agent, resume_agent, SYSTEM_PROMPT as AGENT_SYSTEM_PROMPT
 
@@ -286,6 +290,14 @@ def _init_verdicts_from_submission():
     try:
         with open(SUBMISSION_PATH, "r", encoding="utf-8") as f:
             sub = json.load(f)
+        details_sidecar = {}
+        details_path = os.path.join(os.path.dirname(SUBMISSION_PATH), "verification_details.json")
+        if os.path.exists(details_path):
+            try:
+                with open(details_path, "r", encoding="utf-8") as df:
+                    details_sidecar = json.load(df)
+            except Exception:
+                details_sidecar = {}
         for eid, r in sub.items():
             CLASSIFICATIONS_STORE[eid] = r.get("category", "GENERAL")
             if eid not in VERDICTS_STORE:
@@ -318,13 +330,16 @@ def _init_verdicts_from_submission():
                     "All 7 critical shipping fields match accurately."
                 )
 
+                det = details_sidecar.get(eid, {})
                 VERDICTS_STORE[eid] = {
                     "status": r.get("status"),
                     "review_reason": r.get("review_reason"),
                     "defect_fields": defects,
-                    "si_fields": si_fields,
-                    "bl_fields": bl_fields,
-                    "field_comparisons": comparisons,
+                    "si_fields": det.get("si_fields") or si_fields,
+                    "bl_fields": det.get("bl_fields") or bl_fields,
+                    "field_comparisons": det.get("field_comparisons") or comparisons,
+                    "details": det,
+                    "evidence": det.get("evidence", []),
                     "thoughts": "Verified deterministically against Shipping Instructions and draft Bill of Lading standards.",
                     "summary_reason": summary,
                     "verified_at": _utcnow()
@@ -359,7 +374,8 @@ def get_email_content(email_id: str):
                 "reason": reason
             })
 
-        category = classify_email(email_data.get("subject", ""), email_data.get("body", ""), len(atts) > 0)
+        det = classify_email_detailed(email_data.get("subject", ""), email_data.get("body", ""), len(atts) > 0)
+        category = det["category"]
         CLASSIFICATIONS_STORE[email_id] = category
         email_info = {
             "email_id": email_id,
@@ -367,8 +383,18 @@ def get_email_content(email_id: str):
             "subject": email_data.get("subject", "No subject"),
             "body": email_data.get("body", ""),
             "attachments": att_meta,
-            "category": category
+            "category": category,
+            "subcategory": det["subcategory"],
+            "display_tag": det["display_tag"],
+            "category_description": det["description"]
         }
+
+        threads = EMAIL_THREADS_STORE.get(email_id, [])
+        inbound_replies = [m for m in threads if m.get("direction") == "INBOUND"]
+        email_info["has_reply"] = len(inbound_replies) > 0
+        email_info["reply_count"] = len(inbound_replies)
+        email_info["thread_count"] = len(threads)
+        email_info["threads"] = threads
 
         sb_rec = _get_from_supabase_record(email_id)
         if (not VERDICTS_STORE.get(email_id)) and sb_rec and sb_rec.get("status"):
@@ -388,6 +414,7 @@ def get_email_content(email_id: str):
         if len(atts) < 2:
             return {
                 "email": email_info,
+                "threads": threads,
                 "si_text": "[MISSING ATTACHMENT: Email does not carry the required 2 shipping attachments]",
                 "bl_text": "[MISSING ATTACHMENT: Bill of Lading draft is absent from this request]",
                 "is_corrupted": True,
@@ -425,6 +452,7 @@ def get_email_content(email_id: str):
         if is_si_attachment(path1, text1):
             return {
                 "email": email_info,
+                "threads": threads,
                 "si_text": text1,
                 "bl_text": text2,
                 "is_corrupted": is_corrupt,
@@ -438,6 +466,7 @@ def get_email_content(email_id: str):
         else:
             return {
                 "email": email_info,
+                "threads": threads,
                 "si_text": text2,
                 "bl_text": text1,
                 "is_corrupted": is_corrupt,
@@ -649,6 +678,12 @@ def send_email_smtp(req: SmtpSendRequest):
     now = _utcnow()
     is_live = bool(user and password and "@" in user and len(password) >= 6 and "example" not in user.lower())
 
+    # Ensure subject carries thread tracking reference
+    ref_tag = f"[REF: {req.email_id}]" if req.email_id else ""
+    if ref_tag and ref_tag.lower() not in req.subject.lower():
+        req.subject = f"{req.subject} {ref_tag}"
+    msg_id = f"<averis-ops-{req.email_id or 'gen'}-{uuid.uuid4().hex[:8]}@averis-freight.com>"
+
     if not is_live:
         result = {
             "status": "SIMULATED_SENT",
@@ -657,6 +692,7 @@ def send_email_smtp(req: SmtpSendRequest):
             "message": f"Email successfully validated and dispatched to {req.to_email} via simulated Google SMTP pipeline. (To route over live Gmail, enter your Google App Password in the SMTP settings modal or in .env).",
             "to": req.to_email,
             "subject": req.subject,
+            "message_id": msg_id,
             "body_snippet": req.body[:150] + "...",
             "sent_at": now
         }
@@ -666,6 +702,7 @@ def send_email_smtp(req: SmtpSendRequest):
             msg["From"] = user
             msg["To"] = req.to_email
             msg["Subject"] = req.subject
+            msg["Message-ID"] = msg_id
             msg.attach(MIMEText(req.body, "plain"))
 
             server = smtplib.SMTP(host, port, timeout=15)
@@ -683,6 +720,7 @@ def send_email_smtp(req: SmtpSendRequest):
                 "message": f"Successfully delivered email directly to {req.to_email} via Google SMTP server ({user}).",
                 "to": req.to_email,
                 "subject": req.subject,
+                "message_id": msg_id,
                 "body_snippet": req.body[:150] + "...",
                 "sent_at": now
             }
@@ -695,15 +733,338 @@ def send_email_smtp(req: SmtpSendRequest):
                 "message": f"Google SMTP error: {err_msg}. Note: Gmail accounts with 2FA require a 16-character 'Google App Password'.",
                 "to": req.to_email,
                 "subject": req.subject,
+                "message_id": msg_id,
                 "error": err_msg,
                 "sent_at": now
             }
 
     if req.email_id:
+        outbound_msg = {
+            "id": f"msg_out_{uuid.uuid4().hex[:8]}",
+            "direction": "OUTBOUND",
+            "message_id": msg_id,
+            "from_addr": user or "ops@averis-freight.com",
+            "to_addr": req.to_email,
+            "subject": req.subject,
+            "body": req.body,
+            "sent_at": now,
+            "status": "DELIVERED",
+            "mode": result.get("mode", "SMTP")
+        }
+        _add_thread_message(req.email_id, outbound_msg)
         DISPATCHED_EMAILS_STORE[req.email_id] = result
         _log_to_supabase_audit(req.email_id, "EMAIL_DISPATCHED", result)
 
     return result
+
+
+# ============================================================
+# Automated Inbound Thread Tracking & Reply Ingestion Engine
+# ============================================================
+
+EMAIL_THREADS_FILE = os.path.join(BASE_DIR, "email_threads.json")
+
+def _load_email_threads() -> dict:
+    if os.path.exists(EMAIL_THREADS_FILE):
+        try:
+            with open(EMAIL_THREADS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def _save_email_threads(threads: dict):
+    try:
+        with open(EMAIL_THREADS_FILE, "w", encoding="utf-8") as f:
+            json.dump(threads, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"Error saving email threads: {e}")
+
+EMAIL_THREADS_STORE: dict = _load_email_threads()
+
+def _add_thread_message(email_id: str, msg: dict):
+    if email_id not in EMAIL_THREADS_STORE:
+        EMAIL_THREADS_STORE[email_id] = []
+    EMAIL_THREADS_STORE[email_id].append(msg)
+    _save_email_threads(EMAIL_THREADS_STORE)
+
+def _find_email_id_for_reply(subject: str = "", body: str = "", in_reply_to: str = "", references: str = "") -> Optional[str]:
+    for txt in [subject, body, in_reply_to, references]:
+        if not txt:
+            continue
+        m = re.search(r'\[REF:\s*(email_\d+)\]', txt, re.IGNORECASE)
+        if m:
+            return m.group(1).lower()
+        m2 = re.search(r'\b(email_\d+)\b', txt, re.IGNORECASE)
+        if m2 and ("averis" in txt.lower() or "chaser" in txt.lower() or "draft" in txt.lower() or "bl" in txt.lower() or "booking" in txt.lower()):
+            return m2.group(1).lower()
+
+    for eid, msgs in EMAIL_THREADS_STORE.items():
+        for msg in msgs:
+            orig_subj = (msg.get("subject") or "").lower().replace("re:", "").strip()
+            if orig_subj and orig_subj in (subject or "").lower():
+                return eid
+    return None
+
+def process_inbound_reply(
+    email_id: Optional[str] = None,
+    from_addr: str = "carrier-ops@shipping-line.com",
+    subject: str = "Re: Documentation Update",
+    body: str = "",
+    attachments: Optional[list] = None,
+    in_reply_to: Optional[str] = None
+) -> dict:
+    matched_id = email_id or _find_email_id_for_reply(subject, body, in_reply_to or "")
+    target_id = matched_id or "unmatched_replies"
+
+    now = _utcnow()
+    reply_msg = {
+        "id": f"msg_in_{uuid.uuid4().hex[:8]}",
+        "direction": "INBOUND",
+        "from_addr": from_addr,
+        "to_addr": "ops@averis-freight.com",
+        "subject": subject,
+        "body": body,
+        "received_at": now,
+        "status": "RECEIVED",
+        "in_reply_to": in_reply_to,
+        "attachments": attachments or []
+    }
+    _add_thread_message(target_id, reply_msg)
+
+    # Auto-update status of chasers
+    if target_id in CHASERS_STORE:
+        CHASERS_STORE[target_id]["status"] = "REPLY_RECEIVED"
+        CHASERS_STORE[target_id]["reply_received_at"] = now
+        CHASERS_STORE[target_id]["reply_sender"] = from_addr
+        CHASERS_STORE[target_id]["reply_preview"] = body[:200]
+
+    _log_to_supabase_audit(target_id, "INBOUND_REPLY_RECEIVED", {
+        "from": from_addr,
+        "subject": subject,
+        "preview": body[:120],
+        "has_attachments": bool(attachments)
+    })
+
+    return {
+        "status": "SUCCESS",
+        "email_id": target_id,
+        "message": f"Inbound reply successfully captured and linked to thread {target_id}",
+        "record": reply_msg,
+        "thread_length": len(EMAIL_THREADS_STORE.get(target_id, []))
+    }
+
+@app.get("/api/email/{email_id}/thread")
+def get_email_thread(email_id: str):
+    if not _email_exists(email_id) and email_id not in EMAIL_THREADS_STORE:
+        raise HTTPException(status_code=404, detail="Email thread not found")
+    threads = EMAIL_THREADS_STORE.get(email_id, [])
+    initial = _get_email_data(email_id)
+    return {
+        "email_id": email_id,
+        "thread_count": len(threads),
+        "messages": threads,
+        "initial_email": initial
+    }
+
+class InboundWebhookRequest(BaseModel):
+    email_id: Optional[str] = None
+    from_email: str = "carrier@liner.com"
+    subject: str = ""
+    body: str = ""
+    attachments: Optional[list] = None
+    in_reply_to: Optional[str] = None
+
+@app.post("/api/email/inbound-webhook")
+def receive_inbound_webhook(req: InboundWebhookRequest):
+    return process_inbound_reply(
+        email_id=req.email_id,
+        from_addr=req.from_email,
+        subject=req.subject,
+        body=req.body,
+        attachments=req.attachments,
+        in_reply_to=req.in_reply_to
+    )
+
+class SimulateReplyRequest(BaseModel):
+    sender: Optional[str] = None
+    subject: Optional[str] = None
+    body: Optional[str] = None
+    has_attachment: bool = True
+
+@app.post("/api/email/{email_id}/simulate-reply")
+def simulate_carrier_reply(email_id: str, req: SimulateReplyRequest = None):
+    if not _email_exists(email_id):
+        raise HTTPException(status_code=404, detail=f"Email {email_id} not found")
+
+    d = _get_email_data(email_id) or {}
+    subj = d.get("subject", "Shipping Instructions")
+    body_text = d.get("body", "")
+    atts = d.get("attachments", [])
+    has_bl = _has_bl_attachment(atts)
+    det = classify_email_detailed(subj, body_text, len(atts) > 0)
+    cat = det["category"]
+
+    sender = (req.sender if req and req.sender else "Ocean Carrier Documentation Desk <ops@msc-oceanline.com>")
+    reply_subj = (req.subject if req and req.subject else f"Re: {subj} [REF: {email_id}]")
+
+    if req and req.body:
+        reply_body = req.body
+    elif not has_bl or "missing" in subj.lower():
+        reply_body = (
+            f"Dear Averis Freight Documentation Team,\n\n"
+            f"Thank you for following up regarding reference {email_id}.\n"
+            f"Please find attached the officially issued draft Bill of Lading (Draft BL) for your booking.\n"
+            f"All shipping instructions, container manifests, and cargo weight declarations have been confirmed with terminal operations.\n\n"
+            f"Please review and reply with your final confirmation so we can issue the Original Sea Waybill.\n\n"
+            f"Best regards,\n"
+            f"Carrier Export Documentation Services\n"
+            f"Documentation Team Ref #{email_id.upper()}"
+        )
+    elif cat == "INVOICE_QUERY":
+        reply_body = (
+            f"Dear Accounting / Freight Operations,\n\n"
+            f"We have re-examined demurrage calculation dispute for {email_id}.\n"
+            f"Upon reviewing port terminal equipment interchange logs, the 4-day free-time extension was verified.\n"
+            f"Credit Adjustment Note CR-89410 has been issued for USD 380.00. Revised account balance has been updated.\n\n"
+            f"Sincerely,\n"
+            f"Port Billing & Disbursements Team"
+        )
+    elif cat == "SI_REQUEST":
+        reply_body = (
+            f"Dear Shipper / Freight Forwarder,\n\n"
+            f"Shipping Instructions submission for {email_id} has been accepted into our liner booking system.\n"
+            f"Vessel cutoff schedule confirmed. Draft BL generation is currently in progress.\n\n"
+            f"Best regards,\n"
+            f"Global Booking Office"
+        )
+    else:
+        reply_body = (
+            f"Dear Averis Team,\n\n"
+            f"Thank you for your message regarding {email_id}. We have received your request and updated the booking notes accordingly.\n\n"
+            f"Kind regards,\n"
+            f"Carrier Customer Service Support"
+        )
+
+    attachments = []
+    if req and req.has_attachment:
+        attachments = [{
+            "filename": f"Revised_Draft_BL_{email_id.upper()}.pdf",
+            "type": "application/pdf",
+            "size_kb": 184,
+            "description": "Carrier Revised Draft Bill of Lading document"
+        }]
+
+    return process_inbound_reply(
+        email_id=email_id,
+        from_addr=sender,
+        subject=reply_subj,
+        body=reply_body,
+        attachments=attachments,
+        in_reply_to=f"<averis-ops-{email_id}@averis-freight.com>"
+    )
+
+class ImapPollRequest(BaseModel):
+    imap_host: str = ""
+    imap_port: int = 0
+    imap_user: str = ""
+    imap_pass: str = ""
+    limit: int = 10
+
+@app.post("/api/email/imap-poll")
+def poll_imap_inbox(req: ImapPollRequest):
+    load_dotenv(override=True)
+    host = req.imap_host or os.getenv("IMAP_HOST") or "imap.gmail.com"
+    port = req.imap_port or int(os.getenv("IMAP_PORT") or 993)
+    user = (req.imap_user or os.getenv("IMAP_USER") or os.getenv("DEFAULT_SENDER") or "").strip()
+    password = (req.imap_pass or os.getenv("IMAP_PASSWORD") or os.getenv("SMTP_PASSWORD") or "").strip().replace(" ", "")
+
+    is_live = bool(user and password and "@" in user and len(password) >= 6 and "example" not in user.lower())
+
+    if not is_live:
+        return {
+            "status": "SIMULATED_POLL",
+            "connected": False,
+            "mode": "Simulation (Pre-configured Google IMAP Ready)",
+            "message": f"IMAP listener verified for {host}:{port}. Enter your live Google App Password in .env (IMAP_PASSWORD) or provide it in request to poll live inbox.",
+            "messages_checked": 0,
+            "replies_matched": 0,
+            "active_threads": len(EMAIL_THREADS_STORE)
+        }
+
+    try:
+        mail = imaplib.IMAP4_SSL(host, port, timeout=15)
+        mail.login(user, password)
+        mail.select("INBOX")
+        status, messages = mail.search(None, "UNSEEN")
+        if status != "OK":
+            return {"status": "ERROR", "message": "Failed to search inbox"}
+
+        msg_ids = messages[0].split()
+        matched = []
+        for mid in msg_ids[-req.limit:]:
+            res, data = mail.fetch(mid, "(RFC822)")
+            if res != "OK":
+                continue
+            raw_email = data[0][1]
+            msg = email.message_from_bytes(raw_email)
+
+            subject_header = decode_header(msg.get("Subject", ""))[0]
+            subject_text = subject_header[0]
+            if isinstance(subject_text, bytes):
+                subject_text = subject_text.decode(subject_header[1] or "utf-8", errors="ignore")
+
+            from_header = msg.get("From", "Unknown")
+            in_reply_to = msg.get("In-Reply-To", "")
+            references = msg.get("References", "")
+
+            # Extract body
+            body_text = ""
+            if msg.is_multipart():
+                for part in msg.walk():
+                    content_type = part.get_content_type()
+                    content_disposition = str(part.get("Content-Disposition"))
+                    if content_type == "text/plain" and "attachment" not in content_disposition:
+                        payload = part.get_payload(decode=True)
+                        if payload:
+                            body_text += payload.decode("utf-8", errors="ignore")
+            else:
+                payload = msg.get_payload(decode=True)
+                if payload:
+                    body_text = payload.decode("utf-8", errors="ignore")
+
+            reply_res = process_inbound_reply(
+                email_id=None,
+                from_addr=from_header,
+                subject=subject_text,
+                body=body_text,
+                in_reply_to=in_reply_to
+            )
+            if reply_res.get("email_id") != "unmatched_replies":
+                matched.append({
+                    "email_id": reply_res.get("email_id"),
+                    "subject": subject_text,
+                    "from": from_header
+                })
+
+        mail.close()
+        mail.logout()
+
+        return {
+            "status": "LIVE_POLL_SUCCESS",
+            "connected": True,
+            "messages_checked": min(len(msg_ids), req.limit),
+            "unseen_total": len(msg_ids),
+            "replies_matched": len(matched),
+            "matched_details": matched
+        }
+    except Exception as e:
+        return {
+            "status": "IMAP_ERROR",
+            "connected": False,
+            "error": str(e),
+            "message": f"IMAP connection failed: {e}. If using Gmail, make sure IMAP is enabled in Gmail settings and you are using a 16-character App Password."
+        }
 
 
 # ============================================================
@@ -972,11 +1333,13 @@ def verify_documents(req: VerificationRequest):
         _store_verdict(req.email_id, resp)
         return resp
 
-    # Extract Fields via NVIDIA AI
-    si_fields = extract_shipping_fields(si_text)
-    bl_fields = extract_shipping_fields(bl_text)
+    # Extract fields with the same regex->LLM tiering the batch pipeline uses
+    si_fields, si_prov = extract_fields_tiered(si_text)
+    bl_fields, bl_prov = extract_fields_tiered(bl_text)
 
     resp = _verdict_response(si_fields, bl_fields)
+    resp["si_provenance"] = si_prov
+    resp["bl_provenance"] = bl_prov
     _store_verdict(req.email_id, resp)
     return resp
 
@@ -1004,7 +1367,36 @@ def _verdict_response(si_fields, bl_fields):
     # Compare Fields with Smart Normalization
     defect_fields, is_missing_val, field_comparisons = compare_fields(si_fields, bl_fields)
 
-    # Missing values are escalated deterministically - skip the AI reasoning call
+    evidence = [
+        {
+            "field": f,
+            "si_value": si_fields.get(f),
+            "bl_value": bl_fields.get(f),
+            "reason": c.get("reason"),
+            **({"confidence": c["confidence"]} if c.get("confidence") else {}),
+        }
+        for f, c in field_comparisons.items() if not c.get("match")
+    ]
+
+    # Genuine value-vs-value defects are never swallowed by an escalation;
+    # blanks (one-sided or both) surface as evidence instead.
+    if defect_fields:
+        ai_reasoning = reason_and_verify_with_ai(
+            si_fields, bl_fields, defect_fields, is_missing_val, field_comparisons
+        )
+        return {
+            "status": "MISMATCH",
+            "review_reason": None,
+            "thoughts": ai_reasoning.get("thoughts", "Carefully analyzed field values across documents."),
+            "summary_reason": ai_reasoning.get("summary_reason", "Defect detected in specified fields."),
+            "si_fields": si_fields,
+            "bl_fields": bl_fields,
+            "defect_fields": defect_fields,
+            "field_comparisons": field_comparisons,
+            "evidence": evidence
+        }
+
+    # Missing values (blank on exactly one side) escalate deterministically
     if is_missing_val:
         return {
             "status": "NEEDS_REVIEW",
@@ -1013,8 +1405,25 @@ def _verdict_response(si_fields, bl_fields):
             "summary_reason": "Required field is missing or placeholder value.",
             "si_fields": si_fields,
             "bl_fields": bl_fields,
-            "defect_fields": defect_fields,
-            "field_comparisons": field_comparisons
+            "defect_fields": [],
+            "field_comparisons": field_comparisons,
+            "evidence": evidence
+        }
+
+    # Blank in BOTH documents = the fields could not be extracted at all;
+    # reporting OK would be dishonest.
+    both_blank = [f for f, c in field_comparisons.items() if c.get("blank") == "both"]
+    if both_blank:
+        return {
+            "status": "NEEDS_REVIEW",
+            "review_reason": "unreadable",
+            "thoughts": f"Field extraction produced no value in either document for: {', '.join(both_blank)}.",
+            "summary_reason": f"Escalated: could not extract {', '.join(both_blank)} from either document.",
+            "si_fields": si_fields,
+            "bl_fields": bl_fields,
+            "defect_fields": [],
+            "field_comparisons": field_comparisons,
+            "evidence": evidence
         }
 
     # Reason and think first using AI
@@ -1032,7 +1441,8 @@ def _verdict_response(si_fields, bl_fields):
         "si_fields": si_fields,
         "bl_fields": bl_fields,
         "defect_fields": defect_fields,
-        "field_comparisons": field_comparisons
+        "field_comparisons": field_comparisons,
+        "evidence": evidence
     }
 
 
@@ -1158,13 +1568,22 @@ async def verify_scanned_documents(
                       "Document header inspection detected an invalid document type (e.g. Commercial Invoice or Packing List instead of SI/BL). Escalated to human review.",
                       f"Escalated to human review due to {wrong_doc_err[1]}.")
 
-    si_fields, bl_fields = await asyncio.gather(
-        asyncio.to_thread(lambda: docs["si"]["fields"] or extract_shipping_fields(docs["si"]["text"])),
-        asyncio.to_thread(lambda: docs["bl"]["fields"] or extract_shipping_fields(docs["bl"]["text"])),
+    def _tiered(doc):
+        if doc.get("fields"):
+            return doc["fields"], {k: "vision" for k in doc["fields"]}
+        return extract_fields_tiered(doc["text"])
+
+    si_res, bl_res = await asyncio.gather(
+        asyncio.to_thread(_tiered, docs["si"]),
+        asyncio.to_thread(_tiered, docs["bl"]),
     )
+    si_fields, si_prov = si_res
+    bl_fields, bl_prov = bl_res
 
     resp = await asyncio.to_thread(_verdict_response, si_fields, bl_fields)
     resp.update({
+        "si_provenance": si_prov,
+        "bl_provenance": bl_prov,
         "si_text": docs["si"]["text"],
         "bl_text": docs["bl"]["text"],
         "si_meta": docs["si"]["meta"],
@@ -1237,12 +1656,20 @@ def _queue_item(eid, d):
     corrupted = corrupt_issue is not None
     has_bl = _has_bl_attachment(atts)
     missing_bl = (not has_bl) and _is_bl_relevant_subject(subj)
-    category = CLASSIFICATIONS_STORE.get(eid) or quick_classify(subj, body, len(atts) > 0)
+    det = classify_email_detailed(subj, body, len(atts) > 0)
+    category = CLASSIFICATIONS_STORE.get(eid) or det["category"]
     chaser_status = CHASERS_STORE.get(eid, {}).get("status")
     corrupt_action = CORRUPTED_STORE.get(eid, {}).get("status")
 
+    threads = EMAIL_THREADS_STORE.get(eid, [])
+    inbound_replies = [m for m in threads if m.get("direction") == "INBOUND"]
+    has_reply = len(inbound_replies) > 0
+    latest_reply = inbound_replies[-1] if inbound_replies else None
+
     if resolved:
         queue_status = "RESOLVED"
+    elif has_reply:
+        queue_status = "REPLY_RECEIVED"
     elif verdict_status:
         queue_status = verdict_status
     elif corrupted:
@@ -1258,6 +1685,9 @@ def _queue_item(eid, d):
         "from": d.get("from", "Unknown"),
         "attachments_count": len(atts),
         "category": category,
+        "subcategory": det["subcategory"],
+        "display_tag": det["display_tag"],
+        "category_description": det["description"],
         "has_bl": has_bl,
         "corrupted": corrupted,
         "corrupt_issue": corrupt_issue,
@@ -1267,6 +1697,10 @@ def _queue_item(eid, d):
         "corrupt_action": corrupt_action,
         "queue_status": queue_status,
         "_missing_bl": missing_bl,
+        "has_reply": has_reply,
+        "reply_count": len(inbound_replies),
+        "latest_reply": latest_reply,
+        "thread_count": len(threads),
     }
 
 
@@ -1285,6 +1719,8 @@ def _queue_match(item, flt):
         return item["resolved"]
     if flt == "chaser_sent":
         return item["chaser_status"] is not None
+    if flt == "reply_received":
+        return item.get("has_reply", False)
     return True
 
 
@@ -1310,13 +1746,17 @@ def get_queue(filter: str = "all", search: str = "", page: int = 1, limit: int =
         "corrupted": sum(1 for i in items if _queue_match(i, "corrupted")),
         "resolved": sum(1 for i in items if _queue_match(i, "resolved")),
         "chaser_sent": sum(1 for i in items if _queue_match(i, "chaser_sent")),
+        "reply_received": sum(1 for i in items if _queue_match(i, "reply_received")),
     }
 
     filtered = [i for i in items if _queue_match(i, filter)]
     if search:
         s = search.lower()
         filtered = [i for i in filtered if s in i["email_id"].lower()
-                    or s in i["subject"].lower() or s in i["from"].lower()]
+                    or s in i["subject"].lower() or s in i["from"].lower()
+                    or s in (i.get("display_tag") or "").lower()
+                    or s in (i.get("subcategory") or "").lower()
+                    or s in (i.get("category_description") or "").lower()]
 
     total = len(filtered)
     start = (page - 1) * limit
@@ -1376,6 +1816,7 @@ def get_stats():
     status_counts = {"OK": 0, "MISMATCH": 0, "NEEDS_REVIEW": 0, "RESOLVED": 0, "UNVERIFIED": 0}
     defect_field_counts = {k: 0 for k in DEFECT_FIELDS}
     categories = {}
+    subcategories = {}
     missing_bl_total = 0
     missing_bl_by_carrier = {}
     corrupted_total = 0
@@ -1395,9 +1836,12 @@ def get_stats():
         else:
             status_counts["UNVERIFIED"] += 1
 
-        category = CLASSIFICATIONS_STORE.get(eid) or quick_classify(
+        det = classify_email_detailed(
             d.get("subject", ""), d.get("body", ""), len(d.get("attachments", [])) > 0)
+        category = CLASSIFICATIONS_STORE.get(eid) or det["category"]
         categories[category] = categories.get(category, 0) + 1
+        disp_tag = det["display_tag"]
+        subcategories[disp_tag] = subcategories.get(disp_tag, 0) + 1
 
         atts = d.get("attachments", [])
         if not _has_bl_attachment(atts) and _is_bl_relevant_subject(d.get("subject", "")):
@@ -1426,6 +1870,7 @@ def get_stats():
         "status_counts": status_counts,
         "defect_fields": defect_field_counts,
         "categories": categories,
+        "subcategories": subcategories,
         "missing_bl_total": missing_bl_total,
         "missing_bl_count": missing_bl_total,
         "missing_bl_by_carrier": missing_bl_by_carrier,
@@ -1624,13 +2069,16 @@ def _agent_verify_emails(email_ids=None, status_filter=None, limit=25):
             SUBMISSION_STORE[eid] = result
             if result.get("category"):
                 CLASSIFICATIONS_STORE[eid] = result["category"]
+            det = result.get("details") or {}
             VERDICTS_STORE[eid] = {
                 "status": result.get("status"),
                 "review_reason": result.get("review_reason"),
                 "defect_fields": result.get("defect_fields", []),
-                "si_fields": si_fields or {},
-                "bl_fields": bl_fields or {},
-                "field_comparisons": {},
+                "si_fields": si_fields or det.get("si_fields") or {},
+                "bl_fields": bl_fields or det.get("bl_fields") or {},
+                "field_comparisons": det.get("field_comparisons") or {},
+                "details": det,
+                "evidence": det.get("evidence", []),
                 "thoughts": None,
                 "summary_reason": None,
                 "verified_at": _utcnow(),
@@ -1858,6 +2306,11 @@ def _write_submission(allow_shrink=False):
             if k not in data:
                 data[k] = v
         SUBMISSION_STORE.update(data)
+    # submission.json is scored on exactly the 5 organizer keys; pipeline
+    # results carry a 'details' payload that lives in verification_details.json
+    # and must not leak into the scored file.
+    data = {k: (submission_row(v) if isinstance(v, dict) and "details" in v else v)
+            for k, v in data.items()}
     # Atomic write: a crash mid-dump must not leave a truncated file.
     tmp_path = SUBMISSION_PATH + ".tmp"
     with open(tmp_path, 'w', encoding='utf-8') as f:
@@ -1979,13 +2432,16 @@ def _pipeline_worker(files):
                     SUBMISSION_STORE[eid] = result
                     if result.get("category"):
                         CLASSIFICATIONS_STORE[eid] = result["category"]
+                    det = result.get("details") or {}
                     VERDICTS_STORE[eid] = {
                         "status": result.get("status"),
                         "review_reason": result.get("review_reason"),
                         "defect_fields": result.get("defect_fields", []),
-                        "si_fields": si_fields or {},
-                        "bl_fields": bl_fields or {},
-                        "field_comparisons": {},
+                        "si_fields": si_fields or det.get("si_fields") or {},
+                        "bl_fields": bl_fields or det.get("bl_fields") or {},
+                        "field_comparisons": det.get("field_comparisons") or {},
+                        "details": det,
+                        "evidence": det.get("evidence", []),
                         "thoughts": None,
                         "summary_reason": None,
                         "verified_at": _utcnow(),
@@ -2144,6 +2600,358 @@ def compare_submission():
             "missing": sum(1 for r in rows if "missing_submission" in r["diffs"]),
         },
         "rows": rows,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Stress / edge-case test harness (tests/stress_dataset)
+# ---------------------------------------------------------------------------
+STRESS_DIR = os.path.join(BASE_DIR, "tests", "stress_dataset")
+STRESS_INBOX_DIR = os.path.join(STRESS_DIR, "inbox")
+STRESS_GT_PATH = os.path.join(STRESS_DIR, "stress_ground_truth.json")
+STRESS_RESULTS_PATH = os.path.join(STRESS_DIR, "stress_results.json")
+
+STRESS_STATE = {
+    "running": False, "processed": 0, "total": 0, "current": None,
+    "done": False, "error": None, "cancel_requested": False,
+    "started_at": None, "finished_at": None, "elapsed_seconds": None,
+}
+STRESS_RESULTS = {}   # email_id -> predicted verdict
+STRESS_METRICS = None
+
+
+def _load_stress_gt():
+    if not os.path.exists(STRESS_GT_PATH):
+        return {}
+    with open(STRESS_GT_PATH, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+
+def _stress_verdict_match(pred, gt):
+    return (
+        pred.get("category") == gt.get("category")
+        and pred.get("status") == gt.get("status")
+        and pred.get("review_reason") == gt.get("review_reason")
+        and sorted(pred.get("defect_fields") or []) == sorted(gt.get("defect_fields") or [])
+    )
+
+
+def _stress_verdict_diffs(pred, gt):
+    diffs = []
+    for k in ("category", "status", "review_reason"):
+        if pred.get(k) != gt.get(k):
+            diffs.append(k)
+    if sorted(pred.get("defect_fields") or []) != sorted(gt.get("defect_fields") or []):
+        diffs.append("defect_fields")
+    return diffs
+
+
+def _stress_compute_metrics(results, gt):
+    """Score stress-run predictions against the ground truth file."""
+    from collections import Counter
+    # Score only the cases this run actually processed (a limited run should
+    # not count untouched ground-truth rows as misses).
+    gt_eval = {eid: g for eid, g in gt.items() if eid in results}
+    total = len(gt_eval)
+    exact = category_ok = status_ok = 0
+    rf_total = rf_correct = rf_false_alarms = 0      # expected-OK cases
+    nrf_total = nrf_caught = 0                       # expected-flagged cases
+    defect_total = defect_caught = 0
+    review_total = review_caught = 0
+    crashes = 0
+    f_tp = f_fp = f_fn = 0
+    per_type = {}
+    failures = []
+
+    for eid, g in gt_eval.items():
+        pred = results.get(eid)
+        if pred is None:
+            pred = {"category": None, "status": "MISSING",
+                    "review_reason": None, "defect_fields": []}
+        tt = g.get("test_type", "unknown")
+        bucket = per_type.setdefault(tt, {
+            "total": 0, "exact": 0, "status_ok": 0, "missed": 0,
+            "gt_status": g.get("status"),
+        })
+        bucket["total"] += 1
+
+        if pred.get("status") == "ERROR":
+            crashes += 1
+
+        is_exact = _stress_verdict_match(pred, g)
+        if is_exact:
+            exact += 1
+        if pred.get("category") == g.get("category"):
+            category_ok += 1
+        if pred.get("status") == g.get("status"):
+            status_ok += 1
+            bucket["status_ok"] += 1
+        if is_exact:
+            bucket["exact"] += 1
+        else:
+            bucket["missed"] += 1
+            failures.append({
+                "email_id": eid, "test_type": tt,
+                "expected": {k: g.get(k) for k in ("category", "status", "review_reason", "defect_fields")},
+                "predicted": {k: pred.get(k) for k in ("category", "status", "review_reason", "defect_fields")},
+                "error": pred.get("error"),
+                "diffs": _stress_verdict_diffs(pred, g),
+            })
+
+        if g.get("status") == "OK":
+            rf_total += 1
+            if is_exact:
+                rf_correct += 1
+            elif pred.get("status") in ("MISMATCH", "NEEDS_REVIEW"):
+                rf_false_alarms += 1
+        else:
+            nrf_total += 1
+            if pred.get("status") in ("MISMATCH", "NEEDS_REVIEW"):
+                nrf_caught += 1
+            if g.get("status") == "MISMATCH":
+                defect_total += 1
+                if pred.get("status") == "MISMATCH":
+                    defect_caught += 1
+                gtd = set(g.get("defect_fields") or [])
+                prd = set(pred.get("defect_fields") or [])
+                f_tp += len(gtd & prd)
+                f_fp += len(prd - gtd)
+                f_fn += len(gtd - prd)
+            elif g.get("status") == "NEEDS_REVIEW":
+                review_total += 1
+                if pred.get("status") == "NEEDS_REVIEW":
+                    review_caught += 1
+
+    f_prec = f_tp / (f_tp + f_fp) if (f_tp + f_fp) else 1.0
+    f_rec = f_tp / (f_tp + f_fn) if (f_tp + f_fn) else 1.0
+    f_f1 = 2 * f_prec * f_rec / (f_prec + f_rec) if (f_prec + f_rec) else 0.0
+
+    return {
+        "total": total,
+        "dataset_total": len(gt),
+        "processed": len(results),
+        "exact_verdict_accuracy": exact / total if total else 0,
+        "category_accuracy": category_ok / total if total else 0,
+        "status_accuracy": status_ok / total if total else 0,
+        "crashes": crashes,
+        "clean_accuracy": rf_correct / rf_total if rf_total else 0,
+        "false_alarm_rate": rf_false_alarms / rf_total if rf_total else 0,
+        "clean_total": rf_total,
+        "flagged_total": nrf_total,
+        "catch_rate": nrf_caught / nrf_total if nrf_total else 0,
+        "defect_recall": defect_caught / defect_total if defect_total else 0,
+        "review_recall": review_caught / review_total if review_total else 0,
+        "field_precision": f_prec,
+        "field_recall": f_rec,
+        "field_f1": f_f1,
+        "per_test_type": dict(sorted(per_type.items())),
+        "status_counts": dict(Counter(p.get("status") for p in results.values())),
+        "failures": sorted(failures, key=lambda r: (r["test_type"], r["email_id"])),
+    }
+
+
+def _stress_process_file(fname):
+    path = os.path.join(STRESS_INBOX_DIR, fname)
+    try:
+        with open(path, 'r', encoding='utf-8') as fl:
+            email_data = json.load(fl)
+        eid = email_data.get("email_id") or fname.replace('.json', '')
+        try:
+            result, _, _ = process_email(email_data, bundle_dir=STRESS_DIR)
+            return eid, result
+        except Exception as e:
+            return eid, {
+                "category": "ERROR", "status": "ERROR",
+                "review_reason": None, "defect_fields": [],
+                "error": f"{type(e).__name__}: {e}",
+            }
+    except Exception as e:
+        return fname.replace('.json', ''), {
+            "category": "ERROR", "status": "ERROR",
+            "review_reason": None, "defect_fields": [],
+            "error": f"unreadable email json: {e}",
+        }
+
+
+def _stress_worker(files):
+    from concurrent.futures import ThreadPoolExecutor
+    import time as _time
+    global STRESS_METRICS
+    t0 = _time.time()
+    try:
+        with ThreadPoolExecutor(max_workers=STRESS_STATE.get("workers") or 8) as pool:
+            for eid, result in pool.map(_stress_process_file, files):
+                STRESS_RESULTS[eid] = result
+                STRESS_STATE["processed"] += 1
+                if STRESS_STATE["cancel_requested"]:
+                    STRESS_STATE["error"] = "cancelled"
+                    break
+    except Exception as e:
+        STRESS_STATE["error"] = str(e)
+    finally:
+        STRESS_STATE["elapsed_seconds"] = round(_time.time() - t0, 2)
+        gt = _load_stress_gt()
+        STRESS_METRICS = _stress_compute_metrics(STRESS_RESULTS, gt)
+        STRESS_METRICS["elapsed_seconds"] = STRESS_STATE["elapsed_seconds"]
+        done = STRESS_STATE["elapsed_seconds"] or 1
+        STRESS_METRICS["throughput_eps"] = round(len(STRESS_RESULTS) / done, 1)
+        try:
+            with open(STRESS_RESULTS_PATH, 'w', encoding='utf-8') as f:
+                json.dump({"results": STRESS_RESULTS, "metrics": STRESS_METRICS}, f)
+        except Exception:
+            pass
+        STRESS_STATE["done"] = True
+        STRESS_STATE["running"] = False
+        STRESS_STATE["current"] = None
+        STRESS_STATE["finished_at"] = _utcnow()
+
+
+class StressRunRequest(BaseModel):
+    limit: int = 0          # 0 = all emails in the dataset
+    workers: int = 8        # parallel workers (deterministic pipeline, no LLM)
+
+
+@app.get("/api/stress/dataset")
+def stress_dataset_info():
+    gt = _load_stress_gt()
+    files = []
+    if os.path.isdir(STRESS_INBOX_DIR):
+        files = [f for f in os.listdir(STRESS_INBOX_DIR) if f.endswith('.json')]
+    by_type, by_status = {}, {}
+    for g in gt.values():
+        by_type[g.get("test_type", "unknown")] = by_type.get(g.get("test_type", "unknown"), 0) + 1
+        by_status[g.get("status", "?")] = by_status.get(g.get("status", "?"), 0) + 1
+    return {
+        "exists": os.path.isdir(STRESS_INBOX_DIR),
+        "dataset_dir": STRESS_DIR,
+        "email_count": len(files),
+        "ground_truth_count": len(gt),
+        "by_test_type": dict(sorted(by_type.items())),
+        "by_status": dict(sorted(by_status.items())),
+        "has_saved_results": os.path.exists(STRESS_RESULTS_PATH),
+    }
+
+
+@app.get("/api/stress/cases")
+def stress_cases(search: str = "", test_type: str = "", limit: int = 200):
+    gt = _load_stress_gt()
+    rows = []
+    for eid, g in sorted(gt.items()):
+        if search and search.lower() not in eid.lower():
+            continue
+        if test_type and g.get("test_type") != test_type:
+            continue
+        rows.append({
+            "email_id": eid,
+            "test_type": g.get("test_type"),
+            "category": g.get("category"),
+            "status": g.get("status"),
+            "review_reason": g.get("review_reason"),
+            "defect_fields": g.get("defect_fields") or [],
+        })
+        if len(rows) >= limit:
+            break
+    return {"total": len(gt), "returned": len(rows), "cases": rows}
+
+
+@app.post("/api/stress/run")
+def stress_run(req: StressRunRequest):
+    if STRESS_STATE["running"]:
+        return {"started": False, "message": "stress test already running"}
+    if not os.path.isdir(STRESS_INBOX_DIR):
+        raise HTTPException(status_code=404,
+                            detail="stress dataset not found — run tests/generate_stress_dataset.py first")
+
+    files = sorted([f for f in os.listdir(STRESS_INBOX_DIR) if f.endswith('.json')])
+    if req.limit and req.limit > 0:
+        files = files[:req.limit]
+
+    STRESS_RESULTS.clear()
+    STRESS_STATE.update({
+        "running": True, "processed": 0, "total": len(files),
+        "current": None, "done": False, "error": None,
+        "cancel_requested": False, "started_at": _utcnow(),
+        "finished_at": None, "elapsed_seconds": None,
+        "workers": max(1, min(req.workers, 32)),
+    })
+    threading.Thread(target=_stress_worker, args=(files,), daemon=True).start()
+    return {"started": True, "total": len(files)}
+
+
+@app.post("/api/stress/cancel")
+def stress_cancel():
+    if not STRESS_STATE["running"]:
+        return {"cancelled": False, "message": "no stress run in progress"}
+    STRESS_STATE["cancel_requested"] = True
+    return {"cancelled": True}
+
+
+@app.get("/api/stress/status")
+def stress_status():
+    return dict(STRESS_STATE, metrics=STRESS_METRICS, result_count=len(STRESS_RESULTS))
+
+
+@app.get("/api/stress/results")
+def stress_results(failures_only: bool = False, limit: int = 500):
+    global STRESS_METRICS
+    if STRESS_METRICS is None and os.path.exists(STRESS_RESULTS_PATH):
+        try:
+            with open(STRESS_RESULTS_PATH, 'r', encoding='utf-8') as f:
+                saved = json.load(f)
+            if not STRESS_RESULTS:
+                STRESS_RESULTS.update(saved.get("results", {}))
+            STRESS_METRICS = saved.get("metrics")
+        except Exception:
+            pass
+    if STRESS_METRICS is None:
+        return {"metrics": None, "failures": [], "rows": []}
+    m = dict(STRESS_METRICS)
+    failures = m.pop("failures", [])[:limit]
+    rows = []
+    if not failures_only:
+        gt = _load_stress_gt()
+        for eid in sorted(STRESS_RESULTS)[:limit]:
+            rows.append({
+                "email_id": eid,
+                "test_type": (gt.get(eid) or {}).get("test_type"),
+                "predicted": STRESS_RESULTS[eid],
+                "expected": gt.get(eid),
+                "match": _stress_verdict_match(STRESS_RESULTS[eid], gt.get(eid) or {}),
+            })
+    return {"metrics": m, "failures": failures, "rows": rows}
+
+
+class StressRunOneRequest(BaseModel):
+    email_id: str
+
+
+@app.post("/api/stress/run-one")
+def stress_run_one(req: StressRunOneRequest):
+    eid = req.email_id.strip()
+    path = os.path.join(STRESS_INBOX_DIR, f"{eid}.json")
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail=f"{eid} not found in stress dataset")
+    with open(path, 'r', encoding='utf-8') as f:
+        email_data = json.load(f)
+    try:
+        pred, si_fields, bl_fields = process_email(email_data, bundle_dir=STRESS_DIR)
+        error = None
+    except Exception as e:
+        pred, si_fields, bl_fields = {
+            "category": "ERROR", "status": "ERROR",
+            "review_reason": None, "defect_fields": [],
+        }, {}, {}
+        error = f"{type(e).__name__}: {e}"
+    gt = _load_stress_gt().get(eid)
+    return {
+        "email_id": eid,
+        "predicted": pred,
+        "expected": gt,
+        "si_fields": si_fields,
+        "bl_fields": bl_fields,
+        "error": error,
+        "match": _stress_verdict_match(pred, gt) if gt else None,
+        "diffs": _stress_verdict_diffs(pred, gt) if gt else [],
     }
 
 

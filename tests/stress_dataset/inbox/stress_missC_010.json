@@ -1,0 +1,9 @@
+{
+  "email_id": "stress_missC_010",
+  "from": "ops@hapaglloyd.com",
+  "subject": "DRAFT BL FOR REVIEW // OC-4441 // ROTTERDAM // BKG273651",
+  "body": "Please review the attached draft BL. (Attachment missing in email payload)",
+  "attachments": [
+    "attachments/stress_missC_010_BL.txt"
+  ]
+}

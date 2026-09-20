@@ -18,6 +18,6 @@ DUBAI, UAE
 Port of Loading: PENANG, MALAYSIA (MYPEN)
 Port of Discharge: BARCELONA, SPAIN (ESBCN)
 Total Containers: 6x40HC
-Gross Weight: 22,722 KGS
+Gross Weight: 22,723 KGS
 Reference OC: OC-7505
 Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

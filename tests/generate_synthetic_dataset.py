@@ -176,9 +176,16 @@ for i in range(1, 61):
     si_cnt = f"{num_containers} x 40'HC"
     bl_cnt = f"{num_containers} CONTAINERS (40' HIGH CUBE)" if i % 2 == 0 else f"{num_containers}x40HC"
 
-    # Weight notation style (e.g. MT vs KG or rounding within 0.2%)
+    # Weight notation style — the SAME value on both sides; only formatting
+    # varies (KG vs KGS is in the templates, comma grouping, or an exactly
+    # equivalent MT expression). A real numeric difference is a defect.
     si_wt = f"{w_val:,}"
-    bl_wt = f"{w_val / 1000.0:.2f} MT" if i % 3 == 0 else f"{w_val + (1 if i % 2 == 0 else -1):,}"
+    if i % 3 == 0:
+        bl_wt = f"{w_val / 1000.0} MT"           # e.g. 40.618 MT == 40,618 KG (exact)
+    elif i % 3 == 1:
+        bl_wt = f"{w_val:,}"                     # identical grouping
+    else:
+        bl_wt = f"{w_val}"                       # no comma grouping
 
     # Company name style (e.g. PTE LTD vs PTE. LTD.)
     bl_sh = (sh[0].replace("PTE LTD", "PTE. LTD.").replace("SDN BHD", "SDN. BHD."), sh[1])

@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: ONE
+Bill of Lading No.: BKG772524
+Shipper: APRIL FAR EAST (M) SDN BHD
+Consignee: INTERNATIONAL PAPER DO BRASIL LTDA
+Notify Party: TRANS-MED LOGISTICS GMBH
+Port of Loading: PORT KLANG (WESTPORT), MALAYSIA (MYPKG)
+Port of Discharge: JEBEL ALI, UNITED ARAB EMIRATES (AEJEA)
+Total Containers: 7 x 40'HC
+Gross Weight: 27,882 KGS
+Remarks: Shipper verbally requested 5 containers — pls confirm 7.

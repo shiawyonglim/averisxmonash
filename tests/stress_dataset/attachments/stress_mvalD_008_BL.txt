@@ -1,0 +1,23 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: HAPAG-LLOYD
+Bill of Lading No.: BKG116783
+
+Shipper:
+SÜD PAPIER GMBH
+HAFENSTRASSE 12, 20457 HAMBURG, GERMANY
+
+Consignee:
+HANWHA CORPORATION
+86 CHEONGGYECHEON-RO, JUNG-GU, SEOUL, KOREA
+
+Notify Party:
+N/A
+
+
+Port of Loading: PENANG, MALAYSIA (MYPEN)
+Port of Discharge: ROTTERDAM, NETHERLANDS (NLRTM)
+Total Containers: 4 x 40'HC
+Gross Weight: TBD KGS
+Reference OC: OC-2229
+Status: SUBJECT TO CORRECTION BEFORE VESSEL DEPARTURE

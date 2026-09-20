@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: ONE
+Bill of Lading No.: BKG137560
+Shipper: CELLULOSE TRADING S.A.
+Consignee: PAPELERÍA NACIONAL S.A. DE C.V.
+Notify Party: TRANS-MED LOGISTICS GMBH
+Port of Loading: TANJUNG PELEPAS, MALAYSIA (MYTPP)
+Port of Discharge: BUSAN, SOUTH KOREA (KRPUS)
+Total Containers: 10 x 40'HC
+Gross Weight: 32,724 KGS
+Remarks: Shipper verbally requested 8 containers — pls confirm 10.

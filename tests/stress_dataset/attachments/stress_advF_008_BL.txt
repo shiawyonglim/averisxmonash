@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+========================================
+Carrier: EVERGREEN
+Bill of Lading No.: BKG266705
+Shipper: ASIA PACIFIC RAYON PTE LTD
+Consignee: MÜLLER LOGISTIK AG
+Notify Party: UAB NOVAKOPA
+Port of Loading: BELAWAN, INDONESIA (IDBLW)
+Port of Discharge: HO CHI MINH, VIETNAM (VNSGN)
+Total Containers: 3 x 40'HC
+Gross Weight: 33,170 KGS
+Remarks: Shipper verbally requested 1 containers — pls confirm 3.

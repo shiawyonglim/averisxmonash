@@ -101,33 +101,40 @@ def extract_text(path):
 # Tier 1: Fast Deterministic Field Extractor
 # Extracts the 7 core fields from layout-parsed text (.txt, .pdf, .docx, .xlsx)
 # ---------------------------------------------------------------------------
+# An optional header qualifier is restricted to a parenthetical "(KG)" or a
+# short "/exporter"-style suffix — an arbitrary greedy suffix can swallow the
+# field value itself (e.g. "Shipper        APRIL FINE PAPER TRADING").
+_PAREN = r'(?:\s*\([^)]*\))*'
+# Field separator: colon/pipe, a run of 2+ spaces, or a single space when it
+# directly follows a parenthetical qualifier (e.g. "(POD) FREMANTLE").
+_FSEP = r'(?:[:|]|[ \t]{2,}|(?<=\))[ \t])'
+
 FIELD_PATTERNS = {
     'shipper': [
-        r'(?:^|\|)[ \t]*(?:shipper(?:[^\n:|]+)?)[ \t]*(?:[:|]|[ \t]{2,})[ \t]*([^\n|]*(?:\s*\|\s*on\s*behalf\s*of\s*[^|\n;]+)?)',
+        rf'(?:^|\|)[ \t]*shipper(?:\s*/\s*exporter)?{_PAREN}[ \t]*{_FSEP}[ \t]*([^\n|]*(?:\s*\|\s*on\s*behalf\s*of\s*[^|\n;]+)?)',
     ],
     'consignee': [
-        r'(?:^|\|)[ \t]*(?:consignee(?:[^\n:|]+)?|to\s*the\s*order\s*of(?:[^\n:|]+)?|to\s*order\s*of(?:[^\n:|]+)?)[ \t]*(?:[:|]|[ \t]{2,})[ \t]*([^\n|]*)',
+        rf'(?:^|\|)[ \t]*to\s*the\s*order\s*of{_PAREN}[ \t]+([^\n|]+)',
+        rf'(?:^|\|)[ \t]*(?:consignee|to\s*order\s*of){_PAREN}[ \t]*{_FSEP}[ \t]*([^\n|]*)',
     ],
     'notify_party': [
-        r'(?:^|\|)[ \t]*(?:notify\s*party(?:[^\n:|]+)?|notify(?:[^\n:|]+)?)[ \t]*(?:[:|]|[ \t]{2,})[ \t]*([^\n|]*)',
+        rf'(?:^|\|)[ \t]*notify(?:\s*party)?{_PAREN}[ \t]*{_FSEP}[ \t]*([^\n|]*)',
     ],
     'port_of_loading': [
-        r'(?:^|\|)[ \t]*(?:port\s*of\s*loading|load\s*port|\bpol\b)(?:\s*\([^)]*\))?[ \t]*(?:[:|]|[ \t]{2,})[ \t]*([^\n|]+)',
+        rf'(?:^|\|)[ \t]*(?:port\s*of\s*loading|load\s*port|\bpol\b){_PAREN}[ \t]*{_FSEP}[ \t]*([^\n|]+)',
         r'(?:^|\|)[ \t]*(?:port\s*of\s*loading|load\s*port)[ \t]+([A-Z][^\n|]+)',
-        r'(?:^|\|)[ \t]*(?:port\s*of\s*loading(?:[^\n:|]+)?|load\s*port(?:[^\n:|]+)?|pol(?:[^\n:|]+)?)[ \t]*(?:[:|]|[ \t]{2,})[ \t]*([^\n|]*)',
     ],
     'port_of_discharge': [
-        r'(?:^|\|)[ \t]*(?:port\s*of\s*discharge|discharge\s*port|\bpod\b)(?:\s*\([^)]*\))?[ \t]*(?:[:|]|[ \t]{2,})[ \t]*([^\n|]+)',
+        rf'(?:^|\|)[ \t]*(?:port\s*of\s*discharge|discharge\s*port|\bpod\b){_PAREN}[ \t]*{_FSEP}[ \t]*([^\n|]+)',
         r'(?:^|\|)[ \t]*(?:port\s*of\s*discharge|discharge\s*port)[ \t]+([A-Z][^\n|]+)',
-        r'(?:^|\|)[ \t]*(?:port\s*of\s*discharge(?:[^\n:|]+)?|discharge\s*port(?:[^\n:|]+)?|pod(?:[^\n:|]+)?)[ \t]*(?:[:|]|[ \t]{2,})[ \t]*([^\n|]*)',
     ],
     'container_count': [
-        r'(?:^|\|)[ \t]*(?:total\s*(?:no\.?\s*of\s*)?containers?|no\.?\s*of\s*containers?|container\s*count|containers?)(?!\s*no\b)(?:[^\n:|]*?)[ \t]*(?:[:|]|[ \t]{2,})[ \t]*([^\n|]+)',
+        rf'(?:^|\|)[ \t]*(?:total\s*(?:no\.?\s*of\s*)?containers?|no\.?\s*of\s*containers?|container\s*count|containers?)(?!\s*no\b)(?:\s+or\s+packages)?{_PAREN}[ \t]*{_FSEP}[ \t]*([^\n|]+)',
         r'(?:^|\|)[ \t]*total\s*containers?[ \t]*[:|][ \t]*([^\n|]+)',
         r'(?:^|\|)[ \t]*containers?[ \t]*[:|][ \t]*([^\n|]+)',
     ],
     'gross_weight_kg': [
-        r'(?:^|\|)[ \t]*(?:(?:total\s+)?gross\s*weight(?:[^\n:|]+)?|(?:total\s+)?gross\s*wt(?:[^\n:|]+)?|total\s*gross\s*weight(?:[^\n:|]+)?|weight(?:[^\n:|]+)?)[ \t]*(?:[:|]|[ \t]{2,})[ \t]*([^\n|]*)',
+        rf'(?:^|\|)[ \t]*(?:(?:total\s+)?gross\s*(?:weight|wt)|weight){_PAREN}[ \t]*{_FSEP}[ \t]*([^\n|]*)',
     ]
 }
 
