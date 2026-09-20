@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_040",
+  "from": "agent@msc.com",
+  "subject": "TO CONFIRM DOCS _ OC-6531 _ BARCELONA _ SAICA PACK IBERIA S.L. _ BKG983456",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_040_SI.txt",
+    "attachments/synth_defect_040_BL.txt"
+  ]
+}

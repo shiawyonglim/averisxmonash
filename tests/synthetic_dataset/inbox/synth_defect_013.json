@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_013",
+  "from": "agent@msc.com",
+  "subject": "TO CONFIRM DOCS _ OC-3392 _ HO CHI MINH _ MOORIM SP CO., LTD _ BKG244283",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_013_SI.txt",
+    "attachments/synth_defect_013_BL.txt"
+  ]
+}

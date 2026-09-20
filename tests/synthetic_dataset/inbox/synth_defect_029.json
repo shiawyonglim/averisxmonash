@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_029",
+  "from": "agent@pil.com",
+  "subject": "TO CONFIRM DOCS _ OC-3513 _ ROTTERDAM _ HANWHA CORPORATION _ BKG812048",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_029_SI.txt",
+    "attachments/synth_defect_029_BL.txt"
+  ]
+}

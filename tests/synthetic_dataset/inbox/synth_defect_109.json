@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_109",
+  "from": "agent@evergreen.com",
+  "subject": "TO CONFIRM DOCS _ OC-1539 _ BARCELONA _ MOORIM SP CO., LTD _ BKG288066",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_109_SI.txt",
+    "attachments/synth_defect_109_BL.txt"
+  ]
+}

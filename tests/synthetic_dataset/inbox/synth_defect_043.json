@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_043",
+  "from": "agent@evergreen.com",
+  "subject": "TO CONFIRM DOCS _ OC-8609 _ ROTTERDAM _ SAICA PACK IBERIA S.L. _ BKG313933",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_043_SI.txt",
+    "attachments/synth_defect_043_BL.txt"
+  ]
+}

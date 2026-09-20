@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_012",
+  "from": "agent@maersk.com",
+  "subject": "TO CONFIRM DOCS _ OC-4862 _ ROTTERDAM _ MOORIM SP CO., LTD _ BKG504924",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_012_SI.txt",
+    "attachments/synth_defect_012_BL.txt"
+  ]
+}

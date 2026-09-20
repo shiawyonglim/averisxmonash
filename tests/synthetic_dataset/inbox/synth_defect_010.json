@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_010",
+  "from": "agent@maersk.com",
+  "subject": "TO CONFIRM DOCS _ OC-7081 _ CALLAO _ AL BUSTAN PACKAGING FACTORY LLC _ BKG681478",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_010_SI.txt",
+    "attachments/synth_defect_010_BL.txt"
+  ]
+}

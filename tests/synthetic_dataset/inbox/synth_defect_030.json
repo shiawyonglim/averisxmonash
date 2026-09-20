@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_030",
+  "from": "agent@one.com",
+  "subject": "TO CONFIRM DOCS _ OC-7521 _ JEBEL ALI _ INTERNATIONAL PAPER DO BRASIL LTDA _ BKG429657",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_030_SI.txt",
+    "attachments/synth_defect_030_BL.txt"
+  ]
+}

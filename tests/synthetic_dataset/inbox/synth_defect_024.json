@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_024",
+  "from": "agent@one.com",
+  "subject": "TO CONFIRM DOCS _ OC-9151 _ BUSAN _ INTERNATIONAL PAPER DO BRASIL LTDA _ BKG485191",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_024_SI.txt",
+    "attachments/synth_defect_024_BL.txt"
+  ]
+}

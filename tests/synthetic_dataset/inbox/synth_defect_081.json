@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_081",
+  "from": "agent@maersk.com",
+  "subject": "TO CONFIRM DOCS _ OC-9866 _ BUSAN _ MOORIM SP CO., LTD _ BKG163182",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_081_SI.txt",
+    "attachments/synth_defect_081_BL.txt"
+  ]
+}

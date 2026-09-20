@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_016",
+  "from": "agent@msc.com",
+  "subject": "TO CONFIRM DOCS _ OC-9189 _ ROTTERDAM _ HANWHA CORPORATION _ BKG725726",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_016_SI.txt",
+    "attachments/synth_defect_016_BL.txt"
+  ]
+}

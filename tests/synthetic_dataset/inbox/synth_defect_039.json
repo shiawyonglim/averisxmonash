@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_039",
+  "from": "agent@one.com",
+  "subject": "TO CONFIRM DOCS _ OC-5496 _ JEBEL ALI _ NIPPON PAPER INDUSTRIES CO., LTD _ BKG231250",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_039_SI.txt",
+    "attachments/synth_defect_039_BL.txt"
+  ]
+}

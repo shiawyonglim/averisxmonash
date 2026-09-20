@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_020",
+  "from": "agent@evergreen.com",
+  "subject": "TO CONFIRM DOCS _ OC-1726 _ HO CHI MINH _ SAICA PACK IBERIA S.L. _ BKG469412",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_020_SI.txt",
+    "attachments/synth_defect_020_BL.txt"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_099",
+  "from": "agent@evergreen.com",
+  "subject": "TO CONFIRM DOCS _ OC-5026 _ JEBEL ALI _ HANWHA CORPORATION _ BKG623555",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_099_SI.txt",
+    "attachments/synth_defect_099_BL.txt"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_015",
+  "from": "agent@one.com",
+  "subject": "TO CONFIRM DOCS _ OC-5720 _ BARCELONA _ HANWHA CORPORATION _ BKG349183",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_015_SI.txt",
+    "attachments/synth_defect_015_BL.txt"
+  ]
+}

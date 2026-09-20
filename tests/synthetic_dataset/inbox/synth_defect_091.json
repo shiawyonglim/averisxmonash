@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_091",
+  "from": "agent@pil.com",
+  "subject": "TO CONFIRM DOCS _ OC-3365 _ JEBEL ALI _ HANWHA CORPORATION _ BKG944917",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_091_SI.txt",
+    "attachments/synth_defect_091_BL.txt"
+  ]
+}

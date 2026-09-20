@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_002",
+  "from": "agent@maersk.com",
+  "subject": "TO CONFIRM DOCS _ OC-3463 _ HO CHI MINH _ INTERNATIONAL PAPER DO BRASIL LTDA _ BKG449555",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_002_SI.txt",
+    "attachments/synth_defect_002_BL.txt"
+  ]
+}

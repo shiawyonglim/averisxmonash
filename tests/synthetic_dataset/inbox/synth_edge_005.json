@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_edge_005",
+  "from": "shipper@golden.com",
+  "subject": "TO CONFIRM DOCS _ OC-9939 _ JEBEL ALI _ BKG288667",
+  "body": "Please find attached docs for your processing.",
+  "attachments": [
+    "attachments/synth_edge_005_SI.txt",
+    "attachments/synth_edge_005_PACKING_LIST.txt"
+  ]
+}

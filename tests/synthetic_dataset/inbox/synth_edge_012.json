@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_edge_012",
+  "from": "ops@evergreen.com",
+  "subject": "TO CONFIRM DOCS _ OC-9199 _ HO CHI MINH _ BKG258067",
+  "body": "Attached draft BL with pending weight declaration.",
+  "attachments": [
+    "attachments/synth_edge_012_SI.txt",
+    "attachments/synth_edge_012_BL.txt"
+  ]
+}

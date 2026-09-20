@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_120",
+  "from": "agent@hapag-lloyd.com",
+  "subject": "TO CONFIRM DOCS _ OC-9123 _ JEBEL ALI _ MOORIM SP CO., LTD _ BKG722651",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_120_SI.txt",
+    "attachments/synth_defect_120_BL.txt"
+  ]
+}

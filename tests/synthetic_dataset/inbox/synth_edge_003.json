@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_edge_003",
+  "from": "desk@evergreen.com",
+  "subject": "TO CONFIRM DOCS _ OC-3910 _ BUSAN _ BKG517584",
+  "body": "Attached please find the draft bill of lading PDF.",
+  "attachments": [
+    "attachments/synth_edge_003_SI.txt",
+    "attachments/synth_edge_003_BL.pdf"
+  ]
+}

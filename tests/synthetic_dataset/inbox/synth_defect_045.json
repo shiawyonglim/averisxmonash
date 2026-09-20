@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_045",
+  "from": "agent@one.com",
+  "subject": "TO CONFIRM DOCS _ OC-2586 _ ROTTERDAM _ INTERNATIONAL PAPER DO BRASIL LTDA _ BKG153063",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_045_SI.txt",
+    "attachments/synth_defect_045_BL.txt"
+  ]
+}

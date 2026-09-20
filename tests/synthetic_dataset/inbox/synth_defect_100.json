@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_100",
+  "from": "agent@pil.com",
+  "subject": "TO CONFIRM DOCS _ OC-3773 _ JEBEL ALI _ SAICA PACK IBERIA S.L. _ BKG246757",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_100_SI.txt",
+    "attachments/synth_defect_100_BL.txt"
+  ]
+}

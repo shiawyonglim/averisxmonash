@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_101",
+  "from": "agent@msc.com",
+  "subject": "TO CONFIRM DOCS _ OC-1794 _ CALLAO _ SAICA PACK IBERIA S.L. _ BKG901467",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_101_SI.txt",
+    "attachments/synth_defect_101_BL.txt"
+  ]
+}

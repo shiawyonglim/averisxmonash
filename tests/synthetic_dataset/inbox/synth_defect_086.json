@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_086",
+  "from": "agent@msc.com",
+  "subject": "TO CONFIRM DOCS _ OC-8314 _ CALLAO _ HANWHA CORPORATION _ BKG726822",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_086_SI.txt",
+    "attachments/synth_defect_086_BL.txt"
+  ]
+}

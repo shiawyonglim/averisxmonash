@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_054",
+  "from": "agent@one.com",
+  "subject": "TO CONFIRM DOCS _ OC-2795 _ CALLAO _ AL BUSTAN PACKAGING FACTORY LLC _ BKG536774",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_054_SI.txt",
+    "attachments/synth_defect_054_BL.txt"
+  ]
+}

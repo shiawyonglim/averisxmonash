@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_008",
+  "from": "agent@hapag-lloyd.com",
+  "subject": "TO CONFIRM DOCS _ OC-8355 _ ROTTERDAM _ INTERNATIONAL PAPER DO BRASIL LTDA _ BKG345369",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_008_SI.txt",
+    "attachments/synth_defect_008_BL.txt"
+  ]
+}

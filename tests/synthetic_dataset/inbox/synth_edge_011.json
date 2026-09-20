@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_edge_011",
+  "from": "desk@hapag-lloyd.com",
+  "subject": "TO CONFIRM DOCS _ OC-5239 _ CALLAO _ BKG332785",
+  "body": "Attached please find the draft bill of lading PDF.",
+  "attachments": [
+    "attachments/synth_edge_011_SI.txt",
+    "attachments/synth_edge_011_BL.pdf"
+  ]
+}

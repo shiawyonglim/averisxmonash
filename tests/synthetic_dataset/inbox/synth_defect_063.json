@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_defect_063",
+  "from": "agent@maersk.com",
+  "subject": "TO CONFIRM DOCS _ OC-5450 _ BUSAN _ HANWHA CORPORATION _ BKG243941",
+  "body": "Please verify draft bill attached.\n\nBest regards,\nCarrier Operations",
+  "attachments": [
+    "attachments/synth_defect_063_SI.txt",
+    "attachments/synth_defect_063_BL.txt"
+  ]
+}

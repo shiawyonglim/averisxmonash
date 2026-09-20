@@ -1,0 +1,10 @@
+{
+  "email_id": "synth_ok_100",
+  "from": "ops@one.com",
+  "subject": "TO CONFIRM DOCS _ OC-5781 _ CALLAO _ HANWHA CORPORATION _ BKG633590",
+  "body": "Please find attached SI and draft BL for confirmation.\n\nBest regards,\nOperations Desk",
+  "attachments": [
+    "attachments/synth_ok_100_SI.txt",
+    "attachments/synth_ok_100_BL.txt"
+  ]
+}
