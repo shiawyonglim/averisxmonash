@@ -27,6 +27,7 @@ from pipeline.comparator import compare_fields
 from pipeline.edge_cases import check_wrong_doc_type, diagnose_attachment, is_si_attachment
 from pipeline.parsers import extract_text, is_image_file, validate_image, IMAGE_EXTENSIONS, extract_shipping_fields_fast
 from pipeline.main import process_email
+from pipeline.knowledge_base import build_documents, compute_stats, answer_question
 
 app = FastAPI(title="Shipping Document Verification API")
 
@@ -1409,6 +1410,29 @@ def get_stats():
         "chasers_sent": len(CHASERS_STORE),
         "resolutions": len(RESOLUTIONS_STORE)
     }
+
+
+class ChatRequest(BaseModel):
+    message: str
+    history: list = []
+
+@app.post("/api/chat")
+def chat(req: ChatRequest):
+    if not req.message or not req.message.strip():
+        raise HTTPException(status_code=400, detail="message must not be empty")
+    docs = build_documents(INBOX_DIR, VERDICTS_STORE, CLASSIFICATIONS_STORE, RESOLUTIONS_STORE)
+    result = answer_question(req.message.strip(), req.history, docs)
+    return {
+        "answer": result["answer"],
+        "sources": result["sources"],
+        "degraded": result["degraded"],
+        "model": MODEL
+    }
+
+@app.get("/api/chat/stats")
+def chat_stats():
+    docs = build_documents(INBOX_DIR, VERDICTS_STORE, CLASSIFICATIONS_STORE, RESOLUTIONS_STORE)
+    return compute_stats(docs)
 
 
 @app.get("/api/audit")
