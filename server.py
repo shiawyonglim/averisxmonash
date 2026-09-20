@@ -5,6 +5,7 @@ import re
 import tempfile
 import threading
 import smtplib
+import uuid
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone
@@ -27,7 +28,8 @@ from pipeline.comparator import compare_fields
 from pipeline.edge_cases import check_wrong_doc_type, diagnose_attachment, is_si_attachment
 from pipeline.parsers import extract_text, is_image_file, validate_image, IMAGE_EXTENSIONS, extract_shipping_fields_fast
 from pipeline.main import process_email
-from pipeline.knowledge_base import build_documents, compute_stats, answer_question
+from pipeline.knowledge_base import build_documents, compute_stats, answer_question, retrieve, invalidate_cache
+from pipeline.agent import run_agent, resume_agent, SYSTEM_PROMPT as AGENT_SYSTEM_PROMPT
 
 app = FastAPI(title="Shipping Document Verification API")
 
@@ -78,9 +80,34 @@ def _utcnow():
     return datetime.now(timezone.utc).isoformat()
 
 
-def _email_exists(email_id):
-    return bool(email_id) and os.path.exists(os.path.join(INBOX_DIR, f"{email_id}.json"))
+INBOX_CACHE = {}
 
+def _get_email_data(email_id):
+    if email_id in INBOX_CACHE:
+        return INBOX_CACHE[email_id]
+    p = os.path.join(INBOX_DIR, f"{email_id}.json")
+    if os.path.exists(p):
+        try:
+            with open(p, "r", encoding="utf-8") as fl:
+                data = json.load(fl)
+                INBOX_CACHE[email_id] = data
+                return data
+        except Exception:
+            return {}
+    return {}
+
+def _init_inbox_cache():
+    if not os.path.exists(INBOX_DIR):
+        return
+    for f in sorted(os.listdir(INBOX_DIR)):
+        if f.endswith('.json'):
+            eid = f.replace('.json', '')
+            _get_email_data(eid)
+
+_init_inbox_cache()
+
+def _email_exists(email_id):
+    return bool(email_id) and (email_id in INBOX_CACHE or os.path.exists(os.path.join(INBOX_DIR, f"{email_id}.json")))
 
 def _is_bl_relevant_subject(subject):
     return bool(BL_RELEVANT_RX.search((subject or "").upper()))
@@ -1194,12 +1221,8 @@ def _ensure_corrupted_cache():
         if not f.endswith('.json'):
             continue
         eid = f.replace('.json', '')
-        try:
-            with open(os.path.join(INBOX_DIR, f), 'r', encoding='utf-8') as fl:
-                d = json.load(fl)
-            CORRUPTED_CACHE[eid] = _email_corrupt_issue(d)
-        except Exception:
-            CORRUPTED_CACHE[eid] = "Unreadable email record"
+        d = _get_email_data(eid)
+        CORRUPTED_CACHE[eid] = _email_corrupt_issue(d) if d else "Unreadable email record"
     _CORRUPTED_SCANNED = True
 
 
@@ -1272,10 +1295,8 @@ def get_queue(filter: str = "all", search: str = "", page: int = 1, limit: int =
     files = sorted([f for f in os.listdir(INBOX_DIR) if f.endswith('.json')])
     for f in files:
         eid = f.replace('.json', '')
-        try:
-            with open(os.path.join(INBOX_DIR, f), 'r', encoding='utf-8') as fl:
-                d = json.load(fl)
-        except Exception:
+        d = _get_email_data(eid)
+        if not d:
             continue
         items.append(_queue_item(eid, d))
 
@@ -1318,14 +1339,12 @@ def get_adjacent_in_queue(email_id: str, filter: str = "all"):
     files = sorted([f.replace('.json', '') for f in os.listdir(INBOX_DIR) if f.endswith('.json')])
     matched_eids = []
     for eid in files:
-        try:
-            with open(os.path.join(INBOX_DIR, f"{eid}.json"), 'r', encoding='utf-8') as fl:
-                d = json.load(fl)
-            item = _queue_item(eid, d)
-            if _queue_match(item, filter):
-                matched_eids.append(eid)
-        except Exception:
+        d = _get_email_data(eid)
+        if not d:
             continue
+        item = _queue_item(eid, d)
+        if _queue_match(item, filter):
+            matched_eids.append(eid)
 
     idx = -1
     if email_id in matched_eids:
@@ -1363,10 +1382,8 @@ def get_stats():
 
     for f in files:
         eid = f.replace('.json', '')
-        try:
-            with open(os.path.join(INBOX_DIR, f), 'r', encoding='utf-8') as fl:
-                d = json.load(fl)
-        except Exception:
+        d = _get_email_data(eid)
+        if not d:
             continue
 
         # Status rollup: RESOLVED > verdict status > UNVERIFIED
@@ -1400,13 +1417,20 @@ def get_stats():
 
     return {
         "emails_total": len(files),
+        "total_emails": len(files),
         "verified_count": len(VERDICTS_STORE),
+        "match_count": status_counts.get("OK", 0),
+        "mismatch_count": status_counts.get("MISMATCH", 0),
+        "resolved_count": status_counts.get("RESOLVED", 0),
+        "needs_review_count": status_counts.get("NEEDS_REVIEW", 0),
         "status_counts": status_counts,
         "defect_fields": defect_field_counts,
         "categories": categories,
         "missing_bl_total": missing_bl_total,
+        "missing_bl_count": missing_bl_total,
         "missing_bl_by_carrier": missing_bl_by_carrier,
         "corrupted_total": corrupted_total,
+        "corrupted_count": corrupted_total,
         "chasers_sent": len(CHASERS_STORE),
         "resolutions": len(RESOLUTIONS_STORE)
     }
@@ -1433,6 +1457,318 @@ def chat(req: ChatRequest):
 def chat_stats():
     docs = build_documents(INBOX_DIR, VERDICTS_STORE, CLASSIFICATIONS_STORE, RESOLUTIONS_STORE)
     return compute_stats(docs)
+
+
+# ============================================================
+# Agent Assistant — tool-calling loop with approval-gated writes
+# ============================================================
+
+def _agent_docs():
+    return build_documents(INBOX_DIR, VERDICTS_STORE, CLASSIFICATIONS_STORE, RESOLUTIONS_STORE)
+
+
+def _agent_get_statistics():
+    stats = compute_stats(_agent_docs())
+    stats["summary"] = (f"{stats['total_emails']} emails; "
+                        + ", ".join(f"{k}={v}" for k, v in sorted(stats["by_status"].items())))
+    return stats
+
+
+def _agent_search(query, k=8):
+    hits = retrieve(query or "", _agent_docs(), k=int(k or 8))
+    results = [{
+        "email_id": d["email_id"], "subject": d["subject"], "status": d["status"],
+        "category": d["category"], "defect_fields": d["defect_fields"],
+        "review_reason": d["review_reason"],
+    } for d in hits]
+    return {"results": results, "summary": f"{len(results)} records retrieved"}
+
+
+def _agent_email_details(email_id):
+    eid = (email_id or "").strip()
+    docs = {d["email_id"]: d for d in _agent_docs()}
+    d = docs.get(eid)
+    if not d:
+        return {"error": f"email {eid} not found"}
+    v = VERDICTS_STORE.get(eid) or {}
+    atts = []
+    for a in d["attachments"]:
+        full = os.path.join(BUNDLE_DIR, a)
+        is_bad, reason = diagnose_attachment(full) if os.path.exists(full) else (True, "file missing")
+        atts.append({"path": a, "is_corrupt": is_bad, "reason": reason})
+    return {
+        "email_id": eid,
+        "subject": d["subject"], "sender": d["sender"], "category": d["category"],
+        "status": d["status"], "review_reason": d["review_reason"],
+        "defect_fields": d["defect_fields"], "resolved": d["resolved"],
+        "si_fields": d["si_fields"], "bl_fields": d["bl_fields"],
+        "field_comparisons": v.get("field_comparisons") or {},
+        "attachments": atts,
+        "body": re.sub(r"\s+", " ", d["body"] or "").strip()[:800],
+        "summary": f"{eid}: {d['status']} / {d['category']}",
+    }
+
+
+def _agent_list_emails(status=None, category=None, review_reason=None,
+                       missing_bl=None, resolved=None, limit=50):
+    lim = max(1, min(int(limit or 50), 200))
+    matched = []
+    for d in _agent_docs():
+        if status and d["status"] != status:
+            continue
+        if category and d["category"] != category:
+            continue
+        if review_reason and d["review_reason"] != review_reason:
+            continue
+        if missing_bl is not None and bool(missing_bl) != (d["attachment_count"] < 2):
+            continue
+        if resolved is not None and bool(resolved) != d["resolved"]:
+            continue
+        matched.append({"email_id": d["email_id"], "subject": d["subject"],
+                        "status": d["status"], "category": d["category"]})
+    total = len(matched)
+    return {
+        "total_matched": total,
+        "returned": matched[:lim],
+        "summary": f"{total} matched (showing {min(lim, total)})",
+    }
+
+
+def _agent_list_missing_bls(carrier=None, limit=50):
+    data = get_missing_bills(carrier or "", "")
+    bills = data["missing_bills"]
+    lim = max(1, min(int(limit or 50), 200))
+    rows = [{
+        "email_id": b["email_id"], "subject": b["subject"], "carrier": b["carrier"],
+        "ref_no": b["ref_no"], "missing_type": b["missing_type"], "status": b["status"],
+    } for b in bills[:lim]]
+    return {"total_matched": len(bills), "returned": rows,
+            "summary": f"{len(bills)} missing BLs (showing {len(rows)})"}
+
+
+def _agent_pipeline_status():
+    return dict(PIPELINE_STATE, submission_size=len(SUBMISSION_STORE))
+
+
+def _agent_score_report():
+    report = compare_submission()
+    diff_rows = [r for r in report["rows"] if r["diffs"]][:15]
+    score = report["score"]
+    return {
+        "source": report["source"],
+        "submission_count": report["submission_count"],
+        "score": score,
+        "summary_counts": report["summary"],
+        "top_diffs": [{"email_id": r["email_id"], "diffs": r["diffs"]} for r in diff_rows],
+        "summary": f"score={score}, perfect={report['summary']['perfect']}, with_diffs={report['summary']['with_diffs']}",
+    }
+
+
+def _agent_draft_chaser(email_id):
+    eid = (email_id or "").strip()
+    path = os.path.join(INBOX_DIR, f"{eid}.json")
+    if not os.path.exists(path):
+        return {"error": f"email {eid} not found"}
+    with open(path, 'r', encoding='utf-8') as fl:
+        em = json.load(fl)
+    subj = em.get("subject", "")
+    sender = em.get("from", "")
+    atts = em.get("attachments", [])
+    carrier = _detect_carrier(subj, em.get("body", ""))
+    ref_match = re.search(r'([0-9A-Z]{3,}-[0-9A-Z]{4,}|[A-Z]{3,}[0-9]{6,})', subj)
+    ref_no = ref_match.group(1) if ref_match else eid
+
+    subject = f"URGENT CHASER: Missing Draft Bill of Lading — {subj} [Ref: {eid}]"
+    body = (
+        f"Dear {carrier} Documentation Desk,\n\n"
+        f"We are following up on our Shipping Instruction submitted for shipment ref [{eid}].\n\n"
+        f"The operational port cutoff (17:00 SGT) is approaching and our system has not yet "
+        f"received the draft Bill of Lading.\n\n"
+        f"Please urgently furnish the draft BL so our clearance team can complete "
+        f"cross-validation against the shipper instructions.\n\n"
+        f"Shipment Reference: {eid}\n"
+        f"Booking Reference: {ref_no}\n"
+        f"Booking Subject: {subj}\n"
+        f"Attachments received: {len(atts)}\n\n"
+        f"Kind regards,\nShipping Documentation Operations Desk\nAveris Automated Logistics Pipeline"
+    )
+    return {"to": sender or "carrier-desk@shippingline.com", "subject": subject,
+            "body": body, "carrier": carrier, "summary": f"draft chaser prepared for {eid} ({carrier})"}
+
+
+def _agent_verify_emails(email_ids=None, status_filter=None, limit=25):
+    from concurrent.futures import ThreadPoolExecutor
+    cap = min(max(1, int(limit or 25)), 50)
+
+    all_files = sorted([f for f in os.listdir(INBOX_DIR) if f.endswith('.json')])
+    if email_ids:
+        wanted = {e if e.endswith('.json') else f"{e}.json" for e in email_ids}
+        targets = [f for f in all_files if f in wanted]
+    elif status_filter:
+        docs = _agent_docs()
+        wanted = {d["email_id"] for d in docs if d["status"] == status_filter}
+        targets = [f for f in all_files if f.replace('.json', '') in wanted]
+    else:
+        targets = all_files
+
+    total_targets = len(targets)
+    clamped = total_targets > cap
+    targets = targets[:cap]
+
+    by_status = {}
+    mismatches = []
+    processed = 0
+    with ThreadPoolExecutor(max_workers=PIPELINE_WORKERS) as pool:
+        for eid, meta, result, si_fields, bl_fields in pool.map(_process_email_file, targets):
+            _SUBMISSION_META[eid] = meta
+            SUBMISSION_STORE[eid] = result
+            if result.get("category"):
+                CLASSIFICATIONS_STORE[eid] = result["category"]
+            VERDICTS_STORE[eid] = {
+                "status": result.get("status"),
+                "review_reason": result.get("review_reason"),
+                "defect_fields": result.get("defect_fields", []),
+                "si_fields": si_fields or {},
+                "bl_fields": bl_fields or {},
+                "field_comparisons": {},
+                "thoughts": None,
+                "summary_reason": None,
+                "verified_at": _utcnow(),
+            }
+            st = result.get("status") or "UNKNOWN"
+            by_status[st] = by_status.get(st, 0) + 1
+            if result.get("defect_fields"):
+                mismatches.append({"email_id": eid, "defect_fields": result["defect_fields"]})
+            processed += 1
+    _write_submission()
+    invalidate_cache()
+
+    remaining = total_targets - processed
+    out = {
+        "verified": processed,
+        "by_status": by_status,
+        "mismatches": mismatches,
+        "remaining_unprocessed": remaining,
+        "clamped_to": cap if clamped else None,
+        "summary": f"verified {processed} emails: " + ", ".join(f"{k}={v}" for k, v in sorted(by_status.items())),
+    }
+    return out
+
+
+def _agent_run_pipeline(max_emails=0, resume=True):
+    return run_pipeline(PipelineRunRequest(max_emails=int(max_emails or 0), resume=bool(resume)))
+
+
+def _agent_send_chaser(email_id, to, subject, body):
+    result = send_email_smtp(SmtpSendRequest(
+        email_id=email_id, to_email=to, subject=subject, body=body))
+    if result.get("delivered"):
+        CHASERS_STORE[email_id] = {
+            "status": "CHASER_DISPATCHED",
+            "chaser_sent_at": _utcnow(),
+            "notes": f"Chaser email sent to {to}: {subject}",
+        }
+    result["summary"] = f"chaser for {email_id}: {result.get('status')}"
+    return result
+
+
+def _agent_resolve(email_id, resolutions, notes=""):
+    return resolve_mismatch(ResolveRequest(
+        email_id=email_id, resolutions=resolutions or {}, notes=notes or ""))
+
+
+def _agent_sync_supabase(email_id):
+    res = _save_to_supabase_record(email_id, VERDICTS_STORE.get(email_id, {"status": "UNVERIFIED"}))
+    if res is None:
+        return {"status": "skipped", "message": "Supabase not configured or save failed",
+                "summary": f"sync skipped for {email_id}"}
+    return {"status": "synced", "summary": f"{email_id} synced to Supabase"}
+
+
+AGENT_EXECUTORS = {
+    "get_statistics": _agent_get_statistics,
+    "search_knowledge_base": _agent_search,
+    "get_email_details": _agent_email_details,
+    "list_emails": _agent_list_emails,
+    "list_missing_bls": _agent_list_missing_bls,
+    "get_pipeline_status": _agent_pipeline_status,
+    "get_score_report": _agent_score_report,
+    "draft_chaser": _agent_draft_chaser,
+    "verify_emails": _agent_verify_emails,
+    "run_pipeline": _agent_run_pipeline,
+    "send_chaser_email": _agent_send_chaser,
+    "resolve_mismatch": _agent_resolve,
+    "sync_to_supabase": _agent_sync_supabase,
+}
+
+AGENT_SESSIONS = {}
+AGENT_SESSION_CAP = 50
+
+
+def _new_agent_session():
+    return {"messages": [{"role": "system", "content": AGENT_SYSTEM_PROMPT}],
+            "pending": None, "steps": []}
+
+
+def _agent_payload(session_id, out):
+    return {
+        "session_id": session_id,
+        "answer": out.get("answer", ""),
+        "steps": out.get("steps", []),
+        "pending_action": out.get("pending_action"),
+        "sources": out.get("sources", []),
+        "model": MODEL,
+        "degraded": out.get("degraded", False),
+    }
+
+
+class AgentChatRequest(BaseModel):
+    session_id: str = ""
+    message: str
+
+
+class AgentConfirmRequest(BaseModel):
+    session_id: str
+    action_id: str
+    approved: bool
+
+
+class AgentResetRequest(BaseModel):
+    session_id: str
+
+
+@app.post("/api/agent/chat")
+def agent_chat(req: AgentChatRequest):
+    if not req.message or not req.message.strip():
+        raise HTTPException(status_code=400, detail="message must not be empty")
+    sid = req.session_id or uuid.uuid4().hex
+    session = AGENT_SESSIONS.get(sid)
+    if session is None:
+        sid = uuid.uuid4().hex
+        session = _new_agent_session()
+        AGENT_SESSIONS[sid] = session
+        while len(AGENT_SESSIONS) > AGENT_SESSION_CAP:
+            AGENT_SESSIONS.pop(next(iter(AGENT_SESSIONS)))
+    out = run_agent(session, req.message.strip(), AGENT_EXECUTORS)
+    return _agent_payload(sid, out)
+
+
+@app.post("/api/agent/confirm")
+def agent_confirm(req: AgentConfirmRequest):
+    session = AGENT_SESSIONS.get(req.session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="unknown session")
+    pend = session.get("pending")
+    if not pend or pend.get("action_id") != req.action_id:
+        raise HTTPException(status_code=409, detail="no matching pending action")
+    out = resume_agent(session, req.action_id, req.approved, AGENT_EXECUTORS)
+    return _agent_payload(req.session_id, out)
+
+
+@app.post("/api/agent/reset")
+def agent_reset(req: AgentResetRequest):
+    AGENT_SESSIONS.pop(req.session_id, None)
+    return {"status": "cleared"}
 
 
 @app.get("/api/audit")
@@ -1504,14 +1840,29 @@ PIPELINE_STATE = {
     "running": False, "processed": 0, "total": 0, "current": None,
     "done": False, "error": None, "skipped": 0,
     "finished_at": None, "supabase": None, "cancel_requested": False,
+    "resume": True,
 }
 SUBMISSION_STORE = {}
 _SUBMISSION_META = {}
 
 
-def _write_submission():
-    with open(SUBMISSION_PATH, 'w', encoding='utf-8') as f:
-        json.dump(SUBMISSION_STORE, f, indent=2)
+def _write_submission(allow_shrink=False):
+    # Never silently shrink the scored submission file: merge in any
+    # on-disk entries the in-memory store doesn't have (in-memory entries
+    # win on overlap — they're fresher). allow_shrink=True is reserved for
+    # deliberate fresh non-resume pipeline runs that own the whole file.
+    data = dict(SUBMISSION_STORE)
+    if not allow_shrink:
+        on_disk = _load_submission_file()
+        for k, v in on_disk.items():
+            if k not in data:
+                data[k] = v
+        SUBMISSION_STORE.update(data)
+    # Atomic write: a crash mid-dump must not leave a truncated file.
+    tmp_path = SUBMISSION_PATH + ".tmp"
+    with open(tmp_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2)
+    os.replace(tmp_path, SUBMISSION_PATH)
 
 
 def _load_submission_file():
@@ -1611,6 +1962,9 @@ def _process_email_file(f):
 
 def _pipeline_worker(files):
     from concurrent.futures import ThreadPoolExecutor
+    # A fresh non-resume run owns submission.json and may legitimately
+    # truncate it; a resume run must merge so unprocessed entries survive.
+    allow_shrink = not PIPELINE_STATE.get("resume", True)
     try:
         num_batches = (len(files) + PIPELINE_BATCH_SIZE - 1) // PIPELINE_BATCH_SIZE
         for i in range(0, len(files), PIPELINE_BATCH_SIZE):
@@ -1637,12 +1991,12 @@ def _pipeline_worker(files):
                         "verified_at": _utcnow(),
                     }
                     PIPELINE_STATE["processed"] += 1
-            _write_submission()  # checkpoint after each batch
+            _write_submission(allow_shrink)  # checkpoint after each batch
     except Exception as e:
         PIPELINE_STATE["error"] = str(e)
     finally:
         try:
-            _write_submission()
+            _write_submission(allow_shrink)
             PIPELINE_STATE["supabase"] = _save_to_supabase()
         except Exception as e:
             PIPELINE_STATE["error"] = PIPELINE_STATE["error"] or str(e)
@@ -1688,6 +2042,7 @@ def run_pipeline(req: PipelineRunRequest):
         "finished_at": None,
         "supabase": None,
         "cancel_requested": False,
+        "resume": req.resume,
     })
     threading.Thread(target=_pipeline_worker, args=(files,), daemon=True).start()
     msg = f"started ({len(files)} to process"
