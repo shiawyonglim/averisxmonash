@@ -881,6 +881,7 @@ function App() {
   const [getterLoading, setGetterLoading] = useState(false)
   const [getterCategory, setGetterCategory] = useState('all')
   const [getterQueueFilter, setGetterQueueFilter] = useState('all')
+  const [getterAudience, setGetterAudience] = useState('all')
   const [getterSearch, setGetterSearch] = useState('')
   const [selectedGetterEmail, setSelectedGetterEmail] = useState(null)
   const [isLiveStreaming, setIsLiveStreaming] = useState(false)
@@ -1302,6 +1303,7 @@ function App() {
         limit: String(getterLimit),
         category: cat,
         queue_filter: q,
+        audience: aud,
         search: search || ''
       })
       const res = await fetch(`${API}/api/getter/emails?${params.toString()}`)
@@ -1325,7 +1327,7 @@ function App() {
     } finally {
       setGetterLoading(false)
     }
-  }, [getterCategory, getterQueueFilter, getterSearch, getterLimit, getterSource])
+  }, [getterCategory, getterQueueFilter, getterAudience, getterSearch, getterLimit, getterSource])
 
   const handlePollRealGmail = async () => {
     setPollingRealGmail(true)
@@ -3312,6 +3314,27 @@ function App() {
                   </button>
                 ))}
               </div>
+
+              {/* Audience Pills: internal staff vs customers/partners */}
+              <div className="getter-pill-row">
+                <span className="filter-label">Audience:</span>
+                {[
+                  { key: 'all', label: 'All Senders' },
+                  { key: 'internal', label: `Internal Staff (${getterStatus?.audience?.internal || 0})` },
+                  { key: 'customer', label: `Customers & Partners (${getterStatus?.audience?.customer || 0})` },
+                ].map(pill => (
+                  <button
+                    key={pill.key}
+                    className={`getter-pill ${getterAudience === pill.key ? 'active' : ''}`}
+                    onClick={() => {
+                      setGetterAudience(pill.key)
+                      fetchGetterEmails(1, getterCategory, getterQueueFilter, getterSearch, getterSource, pill.key)
+                    }}
+                  >
+                    {pill.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* SPLIT VIEW: INGESTED STREAM TABLE + INSPECTOR */}
@@ -3372,6 +3395,11 @@ function App() {
                                     : cat === 'SPAM' ? 'Spam'
                                     : 'General'}
                                 </span>
+                                <div style={{ marginTop: 4 }}>
+                                  <span className={`tag ${item.audience === 'internal' ? 'info' : ''}`}>
+                                    {item.audience === 'internal' ? 'Internal' : 'Customer'}
+                                  </span>
+                                </div>
                               </td>
                               <td>
                                 <span className="meta-mono">
@@ -3448,7 +3476,12 @@ function App() {
                       </div>
 
                       <div className="meta" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <div><strong>From:</strong> {selectedGetterEmail.from}</div>
+                        <div>
+                          <strong>From:</strong> {selectedGetterEmail.from}{' '}
+                          <span className={`tag ${selectedGetterEmail.audience === 'internal' ? 'info' : ''}`}>
+                            {selectedGetterEmail.audience === 'internal' ? 'Internal staff' : 'Customer / external'}
+                          </span>
+                        </div>
                         <div><strong>To:</strong> {selectedGetterEmail.to}</div>
                         <div><strong>Subject:</strong> {selectedGetterEmail.subject}</div>
                       </div>
