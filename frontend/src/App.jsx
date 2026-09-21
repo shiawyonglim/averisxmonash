@@ -4264,7 +4264,7 @@ function App() {
                       disabled={pollingInbox}
                       title="Poll the connected inbox via IMAP for unread carrier replies and auto-link them to this thread"
                     >
-                      {pollingInbox ? 'Polling Inbox…' : '📥 Poll Inbox (IMAP)'}
+                      {pollingInbox ? 'Polling…' : 'Poll inbox'}
                     </button>
                     <button
                       className="thread-sim-btn"
@@ -4272,7 +4272,7 @@ function App() {
                       disabled={simulatingReply}
                       title="Simulate an inbound carrier reply (with revised Draft BL attachment) for demo/testing"
                     >
-                      {simulatingReply ? 'Receiving Reply…' : '⚡ Simulate Carrier Reply'}
+                      {simulatingReply ? 'Receiving…' : 'Simulate reply'}
                     </button>
                   </div>
                 </div>
@@ -4295,7 +4295,7 @@ function App() {
                       <div key={m.id} className={`thread-row ${inbound ? 'inbound' : 'outbound'}`}>
                         <div className={`thread-bubble ${inbound ? 'inbound' : 'outbound'}`}>
                           <div className="thread-meta">
-                            <strong>{inbound ? '📨 ' : '📤 '}{inbound ? (m.from_addr || 'Carrier') : `You → ${m.to_addr || 'carrier'}`}</strong>
+                            <strong>{inbound ? (m.from_addr || 'Carrier') : `You → ${m.to_addr || 'carrier'}`}</strong>
                             {ts && <span className="thread-ts">{new Date(ts).toLocaleString()}</span>}
                           </div>
                           {m.subject && <div className="thread-subject">{m.subject}</div>}
@@ -4304,7 +4304,7 @@ function App() {
                             <div className="thread-attach-row">
                               {m.attachments.map((a, i) => (
                                 <span key={i} className={`thread-attach ${inbound ? 'inbound' : ''}`}>
-                                  📎 {a.filename || a.path || 'attachment'}
+                                  {a.filename || a.path || 'attachment'}
                                   {a.size_kb ? ` (${a.size_kb} KB)` : ''}
                                 </span>
                               ))}
@@ -4357,14 +4357,16 @@ function App() {
 
             {/* Resolution success box */}
             {resolveSuccess && (
-              <div className="item-card" style={{ marginTop: '22px', background: '#d4edda', color: '#155724', border: '1px solid #c3e6cb' }}>
-                <strong>✅ Resolution Approved & Logged!</strong>
-                <p style={{ marginTop: '4px', fontSize: '0.9rem' }}>{resolveSuccess.message}</p>
-                {resolveSuccess.record?.timestamp && (
-                  <p style={{ fontSize: '0.8rem', color: '#666', marginTop: '6px' }}>
-                    Logged at {resolveSuccess.record.timestamp}
-                  </p>
-                )}
+              <div className="notice ok" style={{ marginTop: '22px' }}>
+                <div>
+                  <strong>Resolution logged</strong>
+                  <p style={{ marginTop: '4px' }}>{resolveSuccess.message}</p>
+                  {resolveSuccess.record?.timestamp && (
+                    <p className="meta" style={{ marginTop: '6px' }}>
+                      Logged at {resolveSuccess.record.timestamp}
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 
@@ -4394,12 +4396,12 @@ function App() {
                         <h4 style={{ textTransform: 'uppercase', color: 'var(--primary-color)' }}>
                           Field: {f.replace(/_/g, ' ')}
                         </h4>
-                        <span style={{ fontSize: '0.8rem', color: '#dc3545', fontWeight: 'bold' }}>Needs Resolution</span>
+                        <span className="tag danger">Needs resolution</span>
                       </div>
 
                       {result.field_comparisons?.[f]?.reason && (
-                        <p style={{ fontSize: '0.85rem', color: '#856404', margin: '8px 0 12px', fontStyle: 'italic' }}>
-                          ⚠️ AI Finding: {result.field_comparisons[f].reason}
+                        <p className="meta warn" style={{ margin: '8px 0 12px' }}>
+                          {result.field_comparisons[f].reason}
                         </p>
                       )}
 
@@ -4480,14 +4482,14 @@ function App() {
                     disabled={savingResolution}
                     style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-color)', boxShadow: 'none', padding: '10px 18px', fontSize: '0.9rem' }}
                   >
-                    {savingResolution ? 'Logging...' : 'Approve Only'}
+                    {savingResolution ? 'Logging…' : 'Approve only'}
                   </button>
                   <button
                     className="btn-primary-next"
                     onClick={() => handleSubmitResolution(true)}
                     disabled={savingResolution}
                   >
-                    {savingResolution ? 'Logging Resolution...' : 'Approve & Next Discrepancy →'}
+                    {savingResolution ? 'Logging Resolution...' : 'Approve & next discrepancy'}
                   </button>
                 </div>
               </div>
@@ -4498,9 +4500,9 @@ function App() {
             {verifyMode === 'scan' && (
               <>
                 {scanResult?.status === 'MISMATCH' && (
-                  <div className="redirect-banner">
+                  <div className="notice warn">
                     <div>
-                      <strong>⚠️ Discrepancy Found:</strong> {scanResult.defect_fields?.length} field mismatch(es) detected between the scanned documents.
+                      <strong>Discrepancy:</strong> {scanResult.defect_fields?.length} field mismatch(es) detected between the scanned documents.
                     </div>
                   </div>
                 )}
