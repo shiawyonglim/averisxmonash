@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import NavIcon from './NavIcon'
 import './App.css'
 
-const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
+const API = import.meta.env?.VITE_API_URL || (typeof window !== 'undefined' && window.location.port === '5173' ? 'http://localhost:8000' : (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000'))
 const QUEUE_LIMIT = 50
+
+const fmtCount = (n) => (n > 999 ? '999+' : String(n))
 
 const FIELDS = [
   'shipper', 'consignee', 'notify_party',
@@ -861,7 +864,32 @@ function App() {
   const [compareLoading, setCompareLoading] = useState(false)
   const [compareError, setCompareError] = useState(null)
   const [diffFilter, setDiffFilter] = useState('')
-  const [showAllDiffs, setShowAllDiffs] = useState(false)
+  // ---- Auto Email Getter & Laya Decision Classifier ----
+  const [getterSource, setGetterSource] = useState('real') // 'real' (shiawyonglim@gmail.com) | 'dataset' (520 emails)
+  const [getterStatus, setGetterStatus] = useState(null)
+  const [getterEmails, setGetterEmails] = useState([])
+  const [getterTotal, setGetterTotal] = useState(0)
+  const [getterPage, setGetterPage] = useState(1)
+  const [getterLimit] = useState(25)
+  const [getterLoading, setGetterLoading] = useState(false)
+  const [getterCategory, setGetterCategory] = useState('all')
+  const [getterQueueFilter, setGetterQueueFilter] = useState('all')
+  const [getterSearch, setGetterSearch] = useState('')
+  const [selectedGetterEmail, setSelectedGetterEmail] = useState(null)
+  const [isLiveStreaming, setIsLiveStreaming] = useState(false)
+  const [customModalOpen, setCustomModalOpen] = useState(false)
+  const [pollingRealGmail, setPollingRealGmail] = useState(false)
+  const [sendingRealTest, setSendingRealTest] = useState(false)
+  const [customForm, setCustomForm] = useState({
+    from_addr: 'liner.desk@evergreen-marine.com',
+    to_addr: 'shiawyonglim@gmail.com',
+    subject: 'DRAFT BL READY _ 5AKR-61849 _ PORT KLANG _ SIN832764835',
+    body: 'Dear Shiaw Yong Lim,\n\nPlease find attached draft Bill of Lading for verification before vessel cutoff.\n\nBest regards,\nEvergreen Marine Operations Desk',
+    attachments: ['attachments/email_custom_SI.txt', 'attachments/email_custom_BL.txt']
+  })
+  const [customIngesting, setCustomIngesting] = useState(false)
+  const [getterMsg, setGetterMsg] = useState(null)
+  const streamIntervalRef = useRef(null)
 
   // ---- Review & Download (submission export picker) ----
   const [submissionData, setSubmissionData] = useState(null)
@@ -880,6 +908,12 @@ function App() {
   const [saveDocMsg, setSaveDocMsg] = useState(null)
   const [docBackups, setDocBackups] = useState(null)
   const [restoringDocs, setRestoringDocs] = useState(false)
+
+  // ---- Missing-attachment detection + auto draft-chaser prompt ----
+  const [missingDoc, setMissingDoc] = useState(null) // 'si' | 'bl' | 'both' | null
+  const [missingPrompt, setMissingPrompt] = useState(null) // { emailId, doc }
+  const missingPromptDismissed = useRef(new Set())
+  const [threadOpen, setThreadOpen] = useState(false)
 
   // ---- Paper Scan (camera photos / handwritten docs) — merged into Verify Documents ----
   const [verifyMode, setVerifyMode] = useState('email') // 'email' | 'scan'
@@ -1237,6 +1271,198 @@ function App() {
     }
   }, [])
 
+  // ============================================================
+  // AUTO EMAIL GETTER & CLASSIFIER HANDLERS
+  // ============================================================
+  const fetchGetterStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/getter/status`)
+      if (res.ok) {
+        const data = await res.json()
+        setGetterStatus(data)
+      }
+    } catch (err) {
+      console.error('Failed to fetch getter status:', err)
+    }
+  }, [])
+
+  const fetchGetterEmails = useCallback(async (page = 1, cat = getterCategory, q = getterQueueFilter, search = getterSearch, src = getterSource) => {
+    setGetterLoading(true)
+    try {
+      const params = new URLSearchParams({
+        source: src,
+        page: String(page),
+        limit: String(getterLimit),
+        category: cat,
+        queue_filter: q,
+        search: search || ''
+      })
+      const res = await fetch(`${API}/api/getter/emails?${params.toString()}`)
+      if (res.ok) {
+        const data = await res.json()
+        setGetterEmails(data.emails || [])
+        setGetterTotal(data.total || 0)
+        setGetterPage(data.page || 1)
+        if (data.emails?.length > 0) {
+          setSelectedGetterEmail(prev => {
+            if (prev) {
+              const stillPresent = data.emails.find(e => e.email_id === prev.email_id)
+              if (stillPresent) return stillPresent
+            }
+            return data.emails[0]
+          })
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch getter emails:', err)
+    } finally {
+      setGetterLoading(false)
+    }
+  }, [getterCategory, getterQueueFilter, getterSearch, getterLimit, getterSource])
+
+  const handlePollRealGmail = async () => {
+    setPollingRealGmail(true)
+    try {
+      const res = await fetch(`${API}/api/getter/poll-gmail`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 15, only_unread: false })
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setGetterMsg(`Polled real Gmail inbox: ${data.fetched_count} emails fetched (${data.newly_added} new). Neural enrichment running in background.`)
+        fetchGetterStatus()
+        fetchGetterEmails(1, getterCategory, getterQueueFilter, getterSearch, 'real')
+      } else {
+        setGetterMsg(`Gmail poll failed: ${data.detail || 'Connection error'}`)
+      }
+    } catch (err) {
+      setGetterMsg(`Gmail error: ${err.message}`)
+    } finally {
+      setPollingRealGmail(false)
+    }
+  }
+
+  const handleSendRealTestEmail = async () => {
+    setSendingRealTest(true)
+    try {
+      const res = await fetch(`${API}/api/getter/send-real-test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: "URGENT DRAFT BL READY _ 5AKR-61849 _ PORT KLANG _ SIN832764835",
+          body: "Dear Shiaw Yong Lim,\n\nPlease find attached draft Bill of Lading for verification before vessel cutoff at Port Klang.\n\nBest regards,\nEvergreen Marine Operations Desk"
+        })
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setGetterMsg(`Real email sent to ${data.sent_to} via Google SMTP and received back via IMAP. Neural enrichment running.`)
+        fetchGetterStatus()
+        fetchGetterEmails(1, 'all', 'all', '', 'real')
+        if (data.latest_email) {
+          setSelectedGetterEmail(data.latest_email)
+        }
+      } else {
+        setGetterMsg(`Send test failed: ${data.detail || 'SMTP error'}`)
+      }
+    } catch (err) {
+      setGetterMsg(`SMTP error: ${err.message}`)
+    } finally {
+      setSendingRealTest(false)
+    }
+  }
+
+  const handleFetchBatch = async (count = 10) => {
+    try {
+      const res = await fetch(`${API}/api/getter/fetch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ count })
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setGetterMsg(`Successfully ingested +${data.added_count} emails into live stream.`)
+        fetchGetterStatus()
+        fetchGetterEmails(getterPage)
+      }
+    } catch (err) {
+      setGetterMsg(`Ingestion failed: ${err.message}`)
+    }
+  }
+
+  const handleResetGetter = async () => {
+    try {
+      const res = await fetch(`${API}/api/getter/reset?initial_count=25`, { method: 'POST' })
+      if (res.ok) {
+        setGetterMsg('Stream reset. Refreshed real personal Gmail inbox.')
+        fetchGetterStatus()
+        fetchGetterEmails(1)
+      }
+    } catch (err) {
+      setGetterMsg(`Reset failed: ${err.message}`)
+    }
+  }
+
+  const handleCustomIngestSubmit = async (e) => {
+    if (e) e.preventDefault()
+    setCustomIngesting(true)
+    try {
+      const res = await fetch(`${API}/api/getter/ingest-custom`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(customForm)
+      })
+      const data = await res.json()
+      if (res.ok && data.status === 'INGESTED_SUCCESSFULLY') {
+        setCustomModalOpen(false)
+        setSelectedGetterEmail(data.dossier)
+        setGetterMsg(`Email ${data.email_id} ingested → ${data.dossier.classification.category} (Laya neural pass queued)`)
+        fetchGetterStatus()
+        fetchGetterEmails(1)
+      } else {
+        alert(data.message || 'Ingestion failed')
+      }
+    } catch (err) {
+      alert(`Error: ${err.message}`)
+    } finally {
+      setCustomIngesting(false)
+    }
+  }
+
+  // Auto stream polling interval
+  useEffect(() => {
+    if (isLiveStreaming && view === 'getter') {
+      streamIntervalRef.current = setInterval(async () => {
+        try {
+          const res = await fetch(`${API}/api/getter/fetch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ count: 1 })
+          })
+          if (res.ok) {
+            fetchGetterStatus()
+            fetchGetterEmails(getterPage)
+          }
+        } catch (e) {
+          console.error('Stream poll failed:', e)
+        }
+      }, 1800)
+    } else {
+      if (streamIntervalRef.current) clearInterval(streamIntervalRef.current)
+    }
+    return () => {
+      if (streamIntervalRef.current) clearInterval(streamIntervalRef.current)
+    }
+  }, [isLiveStreaming, view, getterPage, fetchGetterStatus, fetchGetterEmails])
+
+  // Refresh on entering getter view
+  useEffect(() => {
+    if (view === 'getter') {
+      fetchGetterStatus()
+      fetchGetterEmails(1)
+    }
+  }, [view, fetchGetterStatus, fetchGetterEmails])
+
   // Score-vs-ground-truth fetcher — called on demand from the Pipeline Run page
   const fetchCompare = useCallback(async () => {
     setCompareLoading(true)
@@ -1265,32 +1491,73 @@ function App() {
   // AUTO-DRAFT EMAIL & GOOGLE SMTP HANDLERS
   // ============================================================
 
-  const openDraftEmail = (emailId, info = null, verdict = null) => {
+  const openDraftEmail = (emailId, info = null, verdict = null, missingOverride = null) => {
     const curEmail = emailId || selectedEmail
     const curInfo = info || emailInfo
     const curVerdict = verdict || result
     const carrier = detectCarrier(curInfo)
-    const to = (curVerdict?.status === 'MISMATCH' || curInfo?.attachments?.length === 0)
-      ? getCarrierDeskEmail(carrier)
-      : (curInfo?.from || 'carrier-desk@shippingline.com')
-    const subjectPrefix = curVerdict?.status === 'MISMATCH'
-      ? 'URGENT: Discrepancy Notice & Draft BL Amendment'
-      : (curInfo?.attachments?.length === 0 ? 'URGENT CHASER: Missing Draft Bill of Lading' : 'Documentation Clearance Notice')
-    const subject = `${subjectPrefix} — ${curInfo?.subject || curEmail} [Ref: ${curEmail}]`
+    const category = curInfo?.category || 'BL_COMPARISON'
 
+    let to = ''
+    let subject = ''
     let body = ''
-    if (curVerdict?.status === 'MISMATCH' && curVerdict?.defect_fields?.length > 0) {
-      const defectsList = curVerdict.defect_fields.map((f, i) => {
-        const siVal = curVerdict.si_fields?.[f] || 'N/A'
-        const blVal = curVerdict.bl_fields?.[f] || 'N/A'
-        return `  ${i + 1}. ${f.replace(/_/g, ' ').toUpperCase()}:\n     - Shipper Instruction (SI): "${siVal}"\n     - Draft Bill of Lading (BL): "${blVal}"`
-      }).join('\n\n')
 
-      body = `Dear ${carrier} Operations Desk,\n\nDuring automated documentation cross-validation for shipment ref [${curEmail}], our verification engine detected discrepancies between our Shipping Instructions (SI) and your draft Bill of Lading (BL):\n\n${defectsList}\n\nPlease issue an amended draft Bill of Lading reflecting the validated Shipping Instruction values before the port cutoff (17:00 SGT) to avoid terminal loading delays.\n\nShipment Reference: ${curEmail}\nOriginal Subject: ${curInfo?.subject || ''}\n\nKind regards,\nShipping Documentation Operations Desk\nAveris Automated Logistics Pipeline`
-    } else if (curInfo?.attachments?.length === 0) {
-      body = `Dear ${carrier} Documentation Desk,\n\nWe are following up on our Shipping Instruction submitted for shipment ref [${curEmail}].\n\nThe operational port cutoff (17:00 SGT) is approaching and our system has not yet received the draft Bill of Lading.\n\nPlease urgently furnish the draft BL so our clearance team can complete cross-validation against the shipper instructions.\n\nShipment Reference: ${curEmail}\nBooking Subject: ${curInfo?.subject || ''}\n\nKind regards,\nShipping Documentation Operations Desk\nAveris Automated Logistics Pipeline`
+    if (category === 'INVOICE_QUERY') {
+      to = curInfo?.from || 'billing-desk@client.com'
+      const subj = curInfo?.subject || curEmail
+      subject = subj.toUpperCase().startsWith('RE:') ? subj : `RE: ${subj} [Ref: ${curEmail}]`
+      const senderName = curInfo?.from?.split('@')[0]?.replace(/[._]/g, ' ') || 'Customer / Operations Partner'
+      body = `Dear ${senderName},\n\nThank you for reaching out regarding invoice charges for shipment ref [${curEmail}].\n\nIn response to your query regarding the Terminal Handling Charges (THC) and local port fee breakdown:\n- Terminal Handling Charges (THC): FOB origin/destination charges have been verified against the agreed tariff schedule.\n- Telex Release & Documentation Fees: Applied in accordance with the standard liner documentation schedule.\n- Local Charges Breakdown: All applicable origin/destination port charges have been reviewed by our billing team.\n\nPlease find the itemized charge breakdown attached for your reference. Please let us know if you require any additional supporting documentation or revised debit notes.\n\nShipment Reference: ${curEmail}\nOriginal Subject: ${curInfo?.subject || ''}\n\nKind regards,\nShipping Documentation & Accounts Billing Desk\nAPRIL Logistics / Averis Global Shared Services`
+    } else if (category === 'SI_REQUEST') {
+      to = curInfo?.from || 'operations@shippingline.com'
+      const subj = curInfo?.subject || curEmail
+      subject = subj.toUpperCase().startsWith('RE:') ? subj : `RE: ${subj} [Ref: ${curEmail}]`
+      const senderName = curInfo?.from?.split('@')[0]?.replace(/[._]/g, ' ') || 'Customer / Operations Partner'
+      body = `Dear ${senderName},\n\nThank you for reaching out regarding Shipping Instructions for shipment ref [${curEmail}].\n\nPlease find the validated Shipping Instruction (SI) details attached for your review and booking confirmation.\n\nKindly confirm receipt and verify that all vessel booking particulars, container specifications, and consignee details align with your requirements.\n\nShipment Reference: ${curEmail}\nOriginal Subject: ${curInfo?.subject || ''}\n\nKind regards,\nShipping Documentation Operations Desk\nAPRIL Logistics / Averis Global Shared Services`
+    } else if (category === 'GENERAL') {
+      to = curInfo?.from || 'operations@shippingline.com'
+      const subj = curInfo?.subject || curEmail
+      subject = subj.toUpperCase().startsWith('RE:') ? subj : `RE: ${subj} [Ref: ${curEmail}]`
+      const senderName = curInfo?.from?.split('@')[0]?.replace(/[._]/g, ' ') || 'Customer / Operations Partner'
+      body = `Dear ${senderName},\n\nThank you for contacting our documentation desk regarding shipment ref [${curEmail}].\n\nOur operations team has reviewed your inquiry. Shipment documentation and cargo dispatch are proceeding on schedule according to standard operational timelines.\n\nPlease let us know if you require any specific vessel tracking updates or supplemental documentation.\n\nShipment Reference: ${curEmail}\nOriginal Subject: ${curInfo?.subject || ''}\n\nKind regards,\nShipping Documentation Operations Desk\nAPRIL Logistics / Averis Global Shared Services`
     } else {
-      body = `Dear Shipper / Carrier Team,\n\nRegarding shipment ref [${curEmail}], all documentation cross-checks have completed. All 7 critical shipping attributes (shipper, consignee, notify party, ports, container count, and gross weight) have been verified.\n\nShipment Reference: ${curEmail}\nStatus: APPROVED / CLEARED FOR ISSUANCE\n\nKind regards,\nShipping Documentation Operations Desk\nAveris Automated Logistics Pipeline`
+      // BL_COMPARISON category
+      const missing = missingOverride
+        || (curEmail === selectedEmail ? missingDoc : null)
+        || (DOC_PLACEHOLDER_RX.test(siText) && !DOC_PLACEHOLDER_RX.test(blText) ? 'si'
+            : DOC_PLACEHOLDER_RX.test(blText) && !DOC_PLACEHOLDER_RX.test(siText) ? 'bl'
+            : (curInfo?.attachments?.length === 0 && curInfo?.category === 'BL_COMPARISON' ? 'both' : null))
+
+      to = missing === 'si'
+        ? (curInfo?.from || '')
+        : (curVerdict?.status === 'MISMATCH' || missing === 'bl' || missing === 'both'
+            ? getCarrierDeskEmail(carrier)
+            : (curInfo?.from || 'carrier-desk@shippingline.com'))
+
+      const subjectPrefix = curVerdict?.status === 'MISMATCH'
+        ? 'URGENT: Discrepancy Notice & Draft BL Amendment'
+        : missing === 'si'
+          ? 'MISSING DOCUMENT: Shipping Instruction Required'
+          : (missing === 'bl' || missing === 'both'
+              ? 'URGENT CHASER: Missing Draft Bill of Lading'
+              : 'Documentation Clearance Notice')
+      subject = `${subjectPrefix} — ${curInfo?.subject || curEmail} [Ref: ${curEmail}]`
+
+      if (curVerdict?.status === 'MISMATCH' && curVerdict?.defect_fields?.length > 0) {
+        const defectsList = curVerdict.defect_fields.map((f, i) => {
+          const siVal = curVerdict.si_fields?.[f] || 'N/A'
+          const blVal = curVerdict.bl_fields?.[f] || 'N/A'
+          return `  ${i + 1}. ${f.replace(/_/g, ' ').toUpperCase()}:\n     - Shipper Instruction (SI): "${siVal}"\n     - Draft Bill of Lading (BL): "${blVal}"`
+        }).join('\n\n')
+
+        body = `Dear ${carrier} Operations Desk,\n\nDuring automated documentation cross-validation for shipment ref [${curEmail}], our verification engine detected discrepancies between our Shipping Instructions (SI) and your draft Bill of Lading (BL):\n\n${defectsList}\n\nPlease issue an amended draft Bill of Lading reflecting the validated Shipping Instruction values before the port cutoff (17:00 SGT) to avoid terminal loading delays.\n\nShipment Reference: ${curEmail}\nOriginal Subject: ${curInfo?.subject || ''}\n\nKind regards,\nShipping Documentation Operations Desk\nAveris Automated Logistics Pipeline`
+      } else if (missing === 'si') {
+        body = `Dear ${curInfo?.from || 'Operations Team'},\n\nRegarding shipment ref [${curEmail}] — your recent correspondence requested a draft Bill of Lading comparison, but the required Shipping Instruction (SI) document was not attached to the email.\n\nPlease re-send the Shipping Instruction at your earliest convenience so our automated verification pipeline can complete the 7-field cross-audit before port cutoff.\n\nShipment Reference: ${curEmail}\nOriginal Subject: ${curInfo?.subject || ''}\n\nKind regards,\nShipping Documentation Operations Desk\nAveris Automated Logistics Pipeline`
+      } else if (missing === 'bl' || missing === 'both') {
+        body = `Dear ${carrier} Documentation Desk,\n\nWe are following up on our Shipping Instruction submitted for shipment ref [${curEmail}].\n\nThe operational port cutoff (17:00 SGT) is approaching and our system has not yet received the draft Bill of Lading.\n\nPlease urgently furnish the draft BL so our clearance team can complete cross-validation against the shipper instructions.\n\nShipment Reference: ${curEmail}\nBooking Subject: ${curInfo?.subject || ''}\n\nKind regards,\nShipping Documentation Operations Desk\nAveris Automated Logistics Pipeline`
+      } else {
+        body = `Dear Shipper / Carrier Team,\n\nRegarding shipment ref [${curEmail}], all documentation cross-checks have completed. All 7 critical shipping attributes (shipper, consignee, notify party, ports, container count, and gross weight) have been verified.\n\nShipment Reference: ${curEmail}\nStatus: APPROVED / CLEARED FOR ISSUANCE\n\nKind regards,\nShipping Documentation Operations Desk\nAveris Automated Logistics Pipeline`
+      }
     }
 
     setEmailDraft({
@@ -1423,6 +1690,9 @@ function App() {
     setReplyNotice(null)
     setSaveDocMsg(null)
     setDocBackups(null)
+    setMissingDoc(null)
+    setMissingPrompt(null)
+    setThreadOpen(false)
     setSiText('Loading attachment...')
     setBlText('Loading attachment...')
 
@@ -1434,8 +1704,10 @@ function App() {
       setBlText(data.bl_text || '')
       if (data.email) setEmailInfo(data.email)
       setEmailThreads(data.threads || data.email?.threads || [])
+      setThreadOpen((data.threads || data.email?.threads || []).length > 0)
       if (data.cloud_synced) setCloudSyncInfo(data.supabase_record)
       if (data.backups) setDocBackups(data.backups)
+      if (data.missing_doc) setMissingDoc(data.missing_doc)
       if (data.is_corrupted) {
         setCorruptWarning({
           reason: data.corrupt_reason,
@@ -1458,6 +1730,23 @@ function App() {
       if (data.resolution) {
         setResolutionRecord(data.resolution)
       }
+      // Auto-draft prompt: a required document is missing and no chaser/
+      // outbound reply has been dispatched yet — offer to draft it now.
+      const threads = data.threads || data.email?.threads || []
+      const alreadySent = threads.some(m => m.direction === 'OUTBOUND')
+      if (data.missing_doc && data.email?.category === 'BL_COMPARISON'
+          && !alreadySent && !data.resolution
+          && !missingPromptDismissed.current.has(eid)) {
+        setMissingPrompt({ emailId: eid, doc: data.missing_doc })
+      }
+      // Auto-verify: two real documents and no stored verdict — run the
+      // audit immediately so the operator never has to press Re-verify.
+      const canAutoVerify = !data.verdict && !data.is_corrupted
+        && (data.email?.attachments?.length || 0) >= 2
+        && data.si_text && data.bl_text
+        && !DOC_PLACEHOLDER_RX.test(data.si_text)
+        && !DOC_PLACEHOLDER_RX.test(data.bl_text)
+      if (canAutoVerify) await handleVerify(data.si_text, data.bl_text, eid)
     } catch (err) {
       setError(err.message)
       setSiText('')
@@ -1633,11 +1922,12 @@ function App() {
     }
   }, [chatMessages, chatLoading, view])
 
-  const handleVerify = async (siOverride, blOverride) => {
+  const handleVerify = async (siOverride, blOverride, emailOverride) => {
     // onClick handlers pass the event object — only honour string overrides
     const siBody = typeof siOverride === 'string' ? siOverride : siText
     const blBody = typeof blOverride === 'string' ? blOverride : blText
-    if (!selectedEmail) {
+    const verifyEmail = typeof emailOverride === 'string' ? emailOverride : selectedEmail
+    if (!verifyEmail) {
       setError('Please select an email first.')
       return
     }
@@ -1657,7 +1947,7 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email_id: selectedEmail,
+          email_id: verifyEmail,
           si_text: siBody,
           bl_text: blBody,
         }),
@@ -2127,108 +2417,108 @@ function App() {
         </div>
 
         <nav className="sidebar-nav">
-          <button
-            className={`sidebar-btn ${view === 'dashboard' ? 'active' : ''}`}
-            onClick={() => setView('dashboard')}
-          >
-            <span>📊 Dashboard</span>
-          </button>
+          <div className="sidebar-section">
+            <p className="sidebar-section-label">Overview</p>
+            <button
+              className={`sidebar-btn ${view === 'dashboard' ? 'active' : ''}`}
+              onClick={() => setView('dashboard')}
+            >
+              <NavIcon name="dashboard" /><span className="nav-label">Dashboard</span>
+            </button>
+            <button
+              className={`sidebar-btn ${view === 'chat' ? 'active' : ''}`}
+              onClick={() => setView('chat')}
+            >
+              <NavIcon name="assistant" /><span className="nav-label">Assistant</span>
+            </button>
+          </div>
 
-          <button
-            className={`sidebar-btn ${view === 'chat' ? 'active' : ''}`}
-            onClick={() => setView('chat')}
-          >
-            <span>💬 Assistant</span>
-          </button>
+          <div className="sidebar-section">
+            <p className="sidebar-section-label">Intake</p>
+            <button
+              className={`sidebar-btn ${view === 'queue' ? 'active' : ''}`}
+              onClick={() => setView('queue')}
+            >
+              <NavIcon name="inbox" /><span className="nav-label">Inbox</span>
+              {queueData?.counts?.all > 0 && (
+                <span className="sidebar-badge">{fmtCount(queueData.counts.all)}</span>
+              )}
+            </button>
+            <button
+              className={`sidebar-btn ${view === 'getter' ? 'active' : ''}`}
+              onClick={() => {
+                setView('getter')
+                fetchGetterStatus()
+                fetchGetterEmails(1)
+              }}
+            >
+              <NavIcon name="bolt" /><span className="nav-label">Auto Collect</span>
+              {getterStatus?.ingested_count > 0 && (
+                <span className="sidebar-badge">{fmtCount(getterStatus.ingested_count)}</span>
+              )}
+            </button>
+          </div>
 
-          <button
-            className={`sidebar-btn ${view === 'queue' ? 'active' : ''}`}
-            onClick={() => setView('queue')}
-          >
-            <span>📥 Inbox</span>
-            {queueData?.counts?.all > 0 && (
-              <span
-                className="sidebar-badge"
-                style={{ background: 'rgba(89, 121, 40, 0.15)', color: 'var(--primary-color)' }}
-              >
-                {queueData.counts.all}
+          <div className="sidebar-section">
+            <p className="sidebar-section-label">Verification</p>
+            <button
+              className={`sidebar-btn ${view === 'verify' ? 'active' : ''}`}
+              onClick={() => setView('verify')}
+            >
+              <NavIcon name="search" />
+              <span className="nav-text">
+                <span className="nav-label">Verify</span>
+                {selectedEmail && <span className="nav-sub">{selectedEmail}</span>}
               </span>
-            )}
-          </button>
+            </button>
+            <button
+              className={`sidebar-btn ${view === 'review' ? 'active' : ''}`}
+              onClick={() => setView('review')}
+            >
+              <NavIcon name="user-check" /><span className="nav-label">Human Review</span>
+              {hitlPendingCount > 0 && (
+                <span className="sidebar-badge attention">{fmtCount(hitlPendingCount)}</span>
+              )}
+            </button>
+          </div>
 
-          <button
-            className={`sidebar-btn ${view === 'verify' ? 'active' : ''}`}
-            onClick={() => setView('verify')}
-          >
-            <span>🔍 Verify Documents</span>
-            {selectedEmail && (
-              <span
-                className="sidebar-badge"
-                style={{ background: 'rgba(89, 121, 40, 0.15)', color: 'var(--primary-color)' }}
-              >
-                {selectedEmail}
-              </span>
-            )}
-          </button>
+          <div className="sidebar-section">
+            <p className="sidebar-section-label">Records</p>
+            <button
+              className={`sidebar-btn ${view === 'cloud' ? 'active' : ''}`}
+              onClick={() => { setView('cloud'); fetchCloudRecords(); }}
+            >
+              <NavIcon name="cloud" /><span className="nav-label">Shared Records</span>
+              {cloudStats?.total_in_supabase > 0 && (
+                <span className="sidebar-badge">{fmtCount(cloudStats.total_in_supabase)}</span>
+              )}
+            </button>
+            <button
+              className={`sidebar-btn ${view === 'audit' ? 'active' : ''}`}
+              onClick={() => setView('audit')}
+            >
+              <NavIcon name="history" /><span className="nav-label">Audit Log</span>
+            </button>
+          </div>
 
-          <button
-            className={`sidebar-btn ${view === 'review' ? 'active' : ''}`}
-            onClick={() => setView('review')}
-          >
-            <span>🧑‍⚖️ Human Review</span>
-            {hitlPendingCount > 0 && (
-              <span
-                className="sidebar-badge"
-                style={{ background: 'rgba(183, 129, 3, 0.18)', color: '#b78103' }}
-              >
-                {hitlPendingCount}
-              </span>
-            )}
-          </button>
-
-          <button
-            className={`sidebar-btn ${view === 'cloud' ? 'active' : ''}`}
-            onClick={() => { setView('cloud'); fetchCloudRecords(); }}
-          >
-            <span>☁️ Shared Records</span>
-            {cloudStats?.total_in_supabase > 0 && (
-              <span
-                className="sidebar-badge"
-                style={{ background: 'rgba(52, 168, 83, 0.15)', color: '#2e7d32' }}
-              >
-                {cloudStats.total_in_supabase}
-              </span>
-            )}
-          </button>
-
-          <button
-            className={`sidebar-btn ${view === 'audit' ? 'active' : ''}`}
-            onClick={() => setView('audit')}
-          >
-            <span>🧾 Audit Log</span>
-          </button>
-
-          <button
-            className={`sidebar-btn ${view === 'pipeline' ? 'active' : ''}`}
-            onClick={() => setView('pipeline')}
-          >
-            <span>📦 Submission Builder</span>
-          </button>
-
-          <button
-            className={`sidebar-btn ${view === 'stress' ? 'active' : ''}`}
-            onClick={() => setView('stress')}
-          >
-            <span>🧪 Stress Lab</span>
-            {stressDataset?.email_count > 0 && (
-              <span
-                className="sidebar-badge"
-                style={{ background: 'rgba(224, 122, 95, 0.15)', color: '#e07a5f' }}
-              >
-                {stressDataset.email_count}
-              </span>
-            )}
-          </button>
+          <div className="sidebar-section">
+            <p className="sidebar-section-label">Tools</p>
+            <button
+              className={`sidebar-btn ${view === 'pipeline' ? 'active' : ''}`}
+              onClick={() => setView('pipeline')}
+            >
+              <NavIcon name="package" /><span className="nav-label">Submissions</span>
+            </button>
+            <button
+              className={`sidebar-btn ${view === 'stress' ? 'active' : ''}`}
+              onClick={() => setView('stress')}
+            >
+              <NavIcon name="flask" /><span className="nav-label">Stress Lab</span>
+              {stressDataset?.email_count > 0 && (
+                <span className="sidebar-badge">{fmtCount(stressDataset.email_count)}</span>
+              )}
+            </button>
+          </div>
         </nav>
 
         <div className="sidebar-footer">
@@ -2246,12 +2536,12 @@ function App() {
         {view === 'dashboard' && (
           <div style={{ maxWidth: '1200px' }}>
             <div className="page-header">
-              <h1>Operations Dashboard</h1>
-              <p>Portfolio-level insight across verifications, defects, missing bills, and corrupted files.</p>
+              <h1>Dashboard</h1>
+              <p>Verification results across all processed emails.</p>
             </div>
 
             {!stats ? (
-              <div style={{ textAlign: 'center', padding: '60px' }}>Loading statistics...</div>
+              <div className="empty-state">Loading…</div>
             ) : (
               <>
                 <CutoffProgressBar stats={stats} onFilter={openQueueFilter} />
@@ -2271,16 +2561,15 @@ function App() {
                     return (
                       <div
                         key={k.label}
-                        className="kpi-card"
+                        className={`kpi-card${clickable ? ' clickable' : ''}`}
                         onClick={reviewKey
                           ? () => { setReviewFilter(reviewKey); setView('review') }
                           : targetFilter ? () => openQueueFilter(targetFilter) : undefined}
-                        style={{ cursor: clickable ? 'pointer' : 'default', transition: 'all 0.2s ease' }}
                         title={clickable ? (reviewKey ? `Open ${k.label} in Human Review` : `Open ${k.label} in Inbox`) : undefined}
                       >
                         <div className="kpi-value">{k.value ?? 0}</div>
                         <div className="kpi-label">
-                          {k.label} {clickable ? '→' : ''}
+                          {k.label}
                         </div>
                       </div>
                     )
@@ -2288,19 +2577,16 @@ function App() {
                 </div>
 
                 {stats.verified_count === 0 && (
-                  <div
-                    className="item-card"
-                    style={{ textAlign: 'center', padding: '28px', color: '#856404', background: '#fff8e1' }}
-                  >
-                    💡 Run verifications or the batch pipeline to populate insights.
+                  <div className="notice warn">
+                    Run a verification or the batch pipeline to see results here.
                   </div>
                 )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                  <div className="item-card" style={{ marginBottom: 0 }}>
-                    <h3 style={{ color: 'var(--primary-color)', marginBottom: '14px' }}>
-                      Defects by Field
-                    </h3>
+                <div className="card-row">
+                  <div className="section-card" style={{ marginBottom: 0 }}>
+                    <div className="section-head">
+                      <h3>Defects by Field</h3>
+                    </div>
                     {FIELDS.map(f => (
                       <BarRow
                         key={f}
@@ -2311,12 +2597,12 @@ function App() {
                     ))}
                   </div>
 
-                  <div className="item-card" style={{ marginBottom: 0 }}>
-                    <h3 style={{ color: 'var(--primary-color)', marginBottom: '14px' }}>
-                      Category Mix
-                    </h3>
+                  <div className="section-card" style={{ marginBottom: 0 }}>
+                    <div className="section-head">
+                      <h3>Categories</h3>
+                    </div>
                     {categoryEntries.length === 0 ? (
-                      <p style={{ opacity: 0.7, fontSize: '0.9rem' }}>No categories recorded yet.</p>
+                      <p className="empty-state">No categories recorded yet.</p>
                     ) : (
                       categoryEntries.map(([cat, n]) => (
                         <BarRow key={cat} label={cat.replace(/_/g, ' ')} value={n} max={categoryMax} />
@@ -2325,24 +2611,15 @@ function App() {
                   </div>
                 </div>
 
-                <div className="item-card" style={{ marginTop: '20px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                    <div>
-                      <h3 style={{ color: 'var(--primary-color)', margin: 0 }}>
-                        Operational Subcategory Taxonomy & Threat Classification
-                      </h3>
-                      <p style={{ fontSize: '0.82rem', color: '#666', margin: '2px 0 0' }}>
-                        Granular intent breakdown across phishing scams, security alerts, demurrage disputes, direct liner filings, and RPA automations.
-                      </p>
-                    </div>
-                    <span style={{ fontSize: '0.8rem', padding: '4px 10px', background: '#f0f4e8', color: 'var(--primary-color)', borderRadius: '6px', fontWeight: 'bold' }}>
-                      {subcategoryEntries.length} Distinct Subcategories
-                    </span>
+                <div className="section-card">
+                  <div className="section-head">
+                    <h3>Subcategories</h3>
+                    <span className="tag">{subcategoryEntries.length} subcategories</span>
                   </div>
                   {subcategoryEntries.length === 0 ? (
-                    <p style={{ opacity: 0.7, fontSize: '0.9rem' }}>No subcategory data recorded yet.</p>
+                    <p className="empty-state">No subcategory data recorded yet.</p>
                   ) : (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px' }}>
+                    <div className="card-row">
                       {subcategoryEntries.map(([subtag, n]) => (
                         <BarRow key={subtag} label={subtag} value={n} max={subcategoryMax} />
                       ))}
@@ -2350,51 +2627,35 @@ function App() {
                   )}
                 </div>
 
-                <div className="item-card" style={{ marginTop: '20px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                    <h3 style={{ color: 'var(--primary-color)', margin: 0 }}>
-                      Missing Draft BL by Carrier
-                    </h3>
+                <div className="section-card">
+                  <div className="section-head">
+                    <h3>Missing Draft BL by Carrier</h3>
                     <button
+                      className="btn-secondary btn-sm"
                       onClick={() => openQueueFilter('missing_bl')}
-                      style={{ padding: '6px 14px', fontSize: '0.82rem' }}
                     >
-                      View All Missing Bills →
+                      View all
                     </button>
                   </div>
                   {carrierEntries.length === 0 ? (
-                    <p style={{ opacity: 0.7, fontSize: '0.9rem' }}>No missing bills by carrier.</p>
+                    <p className="empty-state">No missing bills by carrier.</p>
                   ) : (
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                    <table className="data-table">
                       <thead>
                         <tr>
-                          <th style={{ textAlign: 'left', padding: '8px', borderBottom: '2px solid var(--border-color)' }}>
-                            Carrier
-                          </th>
-                          <th style={{ textAlign: 'right', padding: '8px', borderBottom: '2px solid var(--border-color)' }}>
-                            Missing BLs
-                          </th>
-                          <th style={{ textAlign: 'right', padding: '8px', borderBottom: '2px solid var(--border-color)' }}>
-                            Action
-                          </th>
+                          <th>Carrier</th>
+                          <th className="num">Missing BLs</th>
                         </tr>
                       </thead>
                       <tbody>
                         {carrierEntries.map(([carrier, n]) => (
                           <tr
                             key={carrier}
-                            style={{ cursor: 'pointer', transition: 'background 0.2s ease' }}
+                            className="clickable"
                             onClick={() => openQueueFilter('missing_bl')}
                           >
-                            <td style={{ padding: '8px', borderBottom: '1px solid var(--border-color)', fontWeight: 'bold' }}>
-                              🚢 {carrier}
-                            </td>
-                            <td style={{ padding: '8px', borderBottom: '1px solid var(--border-color)', textAlign: 'right', fontWeight: 'bold', color: 'var(--primary-color)' }}>
-                              {n}
-                            </td>
-                            <td style={{ padding: '8px', borderBottom: '1px solid var(--border-color)', textAlign: 'right', color: 'var(--primary-color)' }}>
-                              Filter Carrier →
-                            </td>
+                            <td>{carrier}</td>
+                            <td className="num">{n}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -2585,7 +2846,7 @@ function App() {
           <div style={{ maxWidth: '1100px' }}>
             <div className="page-header">
               <h1>Inbox</h1>
-              <p>Every incoming email in one place — filter by issue type: mismatches, review flags, missing BLs, corrupted files, resolutions, and chasers.</p>
+              <p>All incoming email. Filter by issue type.</p>
             </div>
 
             <CutoffProgressBar stats={stats} onFilter={setQueueFilter} />
@@ -2607,11 +2868,12 @@ function App() {
               ))}
               {queueFilter === 'missing_bl' && (
                 <button
+                  className="btn-secondary btn-sm"
                   onClick={handleBatchChase}
                   disabled={batchChasing || !queueData?.emails?.length}
-                  style={{ marginLeft: 'auto', padding: '8px 18px', fontSize: '0.85rem', background: '#e07a5f' }}
+                  style={{ marginLeft: 'auto' }}
                 >
-                  ⚡ {batchChasing ? 'Dispatching...' : 'Batch Chase Page'}
+                  {batchChasing ? 'Dispatching…' : 'Chase all on this page'}
                 </button>
               )}
             </div>
@@ -2620,34 +2882,24 @@ function App() {
             <div className="action-bar">
               <input
                 type="text"
-                placeholder="Search by Email ID, Subject, or Sender..."
+                className="search-input"
+                placeholder="Search by email ID, subject, or sender"
                 value={queueSearch}
                 onChange={(e) => {
                   setQueueSearch(e.target.value)
                   setQueuePage(1)
                 }}
-                style={{
-                  flex: 1,
-                  padding: '10px 14px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--border-color)',
-                  fontSize: '0.95rem',
-                }}
               />
             </div>
 
             {queueMsg && (
-              <div style={{ background: '#d4edda', color: '#155724', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px' }}>
-                ✅ {queueMsg}
-              </div>
+              <div className="notice ok">{queueMsg}</div>
             )}
 
             {loadingQueue ? (
-              <div style={{ textAlign: 'center', padding: '60px' }}>Loading queue...</div>
+              <div className="empty-state">Loading…</div>
             ) : !queueData?.emails?.length ? (
-              <div className="item-card" style={{ textAlign: 'center', padding: '40px' }}>
-                <p>No items match this filter.</p>
-              </div>
+              <div className="empty-state">No items match this filter.</div>
             ) : (
               <>
                 {queueData.emails.map(item => {
@@ -2658,7 +2910,6 @@ function App() {
                     <div
                       key={item.email_id}
                       className={`item-card ${cardMod}`}
-                      style={{ padding: '16px 20px' }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div style={{ flex: 1, marginRight: '16px' }}>
@@ -2677,37 +2928,33 @@ function App() {
                                 {item.display_tag || item.category}
                               </span>
                             )}
-                            <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '10px', background: '#f0f4e8', color: 'var(--primary-color)', fontWeight: 'bold' }}>
-                              📎 {item.attachments_count} doc(s)
-                            </span>
+                            <span className="tag">{item.attachments_count} docs</span>
                             {item.has_bl === false && (
-                              <span style={{ fontSize: '0.75rem', color: '#856404', fontWeight: 'bold' }}>
-                                NO BL
-                              </span>
+                              <span className="tag warn">No BL</span>
                             )}
                           </div>
                           <p style={{ fontSize: '0.9rem', marginTop: '4px', color: 'var(--text-color)' }}>
                             {item.subject}
                           </p>
-                          <p style={{ fontSize: '0.8rem', color: '#666' }}>From: {item.from}</p>
+                          <p className="meta">From: {item.from}</p>
                           {item.corrupt_issue && (
-                            <p style={{ fontSize: '0.8rem', color: '#c62828', marginTop: '4px' }}>
-                              ⚠️ {item.corrupt_issue}
+                            <p className="meta danger" style={{ marginTop: '4px' }}>
+                              {item.corrupt_issue}
                             </p>
                           )}
                           {item.chaser_status && (
-                            <p style={{ fontSize: '0.78rem', color: '#155724', fontStyle: 'italic', marginTop: '4px' }}>
-                              📧 Chaser: {item.chaser_status}
+                            <p className="meta ok" style={{ marginTop: '4px' }}>
+                              Chaser: {item.chaser_status}
                             </p>
                           )}
                           {item.has_reply && item.latest_reply && (
-                            <p style={{ fontSize: '0.78rem', color: '#004085', fontWeight: 600, marginTop: '4px' }}>
-                              📨 Reply received from {item.latest_reply.from_addr || 'carrier'}
+                            <p className="meta info" style={{ marginTop: '4px' }}>
+                              Reply from {item.latest_reply.from_addr || 'carrier'}
                               {item.latest_reply.body ? ` — "${item.latest_reply.body.slice(0, 90)}${item.latest_reply.body.length > 90 ? '…' : ''}"` : ''}
                             </p>
                           )}
                           {item.corrupt_action && (
-                            <p style={{ fontSize: '0.78rem', color: '#555', fontStyle: 'italic', marginTop: '2px' }}>
+                            <p className="meta" style={{ marginTop: '2px' }}>
                               Corruption action: {item.corrupt_action}
                             </p>
                           )}
@@ -2715,23 +2962,23 @@ function App() {
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
                           <button
+                            className="btn-sm"
                             onClick={(e) => {
                               e.stopPropagation()
                               openEmail(item.email_id)
                             }}
-                            style={{ padding: '8px 16px', fontSize: '0.82rem' }}
                           >
-                            Open & Verify →
+                            Open
                           </button>
                           {(qs === 'missing_bl' || queueFilter === 'missing_bl') && (
                             <button
+                              className="btn-secondary btn-sm"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleChase(item.email_id)
                               }}
-                              style={{ padding: '8px 16px', fontSize: '0.82rem', background: '#e07a5f' }}
                             >
-                              📧 Send Chaser
+                              Send chaser
                             </button>
                           )}
                         </div>
@@ -2739,28 +2986,28 @@ function App() {
 
                       {qs === 'corrupted' && (
                         <div
-                          style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '12px', borderTop: '1px solid #f0e9df', paddingTop: '12px' }}
+                          style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '12px', borderTop: '1px solid var(--line)', paddingTop: '12px' }}
                           onClick={(e) => e.stopPropagation()}
                         >
                           <input
                             type="text"
-                            placeholder="Add operator remediation notes..."
+                            className="search-input"
+                            placeholder="Add a note"
                             value={focusedCorruptRow === item.email_id ? corruptActionNotes : ''}
                             onFocus={() => setFocusedCorruptRow(item.email_id)}
                             onChange={(e) => setCorruptActionNotes(e.target.value)}
-                            style={{ flex: 1, padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
                           />
                           <button
+                            className="btn-secondary btn-sm"
                             onClick={() => handleCorruptAction(item.email_id, 'CARRIER_RE_REQUESTED')}
-                            style={{ padding: '8px 16px', fontSize: '0.82rem', background: '#6c757d' }}
                           >
-                            Request New Copy
+                            Request new copy
                           </button>
                           <button
+                            className="btn-sm"
                             onClick={() => handleCorruptAction(item.email_id, 'MANUAL_OVERRIDE')}
-                            style={{ padding: '8px 16px', fontSize: '0.82rem' }}
                           >
-                            Mark Handled
+                            Mark handled
                           </button>
                         </div>
                       )}
@@ -2771,24 +3018,835 @@ function App() {
                 {/* Pagination */}
                 <div className="pager">
                   <button
+                    className="btn-secondary btn-sm"
                     disabled={queuePage <= 1}
                     onClick={() => setQueuePage(p => p - 1)}
-                    style={{ padding: '8px 18px', fontSize: '0.85rem' }}
+                  >
+                    Prev
+                  </button>
+                  <span className="meta">
+                    Page {queueData.page} of {totalPages} · {queueData.total} items
+                  </span>
+                  <button
+                    className="btn-secondary btn-sm"
+                    disabled={queuePage >= totalPages}
+                    onClick={() => setQueuePage(p => p + 1)}
+                  >
+                    Next
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ========================================================== */}
+        {/* VIEW: AUTO EMAIL GETTER & CLASSIFIER STUDIO                */}
+        {/* ========================================================== */}
+        {view === 'getter' && (
+          <div className="getter-container">
+            {/* HERO BANNER & PIPELINE FLOW */}
+            <div className="getter-hero-banner">
+              <div className="getter-hero-top">
+                <div>
+                  <h1>⚡ Auto Email Getter & Intelligent Classifier</h1>
+                  <p>
+                    Continuous mailbox polling and real-time operational triage powered by <strong>Laya Decision Model (Convai Innovations)</strong>.
+                    Directly connected to <strong>shiawyonglim@gmail.com</strong> via Google IMAP SSL (Port 993) & SMTP (Port 587).
+                  </p>
+                </div>
+                <div className="getter-live-badge">
+                  <span className="getter-pulse-dot"></span>
+                  {getterSource === 'real'
+                    ? (isLiveStreaming ? 'LIVE GMAIL STREAM (1.8s)' : 'IMAP SSL READY · 30,000+ MSGS')
+                    : (isLiveStreaming ? 'LIVE POLLING ACTIVE (1.8s)' : 'DATASET READY · 520 MSGS')}
+                </div>
+              </div>
+
+              {/* Source Switcher */}
+              <div className="getter-source-switch">
+                <button
+                  className={`getter-source-btn ${getterSource === 'real' ? 'active real' : ''}`}
+                  onClick={() => {
+                    setGetterSource('real')
+                    fetchGetterEmails(1, getterCategory, getterQueueFilter, getterSearch, 'real')
+                  }}
+                >
+                  📬 Live Personal Gmail (shiawyonglim@gmail.com)
+                </button>
+                <button
+                  className={`getter-source-btn ${getterSource === 'dataset' ? 'active' : ''}`}
+                  onClick={() => {
+                    setGetterSource('dataset')
+                    fetchGetterEmails(1, getterCategory, getterQueueFilter, getterSearch, 'dataset')
+                  }}
+                >
+                  📁 Dataset Mailbox (520 Emails)
+                </button>
+              </div>
+
+              {/* 4-Step Pipeline Flow */}
+              <div className="getter-pipeline-flow">
+                <div className="getter-flow-step">
+                  <div className="flow-step-icon">📡</div>
+                  <div className="flow-step-text">
+                    <span className="flow-step-title">1. Real IMAP SSL</span>
+                    <span className="flow-step-desc">imap.gmail.com:993 (shiawyonglim)</span>
+                  </div>
+                </div>
+                <div className="getter-flow-step">
+                  <div className="flow-step-icon">🔍</div>
+                  <div className="flow-step-text">
+                    <span className="flow-step-title">2. Laya Preprocessor</span>
+                    <span className="flow-step-desc">clean_email_body + email_state</span>
+                  </div>
+                </div>
+                <div className="getter-flow-step">
+                  <div className="flow-step-icon">🧠</div>
+                  <div className="flow-step-text">
+                    <span className="flow-step-title">3. Laya System-1</span>
+                    <span className="flow-step-desc">Non-Autoregressive Decision Schema</span>
+                  </div>
+                </div>
+                <div className="getter-flow-step">
+                  <div className="flow-step-icon">🎯</div>
+                  <div className="flow-step-text">
+                    <span className="flow-step-title">4. Smart Router</span>
+                    <span className="flow-step-desc">7-Field Audit, Billing, SI, Chaser</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* METRICS SUMMARY */}
+            <div className="getter-metrics-grid">
+              <div className="getter-metric-card">
+                <span className="getter-metric-label">{getterSource === 'real' ? 'Gmail Ingested' : 'Dataset Ingested'}</span>
+                <span className="getter-metric-val">{getterTotal ?? 0}</span>
+                <span className="getter-metric-sub">
+                  <span>{getterSource === 'real' ? `${(getterStatus?.total_available ?? 0).toLocaleString()} in mailbox` : '520 carrier emails'}</span>
+                </span>
+              </div>
+              <div className="getter-metric-card">
+                <span className="getter-metric-label">Classifier Engine</span>
+                <span className="getter-metric-val" style={{ color: '#7e22ce' }}>
+                  Laya v0.3.4
+                </span>
+                <span className="getter-metric-sub">
+                  <span>Convai System-1 Decision Model</span>
+                </span>
+              </div>
+              <div className="getter-metric-card">
+                <span className="getter-metric-label">Inference Latency</span>
+                <span className="getter-metric-val" style={{ color: '#15803d' }}>
+                  {getterStatus?.avg_latency_ms ? `~${Math.round(getterStatus.avg_latency_ms)} ms` : 'pending'}
+                </span>
+                <span className="getter-metric-sub">
+                  <span>Laya CPU forward pass (33ms on GPU)</span>
+                </span>
+              </div>
+              <div className="getter-metric-card">
+                <span className="getter-metric-label">Mailbox Status</span>
+                <span className="getter-metric-val" style={{ fontSize: '1.05rem', color: '#1e293b' }}>
+                  {getterSource === 'real' ? 'LIVE IMAP SSL' : 'STATIC DATASET'}
+                </span>
+                <span className="getter-metric-sub">
+                  <span>{getterSource === 'real' ? 'shiawyonglim@gmail.com' : 'shipping.docs@aprilasia.com'}</span>
+                </span>
+              </div>
+            </div>
+
+            {/* CONTROLS & STREAM TOOLBAR */}
+            <div className="getter-toolbar">
+              <div className="getter-toolbar-left">
+                {getterSource === 'real' ? (
+                  <>
+                    <button
+                      className="getter-btn primary"
+                      style={{ background: '#15803d', borderColor: '#15803d' }}
+                      onClick={handlePollRealGmail}
+                      disabled={pollingRealGmail}
+                    >
+                      {pollingRealGmail ? '⏳ Polling Gmail IMAP...' : '🔄 Poll Real Gmail Inbox (IMAP SSL)'}
+                    </button>
+                    <button
+                      className="getter-btn"
+                      style={{ background: '#f5f3ff', borderColor: '#c084fc', color: '#7e22ce', fontWeight: 700 }}
+                      onClick={handleSendRealTestEmail}
+                      disabled={sendingRealTest}
+                    >
+                      {sendingRealTest ? '⏳ Dispatching via SMTP...' : '✉️ Send Real Test Email to Myself & Classify'}
+                    </button>
+                    <button
+                      className={`getter-btn ${isLiveStreaming ? 'active-stream' : ''}`}
+                      onClick={() => setIsLiveStreaming(prev => !prev)}
+                    >
+                      {isLiveStreaming ? '⏸️ Pause Auto-Polling' : '▶️ Live Auto-Poll (1.8s)'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      className={`getter-btn ${isLiveStreaming ? 'active-stream' : 'primary'}`}
+                      onClick={() => setIsLiveStreaming(prev => !prev)}
+                    >
+                      {isLiveStreaming ? '⏸️ Pause Auto-Polling' : '▶️ Start Live Stream (1.8s)'}
+                    </button>
+                    <button
+                      className="getter-btn"
+                      onClick={() => handleFetchBatch(10)}
+                      disabled={isLiveStreaming}
+                    >
+                      📥 Ingest Next Batch (+10)
+                    </button>
+                    <button
+                      className="getter-btn"
+                      onClick={() => handleFetchBatch(520)}
+                      disabled={isLiveStreaming}
+                    >
+                      ⚡ Ingest All Available (520)
+                    </button>
+                    <button
+                      className="getter-btn"
+                      onClick={handleResetGetter}
+                      disabled={isLiveStreaming}
+                    >
+                      🔄 Reset Stream (25)
+                    </button>
+                    <button
+                      className="getter-btn"
+                      style={{ background: '#f0fdf4', borderColor: '#86efac', color: '#166534' }}
+                      onClick={() => setCustomModalOpen(true)}
+                    >
+                      ➕ Simulate Custom Inbound Email
+                    </button>
+                  </>
+                )}
+              </div>
+              {getterMsg && (
+                <div style={{ fontSize: '0.82rem', color: '#166534', fontWeight: 600 }}>
+                  ✓ {getterMsg}
+                </div>
+              )}
+            </div>
+
+            {/* FILTERS & SEARCH */}
+            <div className="getter-filters-bar">
+              <div className="getter-search-row">
+                <input
+                  type="text"
+                  className="getter-search-input"
+                  placeholder="🔍 Filter ingested stream by Subject, Email ID, Booking Ref (e.g. 5AKR-), BL Ref, or Carrier..."
+                  value={getterSearch}
+                  onChange={e => {
+                    setGetterSearch(e.target.value)
+                    fetchGetterEmails(1, getterCategory, getterQueueFilter, e.target.value)
+                  }}
+                />
+              </div>
+
+              {/* Category Pills */}
+              <div className="getter-pill-row">
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                  Category:
+                </span>
+                {[
+                  { key: 'all', label: `All Categories (${getterStatus?.ingested_count || 0})` },
+                  { key: 'BL_COMPARISON', label: `BL Comparison (${getterStatus?.categories?.BL_COMPARISON || 0})` },
+                  { key: 'INVOICE_QUERY', label: `Invoice Queries (${getterStatus?.categories?.INVOICE_QUERY || 0})` },
+                  { key: 'SI_REQUEST', label: `SI Requests (${getterStatus?.categories?.SI_REQUEST || 0})` },
+                  { key: 'GENERAL', label: `General Logistics (${getterStatus?.categories?.GENERAL || 0})` },
+                  { key: 'SPAM', label: `Quarantined (${getterStatus?.categories?.SPAM || 0})` },
+                ].map(pill => (
+                  <button
+                    key={pill.key}
+                    className={`getter-pill ${getterCategory === pill.key ? 'active' : ''}`}
+                    onClick={() => {
+                      setGetterCategory(pill.key)
+                      fetchGetterEmails(1, pill.key, getterQueueFilter, getterSearch)
+                    }}
+                  >
+                    {pill.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Queue Destination Pills */}
+              <div className="getter-pill-row">
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                  Smart Queue:
+                </span>
+                {[
+                  { key: 'all', label: 'All Destinations' },
+                  { key: 'comparator', label: `7-Field Comparator Studio (${getterStatus?.queues?.comparator_ready || 0})` },
+                  { key: 'chaser', label: `Awaiting Draft BL (${getterStatus?.queues?.awaiting_draft_bl || 0})` },
+                  { key: 'billing', label: `Billing & THC Desk (${getterStatus?.queues?.billing_desk || 0})` },
+                  { key: 'si', label: `SI Operations (${getterStatus?.queues?.si_operations || 0})` },
+                  { key: 'general', label: `General Ops Log (${getterStatus?.queues?.general_ops || 0})` },
+                ].map(pill => (
+                  <button
+                    key={pill.key}
+                    className={`getter-pill ${getterQueueFilter === pill.key ? 'active' : ''}`}
+                    onClick={() => {
+                      setGetterQueueFilter(pill.key)
+                      fetchGetterEmails(1, getterCategory, pill.key, getterSearch)
+                    }}
+                  >
+                    {pill.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* SPLIT VIEW: INGESTED STREAM TABLE + INSPECTOR */}
+            <div className="getter-split-view">
+              {/* Left Column: Stream Table */}
+              <div className="getter-table-card">
+                <div className="getter-table-header">
+                  <h3>📥 Ingested & Classified Stream ({getterTotal} items)</h3>
+                  <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                    Page {getterPage} of {Math.max(1, Math.ceil(getterTotal / getterLimit))}
+                  </div>
+                </div>
+
+                <div className="getter-table-wrap">
+                  {getterLoading ? (
+                    <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
+                      <p>Loading email stream from mailbox...</p>
+                    </div>
+                  ) : getterEmails.length === 0 ? (
+                    <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
+                      <p>No ingested emails match the selected filters.</p>
+                    </div>
+                  ) : (
+                    <table className="getter-table">
+                      <thead>
+                        <tr>
+                          <th>ID</th>
+                          <th>Category</th>
+                          <th>Booking / BL Ref</th>
+                          <th>Subject</th>
+                          <th>Atts</th>
+                          <th>Routing Queue</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {getterEmails.map(item => {
+                          const isSelected = selectedGetterEmail?.email_id === item.email_id
+                          const cat = item.classification.category
+                          const catClass = cat.toLowerCase()
+                          const prio = item.classification.priority || 'NORMAL'
+                          const prioClass = prio.toLowerCase()
+
+                          return (
+                            <tr
+                              key={item.email_id}
+                              className={`getter-table-row ${isSelected ? 'selected' : ''}`}
+                              onClick={() => setSelectedGetterEmail(item)}
+                            >
+                              <td style={{ fontFamily: 'monospace', fontWeight: 700 }}>
+                                {item.email_id}
+                                {item.source === 'real_gmail' ? (
+                                  <span style={{ marginLeft: 4, fontSize: '0.64rem', color: '#15803d', background: '#dcfce7', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>
+                                    ●GMAIL
+                                  </span>
+                                ) : item.is_custom_simulation ? (
+                                  <span style={{ marginLeft: 4, fontSize: '0.68rem', color: '#16a34a' }}>●LIVE</span>
+                                ) : null}
+                              </td>
+                              <td>
+                                <span className={`cat-badge ${catClass}`}>
+                                  {cat === 'BL_COMPARISON' ? '📄 BL AUDIT'
+                                    : cat === 'INVOICE_QUERY' ? '💼 INVOICE'
+                                    : cat === 'SI_REQUEST' ? '📝 SI REQUEST'
+                                    : cat === 'SPAM' ? '🛡️ SPAM'
+                                    : '🌐 GENERAL'}
+                                </span>
+                              </td>
+                              <td>
+                                <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: '#0f172a', fontWeight: 600 }}>
+                                  {item.entities.booking_ref !== 'N/A' ? item.entities.booking_ref
+                                    : item.entities.bl_ref !== 'N/A' ? item.entities.bl_ref
+                                    : item.entities.invoice_no !== 'N/A' ? `INV ${item.entities.invoice_no}`
+                                    : '—'}
+                                </span>
+                              </td>
+                              <td style={{ maxWidth: '240px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                <span title={item.subject}>{item.subject}</span>
+                              </td>
+                              <td style={{ textAlign: 'center' }}>
+                                <span style={{
+                                  fontSize: '0.74rem',
+                                  padding: '2px 7px',
+                                  borderRadius: 10,
+                                  background: item.attachments_count >= 2 ? '#dcfce7' : item.attachments_count === 1 ? '#fef9c3' : '#f1f5f9',
+                                  color: item.attachments_count >= 2 ? '#166534' : '#475569',
+                                  fontWeight: 700
+                                }}>
+                                  📎 {item.attachments_count}
+                                </span>
+                              </td>
+                              <td>
+                                <span style={{ fontSize: '0.78rem', color: '#475569', fontWeight: 600 }}>
+                                  {item.classification.target_queue}
+                                </span>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+                {/* Pagination */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 18px', borderTop: '1px solid #e2e8f0', background: '#fafbfc' }}>
+                  <button
+                    className="getter-btn"
+                    disabled={getterPage <= 1}
+                    onClick={() => {
+                      const prevPage = getterPage - 1
+                      setGetterPage(prevPage)
+                      fetchGetterEmails(prevPage)
+                    }}
                   >
                     ← Prev
                   </button>
-                  <span style={{ fontSize: '0.9rem' }}>
-                    Page {queueData.page} of {totalPages} ({queueData.total})
+                  <span style={{ fontSize: '0.82rem', color: '#64748b' }}>
+                    Showing {(getterPage - 1) * getterLimit + 1} - {Math.min(getterTotal, getterPage * getterLimit)} of {getterTotal}
                   </span>
                   <button
-                    disabled={queuePage >= totalPages}
-                    onClick={() => setQueuePage(p => p + 1)}
-                    style={{ padding: '8px 18px', fontSize: '0.85rem' }}
+                    className="getter-btn"
+                    disabled={getterPage >= Math.ceil(getterTotal / getterLimit)}
+                    onClick={() => {
+                      const nextPage = getterPage + 1
+                      setGetterPage(nextPage)
+                      fetchGetterEmails(nextPage)
+                    }}
                   >
                     Next →
                   </button>
                 </div>
-              </>
+              </div>
+
+              {/* Right Column: Deep Dive Inspector */}
+              <div className="getter-inspector-card">
+                {selectedGetterEmail ? (
+                  <>
+                    <div className="getter-inspector-header">
+                      <div className="getter-inspector-title-row">
+                        <div>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                            Email Dossier Inspector
+                          </span>
+                          <h3 style={{ marginTop: 4 }}>
+                            {selectedGetterEmail.email_id}
+                          </h3>
+                        </div>
+                        <span className={`prio-badge ${(selectedGetterEmail.classification.priority || 'NORMAL').toLowerCase()}`}>
+                          {selectedGetterEmail.classification.priority || 'NORMAL'} PRIORITY
+                        </span>
+                      </div>
+
+                      <div style={{ fontSize: '0.82rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div><strong>From:</strong> {selectedGetterEmail.from}</div>
+                        <div><strong>To:</strong> {selectedGetterEmail.to}</div>
+                        <div><strong>Subject:</strong> {selectedGetterEmail.subject}</div>
+                      </div>
+                    </div>
+
+                    <div className="getter-inspector-body">
+                      {/* Classification Box */}
+                      <div className="getter-section-box">
+                        <div className="getter-section-title">
+                          <span>🏷️ Automated Classification Dossier</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                          <span className={`cat-badge ${selectedGetterEmail.classification.category.toLowerCase()}`} style={{ fontSize: '0.82rem', padding: '4px 12px' }}>
+                            {selectedGetterEmail.classification.display_tag}
+                          </span>
+                          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#16a34a' }}>
+                            Confidence: {Math.round((selectedGetterEmail.classification.confidence || 0.99) * 100)}%
+                          </span>
+                        </div>
+                        <p style={{ fontSize: '0.82rem', color: '#475569', margin: '0 0 10px 0', lineHeight: 1.4 }}>
+                          {selectedGetterEmail.classification.description}
+                        </p>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                          <strong>Engine Provenance:</strong> <code>{selectedGetterEmail.classification.provenance}</code>
+                        </div>
+                      </div>
+
+                      {/* Laya Decision Model Card */}
+                      {selectedGetterEmail.laya_decision && (
+                        <div className="getter-laya-card">
+                          <div className="getter-laya-header">
+                            <div className="getter-laya-title">
+                              <span>🧠 Laya Decision Model (Convai Innovations)</span>
+                            </div>
+                            <span style={{ fontSize: '0.7rem', background: '#e9d5ff', color: '#6b21a8', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>
+                              {selectedGetterEmail.laya_decision?.inference === 'real'
+                                ? 'NEURAL VERIFIED · SYSTEM-1'
+                                : selectedGetterEmail.laya_decision?.inference === 'pending'
+                                  ? 'RULES · NEURAL PENDING'
+                                  : 'RULES ONLY'}
+                            </span>
+                          </div>
+                          
+                          <div className="getter-laya-grid">
+                            <div className="getter-laya-item">
+                              <div className="getter-laya-label">
+                                <span>Question: Category</span>
+                                <span>type: choice</span>
+                              </div>
+                              <div className="getter-laya-val" style={{ color: '#6b21a8' }}>
+                                {selectedGetterEmail.laya_decision.answers?.category?.choice || selectedGetterEmail.classification.category}
+                              </div>
+                              <div style={{ fontSize: '0.72rem', color: '#16a34a', marginTop: 2 }}>
+                                Calibrated Confidence: {Math.round((selectedGetterEmail.laya_decision.answers?.category?.confidence || 0.96) * 100)}%
+                              </div>
+                            </div>
+
+                            <div className="getter-laya-item">
+                              <div className="getter-laya-label">
+                                <span>Question: Urgency</span>
+                                <span>type: score (0-2.0)</span>
+                              </div>
+                              <div className="getter-laya-val">
+                                {selectedGetterEmail.laya_decision.answers?.urgency?.level || 'ROUTINE'} ({selectedGetterEmail.laya_decision.answers?.urgency?.score ?? 0.2})
+                              </div>
+                              <div className="getter-meter-bar">
+                                <div
+                                  className="getter-meter-fill"
+                                  style={{ width: `${Math.min(100, Math.max(10, ((selectedGetterEmail.laya_decision.answers?.urgency?.score ?? 0.2) / 2.0) * 100))}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="getter-laya-item">
+                              <div className="getter-laya-label">
+                                <span>Question: Needs Reply</span>
+                                <span>type: noul</span>
+                              </div>
+                              <div className="getter-laya-val" style={{ color: (selectedGetterEmail.laya_decision.answers?.needs_reply?.probability ?? 0.5) > 0.5 ? '#b45309' : '#15803d' }}>
+                                {(selectedGetterEmail.laya_decision.answers?.needs_reply?.probability ?? 0.5) > 0.5 ? 'YES — ACTION REQUIRED' : 'NO — INFORMATIONAL'}
+                              </div>
+                              <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                                Probability: {selectedGetterEmail.laya_decision.answers?.needs_reply?.probability ?? 0.5}
+                              </div>
+                            </div>
+
+                            <div className="getter-laya-item">
+                              <div className="getter-laya-label">
+                                <span>Question: Is Spam</span>
+                                <span>type: noul</span>
+                              </div>
+                              <div className="getter-laya-val" style={{ color: (selectedGetterEmail.laya_decision.answers?.is_spam?.probability ?? 0) > 0.5 ? '#dc2626' : '#15803d' }}>
+                                {(selectedGetterEmail.laya_decision.answers?.is_spam?.probability ?? 0) > 0.5 ? 'QUARANTINED' : 'CLEAN INBOX'}
+                              </div>
+                              <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                                Probability: {selectedGetterEmail.laya_decision.answers?.is_spam?.probability ?? 0.02}
+                              </div>
+                            </div>
+                          </div>
+
+                          {selectedGetterEmail.laya_decision.clean_state && (
+                            <div style={{ background: '#ffffff', border: '1px solid #e9d5ff', borderRadius: 6, padding: '8px 10px' }}>
+                              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#6b21a8', textTransform: 'uppercase', marginBottom: 4 }}>
+                                Laya Preprocessed State (Signatures & Disclaimers Stripped):
+                              </div>
+                              <div style={{ fontSize: '0.74rem', color: '#475569', maxHeight: '75px', overflowY: 'auto', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+                                {selectedGetterEmail.laya_decision.clean_state.body || selectedGetterEmail.snippet}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Extracted Shipping Entities */}
+                      <div className="getter-section-box">
+                        <div className="getter-section-title">
+                          <span>📦 Extracted Shipping Entities</span>
+                        </div>
+                        <div className="getter-entities-grid">
+                          <div className="getter-entity-item">
+                            <span className="getter-entity-label">Booking Ref</span>
+                            <div className="getter-entity-val">{selectedGetterEmail.entities.booking_ref}</div>
+                          </div>
+                          <div className="getter-entity-item">
+                            <span className="getter-entity-label">Carrier B/L Ref</span>
+                            <div className="getter-entity-val">{selectedGetterEmail.entities.bl_ref}</div>
+                          </div>
+                          <div className="getter-entity-item">
+                            <span className="getter-entity-label">Invoice Number</span>
+                            <div className="getter-entity-val">{selectedGetterEmail.entities.invoice_no}</div>
+                          </div>
+                          <div className="getter-entity-item">
+                            <span className="getter-entity-label">Liner Carrier</span>
+                            <div className="getter-entity-val">{selectedGetterEmail.entities.carrier}</div>
+                          </div>
+                          <div className="getter-entity-item" style={{ gridColumn: 'span 2' }}>
+                            <span className="getter-entity-label">Detected Ports / Locations</span>
+                            <div className="getter-entity-val">{selectedGetterEmail.entities.ports.join(', ')}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Decision Signals / Why Classified */}
+                      <div className="getter-section-box">
+                        <div className="getter-section-title">
+                          <span>🔍 Decision Signals & Trigger Reasoning</span>
+                        </div>
+                        <ul className="getter-signals-list">
+                          {selectedGetterEmail.classification.signals?.map((sig, idx) => (
+                            <li key={idx} className="getter-signal-item">
+                              <span className="getter-signal-dot"></span>
+                              <span>{sig}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Downstream Smart Action Card */}
+                      <div className="getter-action-banner">
+                        <div className="getter-action-title">
+                          <span>🚀 Downstream Automated Action</span>
+                        </div>
+                        <div className="getter-action-desc">
+                          {selectedGetterEmail.classification.recommended_action}
+                        </div>
+                        <div style={{ marginTop: 8 }}>
+                          {selectedGetterEmail.classification.category === 'BL_COMPARISON' && selectedGetterEmail.attachments_count >= 2 ? (
+                            <button
+                              className="getter-btn primary"
+                              onClick={() => {
+                                setSelectedEmail(selectedGetterEmail.email_id)
+                                setView('verify')
+                              }}
+                            >
+                              🔍 Open in 7-Field Verify Studio
+                            </button>
+                          ) : selectedGetterEmail.classification.category === 'INVOICE_QUERY' ? (
+                            <button
+                              className="getter-btn primary"
+                              style={{ background: '#b45309', borderColor: '#b45309' }}
+                              onClick={() => {
+                                setSelectedEmail(selectedGetterEmail.email_id)
+                                openDraftEmail(selectedGetterEmail.email_id, selectedGetterEmail)
+                              }}
+                            >
+                              ✉️ Auto-Draft Billing / THC Reply
+                            </button>
+                          ) : selectedGetterEmail.classification.category === 'SI_REQUEST' ? (
+                            <button
+                              className="getter-btn primary"
+                              style={{ background: '#047857', borderColor: '#047857' }}
+                              onClick={() => {
+                                setSelectedEmail(selectedGetterEmail.email_id)
+                                openDraftEmail(selectedGetterEmail.email_id, selectedGetterEmail)
+                              }}
+                            >
+                              ✉️ Auto-Draft Shipping Instructions
+                            </button>
+                          ) : (
+                            <button
+                              className="getter-btn"
+                              onClick={() => {
+                                setSelectedEmail(selectedGetterEmail.email_id)
+                                openDraftEmail(selectedGetterEmail.email_id, selectedGetterEmail)
+                              }}
+                            >
+                              ✉️ Auto-Draft Operational Email
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Raw Body Snippet */}
+                      <div className="getter-section-box">
+                        <div className="getter-section-title">
+                          <span>✉️ Raw Message Body</span>
+                        </div>
+                        <pre style={{
+                          background: '#fff',
+                          border: '1px solid #e2e8f0',
+                          padding: 12,
+                          borderRadius: 8,
+                          fontSize: '0.78rem',
+                          color: '#334155',
+                          whiteSpace: 'pre-wrap',
+                          maxHeight: '180px',
+                          overflowY: 'auto',
+                          fontFamily: 'monospace'
+                        }}>
+                          {selectedGetterEmail.full_body}
+                        </pre>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>
+                    <p>Select an email from the stream to view its classified dossier.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* CUSTOM EMAIL INGESTION MODAL */}
+            {customModalOpen && (
+              <div className="getter-modal-overlay" onClick={() => setCustomModalOpen(false)}>
+                <div className="getter-modal-card" onClick={e => e.stopPropagation()}>
+                  <div className="getter-modal-header">
+                    <h3>➕ Ingest & Classify Custom Inbound Email</h3>
+                    <button
+                      onClick={() => setCustomModalOpen(false)}
+                      style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleCustomIngestSubmit}>
+                    <div className="getter-modal-body">
+                      {/* Presets */}
+                      <div>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
+                          ⚡ Quick Simulation Presets:
+                        </span>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+                          <button
+                            type="button"
+                            className="getter-pill"
+                            onClick={() => setCustomForm({
+                              from_addr: 'doc.desk@evergreen-marine.com',
+                              to_addr: 'shipping.docs@aprilasia.com',
+                              subject: 'DRAFT BL READY _ 5AKR-61849 _ PORT KLANG _ SIN832764835',
+                              body: 'Dear Documentation Team,\n\nPlease find attached our draft Bill of Lading for verification before vessel cutoff at Port Klang.\n\nBest regards,\nEvergreen Marine Liner Desk',
+                              attachments: ['attachments/email_custom_SI.txt', 'attachments/email_custom_BL.txt']
+                            })}
+                          >
+                            Preset 1: Draft BL Arrival (2 Atts)
+                          </button>
+                          <button
+                            type="button"
+                            className="getter-pill"
+                            onClick={() => setCustomForm({
+                              from_addr: 'accounting@freightpartner.com',
+                              to_addr: 'shipping.docs@aprilasia.com',
+                              subject: 'RE_ LOCAL CHARGES FOB - 5AKR-91823 - TELEX SURRENDER FEE',
+                              body: 'Hi Team,\n\nQuery on invoice 5250089123: are the THC / local port fees and telex release charges included in the ocean freight debit note? Please advise itemized breakdown asap.\n\nBest regards,\nAccounting Desk',
+                              attachments: []
+                            })}
+                          >
+                            Preset 2: Invoice & THC Query (0 Atts)
+                          </button>
+                          <button
+                            type="button"
+                            className="getter-pill"
+                            onClick={() => setCustomForm({
+                              from_addr: 'liner.ops@cma-cgm.com',
+                              to_addr: 'shipping.docs@aprilasia.com',
+                              subject: 'REQUEST SI _ 5RSG-90214 _ JAKARTA _ URGENT PORT CUTOFF',
+                              body: 'URGENT: Please submit shipping instruction particulars for booking 5RSG-90214. Port cutoff is 17:00 SGT today.\n\nCMA CGM Customer Service',
+                              attachments: []
+                            })}
+                          >
+                            Preset 3: Urgent SI Request (0 Atts)
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>
+                          Sender Address (From):
+                        </label>
+                        <input
+                          type="email"
+                          required
+                          className="getter-search-input"
+                          style={{ width: '100%' }}
+                          value={customForm.from_addr}
+                          onChange={e => setCustomForm({ ...customForm, from_addr: e.target.value })}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>
+                          Subject Line:
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          className="getter-search-input"
+                          style={{ width: '100%' }}
+                          value={customForm.subject}
+                          onChange={e => setCustomForm({ ...customForm, subject: e.target.value })}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>
+                          Email Body:
+                        </label>
+                        <textarea
+                          rows={4}
+                          required
+                          className="getter-search-input"
+                          style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.82rem' }}
+                          value={customForm.body}
+                          onChange={e => setCustomForm({ ...customForm, body: e.target.value })}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>
+                          Attachments Simulation:
+                        </label>
+                        <div style={{ display: 'flex', gap: 12 }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem' }}>
+                            <input
+                              type="radio"
+                              name="atts_opt"
+                              checked={customForm.attachments.length === 2}
+                              onChange={() => setCustomForm({
+                                ...customForm,
+                                attachments: ['attachments/email_custom_SI.txt', 'attachments/email_custom_BL.txt']
+                              })}
+                            />
+                            2 Attachments (SI + Draft BL)
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem' }}>
+                            <input
+                              type="radio"
+                              name="atts_opt"
+                              checked={customForm.attachments.length === 0}
+                              onChange={() => setCustomForm({ ...customForm, attachments: [] })}
+                            />
+                            0 Attachments (Text Inquiry / Chaser)
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="getter-modal-footer">
+                      <button
+                        type="button"
+                        className="getter-btn"
+                        onClick={() => setCustomModalOpen(false)}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="getter-btn primary"
+                        disabled={customIngesting}
+                      >
+                        {customIngesting ? 'Ingesting...' : '⚡ Ingest & Classify Now'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -2799,7 +3857,7 @@ function App() {
           <>
             <div className="page-header">
               <h1>Verify Documents</h1>
-              <p>Review an inbox email's attachments, or photograph / upload paper documents — compare SI vs draft BL either way.</p>
+              <p>Compare an email's SI vs draft BL — or upload paper scans.</p>
             </div>
 
             {/* Mode toggle: inbox email vs paper scan/upload */}
@@ -2955,7 +4013,10 @@ function App() {
                   style={{ background: '#6e3511', color: '#fff', border: 'none', borderRadius: '8px', padding: '7px 14px', fontSize: '0.85rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
                   title="Auto-draft and send email via Google SMTP"
                 >
-                  ✉️ Auto-Draft Email
+                  {emailInfo?.category === 'INVOICE_QUERY' ? '✉️ Reply to Invoice Query' :
+                   emailInfo?.category === 'SI_REQUEST' ? '✉️ Reply with SI' :
+                   emailInfo?.category === 'GENERAL' ? '✉️ Reply to Inquiry' :
+                   '✉️ Auto-Draft Email'}
                 </button>
                 <div className="keyboard-shortcuts-hint">
                   <span title="Keyboard shortcuts: Press [Q] for Previous, [W] for Next, [E] to Auto-Draft">
@@ -2994,7 +4055,7 @@ function App() {
             {cloudSyncInfo && (
               <div className="cloud-cache-banner">
                 <div>
-                  <strong>☁️ Supabase Cloud Synchronized:</strong> Previously verified & cached in shared Supabase database (Status: {cloudSyncInfo.status || 'OK'}{cloudSyncInfo.updated_at ? ` · Last Synced: ${new Date(cloudSyncInfo.updated_at).toLocaleTimeString()}` : ''}).
+                  <strong>☁️ Cloud-cached verdict:</strong> {cloudSyncInfo.status || 'OK'}{cloudSyncInfo.updated_at ? ` · synced ${new Date(cloudSyncInfo.updated_at).toLocaleTimeString()}` : ''}
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button
@@ -3013,37 +4074,121 @@ function App() {
               </div>
             )}
 
-            {/* Contextual Action Card: Missing Draft BL Carrier Chaser */}
-            {emailInfo && emailInfo.category === 'BL_COMPARISON' && emailInfo.attachments?.length === 0 && (
-              <div className="action-card chaser">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#e07a5f' }}>
-                      MISSING BILL OF LADING · IMMEDIATE REMEDIATION
-                    </span>
-                    <h3 style={{ margin: '4px 0', color: 'var(--primary-color)' }}>
-                      Automated Carrier Chaser Dispatch
-                    </h3>
-                    <p style={{ fontSize: '0.88rem', color: '#555', margin: 0 }}>
-                      Shipper instructions were received, but no draft BL attachment is present. Dispatch an automated chaser to <strong>{detectCarrier(emailInfo)}</strong> before port cutoff.
-                    </p>
+            {/* Contextual Action Card: Inbound Invoice & Local Charges Query */}
+            {emailInfo && emailInfo.category === 'INVOICE_QUERY' && (
+              <div className="action-card query" style={{ background: '#fdf9f4', border: '1px solid #eadbc8', borderRadius: '10px', padding: '14px 18px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '1.3rem' }}>💼</span>
+                    <div>
+                      <strong style={{ color: '#8c4308', display: 'block' }}>
+                        Inbound Billing & Local Charges Inquiry (from {emailInfo.from})
+                      </strong>
+                      <span style={{ fontSize: '0.84rem', color: '#555' }}>
+                        Sender is inquiring about invoice charges, THC, or telex release fees. Reply directly with the fee schedule.
+                      </span>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => handleChase(selectedEmail)}
-                    style={{ background: '#e07a5f', padding: '10px 20px', fontSize: '0.9rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '8px' }}
-                  >
-                    ⚡ Dispatch Carrier Chaser Email
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => openDraftEmail(selectedEmail)}
+                      style={{ background: '#8c4308', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 18px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      ✉️ Reply with Charges Breakdown
+                    </button>
+                  </div>
                 </div>
+              </div>
+            )}
 
-                <div className="email-preview-box">
-                  <div style={{ fontWeight: 600, marginBottom: '6px', color: '#6e3511' }}>
-                    📧 Outgoing Carrier Chaser:
+            {/* Contextual Action Card: Inbound Shipping Instruction Request */}
+            {emailInfo && emailInfo.category === 'SI_REQUEST' && (
+              <div className="action-card query" style={{ background: '#f4f8fa', border: '1px solid #cfe2ec', borderRadius: '10px', padding: '14px 18px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '1.3rem' }}>📄</span>
+                    <div>
+                      <strong style={{ color: '#006699', display: 'block' }}>
+                        Inbound Shipping Instruction Request (from {emailInfo.from})
+                      </strong>
+                      <span style={{ fontSize: '0.84rem', color: '#555' }}>
+                        Customer or freight forwarder is requesting Shipping Instructions for this booking.
+                      </span>
+                    </div>
                   </div>
-                  <div><strong>To:</strong> {getCarrierDeskEmail(detectCarrier(emailInfo))} ({detectCarrier(emailInfo)} Documentation Desk)</div>
-                  <div><strong>Subject:</strong> URGENT: Missing Draft Bill of Lading — {emailInfo.subject}</div>
-                  <div style={{ marginTop: '8px', fontStyle: 'italic', color: '#444' }}>
-                    "Dear Carrier Operations Team, we are following up on our Shipping Instruction for shipment ref {selectedEmail}. Port cutoff is approaching and our automated verification pipeline has not received the draft BL. Please urgently furnish the draft BL to avoid shipping delays."
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => openDraftEmail(selectedEmail)}
+                      style={{ background: '#006699', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 18px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      ✉️ Reply with Shipping Instructions
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Contextual Action Card: Inbound General Logistics Inquiry */}
+            {emailInfo && emailInfo.category === 'GENERAL' && (
+              <div className="action-card query" style={{ background: '#f8f9fa', border: '1px solid #e2e6ea', borderRadius: '10px', padding: '14px 18px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '1.3rem' }}>🌐</span>
+                    <div>
+                      <strong style={{ color: '#495057', display: 'block' }}>
+                        General Logistics Inquiry (from {emailInfo.from})
+                      </strong>
+                      <span style={{ fontSize: '0.84rem', color: '#555' }}>
+                        General correspondence regarding vessel schedule, tracking, or booking status.
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => openDraftEmail(selectedEmail)}
+                      style={{ background: '#495057', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 18px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      ✉️ Reply to Inquiry
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Compact missing-document banner — the auto-prompt modal covers the draft flow */}
+            {emailInfo && emailInfo.category === 'BL_COMPARISON' && missingDoc && (
+              <div className="action-card chaser" style={{ padding: '14px 18px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '1.3rem' }}>📎</span>
+                    <div>
+                      <strong style={{ color: '#b3560e' }}>
+                        {missingDoc === 'si' ? 'Shipping Instruction missing'
+                          : missingDoc === 'bl' ? 'Draft BL missing'
+                          : 'No documents attached'}
+                      </strong>
+                      <span style={{ fontSize: '0.85rem', color: '#555', marginLeft: '8px' }}>
+                        {missingDoc === 'si'
+                          ? 'the sender forgot to attach it'
+                          : `the ${detectCarrier(emailInfo)} desk hasn't issued it yet`}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => openDraftEmail(selectedEmail, null, null, missingDoc)}
+                      style={{ background: '#e07a5f', padding: '8px 16px', fontSize: '0.85rem', fontWeight: 600 }}
+                    >
+                      ✉️ Draft {missingDoc === 'si' ? 'Request' : 'Chaser'} Email
+                    </button>
+                    {missingDoc !== 'si' && (
+                      <button
+                        onClick={() => handleChase(selectedEmail)}
+                        style={{ background: 'transparent', border: '1px solid #e07a5f', color: '#e07a5f', boxShadow: 'none', padding: '8px 16px', fontSize: '0.85rem', fontWeight: 600 }}
+                      >
+                        ⚡ Quick Send
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -3127,11 +4272,6 @@ function App() {
                     >
                       {emailInfo.display_tag || `Category: ${emailInfo.category || 'CLASSIFYING'}`}
                     </span>
-                    {emailInfo.category_description && (
-                      <span style={{ fontSize: '0.74rem', color: '#666', maxWidth: '320px', textAlign: 'right', fontStyle: 'italic' }}>
-                        {emailInfo.category_description}
-                      </span>
-                    )}
                   </div>
                 </div>
 
@@ -3174,16 +4314,23 @@ function App() {
               </div>
             )}
 
-            {/* EMAIL CONVERSATION THREAD — outbound dispatches + inbound carrier replies */}
+            {/* EMAIL CONVERSATION THREAD — collapsible, auto-opens when messages exist */}
             {emailInfo && (
               <div className="glass-panel thread-panel">
                 <div className="thread-header">
-                  <div>
-                    <span className="thread-eyebrow">
-                      AUTOMATED INBOUND THREAD TRACKING &bull; {selectedEmail}
-                    </span>
-                    <h3 style={{ margin: '4px 0 0', color: 'var(--primary-color)' }}>
-                      📨 Carrier Correspondence ({emailThreads.length} message{emailThreads.length === 1 ? '' : 's'})
+                  <div
+                    onClick={() => setThreadOpen(o => !o)}
+                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                    title={threadOpen ? 'Collapse thread' : 'Expand thread'}
+                  >
+                    <h3 style={{ margin: 0, color: 'var(--primary-color)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '0.8rem' }}>{threadOpen ? '▾' : '▸'}</span>
+                      📨 Correspondence
+                      {emailThreads.length > 0 && (
+                        <span style={{ fontSize: '0.78rem', fontWeight: 700, background: '#f0f4e8', color: 'var(--primary-color)', borderRadius: '10px', padding: '1px 9px' }}>
+                          {emailThreads.length}
+                        </span>
+                      )}
                     </h3>
                   </div>
                   <div className="thread-actions">
@@ -3205,14 +4352,15 @@ function App() {
                   </div>
                 </div>
 
-                {replyNotice && (
+                {threadOpen && replyNotice && (
                   <div className="thread-notice">{replyNotice}</div>
                 )}
 
+                {threadOpen && (
                 <div className="thread-list">
                   {emailThreads.length === 0 && (
                     <p className="thread-empty">
-                      No correspondence yet. Dispatch an email via <strong>✉️ Auto-Draft Email</strong> (or a carrier chaser) and replies will be captured here automatically — matched by Message-ID / [REF] tag.
+                      No correspondence yet — outbound emails and auto-captured carrier replies appear here.
                     </p>
                   )}
                   {emailThreads.map(m => {
@@ -3245,6 +4393,7 @@ function App() {
                     )
                   })}
                 </div>
+                )}
               </div>
             )}
 
@@ -3481,35 +4630,39 @@ function App() {
           const groups = [
             {
               key: 'mismatch',
-              title: '🔴 Mismatches Awaiting Resolution',
+              title: 'Mismatches',
+              tagVariant: 'danger',
               desc: 'Genuine SI vs BL value conflicts — pick the correct value or enter a manual override in Verify Documents.',
               items: pendingMismatch,
               adjacentFilter: 'mismatch',
-              actionLabel: 'Resolve Discrepancy →',
+              actionLabel: 'Resolve discrepancy',
             },
             {
               key: 'needs_review',
-              title: '🟡 Escalated by the Engine',
+              title: 'Escalated',
+              tagVariant: 'warn',
               desc: 'The engine refused to auto-clear these — missing field values, missing attachments, unreadable or wrong documents.',
               items: needsReview,
               adjacentFilter: 'needs_review',
-              actionLabel: 'Open & Verify →',
+              actionLabel: 'Open & verify',
             },
             {
               key: 'corrupted',
-              title: '🟣 Corrupted / Unreadable Files',
+              title: 'Corrupted files',
+              tagVariant: 'danger',
               desc: 'Attachments that failed integrity checks before a verdict could be produced.',
               items: corruptedOnly,
               adjacentFilter: 'corrupted',
-              actionLabel: 'Inspect →',
+              actionLabel: 'Inspect',
             },
             {
               key: 'reply',
-              title: '📨 Carrier Replies Awaiting Triage',
+              title: 'Carrier replies',
+              tagVariant: 'info',
               desc: 'Inbound replies auto-captured from carriers — confirm whether the revised draft BL clears the issue.',
               items: replies,
               adjacentFilter: 'reply_received',
-              actionLabel: 'Open Thread →',
+              actionLabel: 'Open thread',
             },
           ]
           const groupCounts = Object.fromEntries(groups.map(g => [g.key, g.items.length]))
@@ -3525,7 +4678,6 @@ function App() {
               <div
                 key={`${group.key}-${item.email_id}`}
                 className={`item-card ${qs === 'corrupted' ? 'danger' : ''}`}
-                style={{ padding: '16px 20px' }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div style={{ flex: 1, marginRight: '16px' }}>
@@ -3549,14 +4701,12 @@ function App() {
                           {item.display_tag || item.category}
                         </span>
                       )}
-                      <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '10px', background: '#f0f4e8', color: 'var(--primary-color)', fontWeight: 'bold' }}>
-                        📎 {item.attachments_count} doc(s)
-                      </span>
+                      <span className="tag">{item.attachments_count} docs</span>
                     </div>
                     <p style={{ fontSize: '0.9rem', marginTop: '4px', color: 'var(--text-color)' }}>
                       {item.subject}
                     </p>
-                    <p style={{ fontSize: '0.8rem', color: '#666' }}>From: {item.from}</p>
+                    <p className="meta">From: {item.from}</p>
 
                     {item.defect_fields?.length > 0 && (
                       <div className="diff-chips" style={{ marginTop: '6px' }}>
@@ -3566,33 +4716,33 @@ function App() {
                       </div>
                     )}
                     {item.missing_fields?.length > 0 && (
-                      <p style={{ fontSize: '0.78rem', color: '#b3560e', marginTop: '4px' }}>
-                        🟠 Missing fields: {item.missing_fields.map(f => f.replace(/_/g, ' ')).join(', ')}
+                      <p className="meta warn" style={{ marginTop: '4px' }}>
+                        Missing fields: {item.missing_fields.map(f => f.replace(/_/g, ' ')).join(', ')}
                       </p>
                     )}
                     {item.summary_reason && item.verdict_status === 'NEEDS_REVIEW' && (
-                      <p style={{ fontSize: '0.8rem', color: '#856404', fontStyle: 'italic', marginTop: '4px' }}>
+                      <p className="meta warn" style={{ marginTop: '4px' }}>
                         {item.summary_reason}
                       </p>
                     )}
                     {item.corrupt_issue && (
-                      <p style={{ fontSize: '0.8rem', color: '#c62828', marginTop: '4px' }}>
-                        ⚠️ {item.corrupt_issue}
+                      <p className="meta danger" style={{ marginTop: '4px' }}>
+                        {item.corrupt_issue}
                       </p>
                     )}
                     {item.corrupt_action && (
-                      <p style={{ fontSize: '0.78rem', color: '#555', fontStyle: 'italic', marginTop: '2px' }}>
-                        ✓ Corruption action logged: {item.corrupt_action}
+                      <p className="meta" style={{ marginTop: '2px' }}>
+                        Corruption action logged: {item.corrupt_action}
                       </p>
                     )}
                     {item.chaser_status && (
-                      <p style={{ fontSize: '0.78rem', color: '#155724', fontStyle: 'italic', marginTop: '4px' }}>
-                        📧 Chaser: {item.chaser_status}
+                      <p className="meta ok" style={{ marginTop: '4px' }}>
+                        Chaser: {item.chaser_status}
                       </p>
                     )}
                     {item.has_reply && item.latest_reply && (
-                      <p style={{ fontSize: '0.78rem', color: '#004085', fontWeight: 600, marginTop: '4px' }}>
-                        📨 Reply from {item.latest_reply.from_addr || 'carrier'}
+                      <p className="meta info" style={{ marginTop: '4px' }}>
+                        Reply from {item.latest_reply.from_addr || 'carrier'}
                         {item.latest_reply.body ? ` — "${item.latest_reply.body.slice(0, 90)}${item.latest_reply.body.length > 90 ? '…' : ''}"` : ''}
                       </p>
                     )}
@@ -3600,43 +4750,43 @@ function App() {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
                     <button
+                      className="btn-sm"
                       onClick={() => openEmail(item.email_id, group.adjacentFilter)}
-                      style={{ padding: '8px 16px', fontSize: '0.82rem' }}
                     >
                       {group.actionLabel}
                     </button>
                     {item.has_bl === false && (
                       <button
+                        className="btn-secondary btn-sm"
                         onClick={() => handleChase(item.email_id)}
-                        style={{ padding: '8px 16px', fontSize: '0.82rem', background: '#e07a5f' }}
                       >
-                        📧 Send Chaser
+                        Send chaser
                       </button>
                     )}
                   </div>
                 </div>
 
                 {(item.corrupted || item.review_reason === 'unreadable') && !item.corrupt_action && (
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '12px', borderTop: '1px solid #f0e9df', paddingTop: '12px' }}>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '12px', borderTop: '1px solid var(--line)', paddingTop: '12px' }}>
                     <input
                       type="text"
-                      placeholder="Add operator remediation notes..."
+                      className="search-input"
+                      placeholder="Add a note"
                       value={focusedCorruptRow === item.email_id ? corruptActionNotes : ''}
                       onFocus={() => setFocusedCorruptRow(item.email_id)}
                       onChange={(e) => setCorruptActionNotes(e.target.value)}
-                      style={{ flex: 1, padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
                     />
                     <button
+                      className="btn-secondary btn-sm"
                       onClick={() => handleCorruptAction(item.email_id, 'CARRIER_RE_REQUESTED')}
-                      style={{ padding: '8px 16px', fontSize: '0.82rem', background: '#6c757d' }}
                     >
-                      Request New Copy
+                      Request new copy
                     </button>
                     <button
+                      className="btn-sm"
                       onClick={() => handleCorruptAction(item.email_id, 'MANUAL_OVERRIDE')}
-                      style={{ padding: '8px 16px', fontSize: '0.82rem' }}
                     >
-                      Mark Handled
+                      Mark handled
                     </button>
                   </div>
                 )}
@@ -3647,8 +4797,8 @@ function App() {
           return (
             <div style={{ maxWidth: '1100px' }}>
               <div className="page-header">
-                <h1>Human-in-the-Loop Review</h1>
-                <p>Everything the engine refused to auto-clear — SI/BL mismatches awaiting resolution, escalated reviews, corrupted files, and carrier replies to triage.</p>
+                <h1>Human Review</h1>
+                <p>Items the engine did not auto-clear: SI/BL mismatches, escalations, corrupted files, and carrier replies.</p>
               </div>
 
               <div className="action-bar" style={{ flexWrap: 'wrap', gap: '10px' }}>
@@ -3663,35 +4813,34 @@ function App() {
                   </button>
                 ))}
                 <button
+                  className="btn-secondary btn-sm"
                   onClick={fetchReviewQueue}
-                  style={{ marginLeft: 'auto', padding: '8px 18px', fontSize: '0.85rem', background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-color)', boxShadow: 'none' }}
+                  style={{ marginLeft: 'auto' }}
                 >
-                  ↻ Refresh
+                  Refresh
                 </button>
               </div>
 
               {reviewMsg && (
-                <div style={{ background: '#d4edda', color: '#155724', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px' }}>
-                  ✅ {reviewMsg}
-                </div>
+                <div className="notice ok">{reviewMsg}</div>
               )}
 
               {reviewLoading ? (
-                <div style={{ textAlign: 'center', padding: '60px' }}>Loading review queue...</div>
+                <div className="empty-state">Loading…</div>
               ) : totalPending === 0 ? (
-                <div className="item-card" style={{ textAlign: 'center', padding: '50px' }}>
-                  <div style={{ fontSize: '2rem' }}>🎉</div>
-                  <p style={{ marginTop: '8px' }}>All clear — nothing is waiting on a human decision.</p>
-                </div>
+                <div className="empty-state">All clear — nothing is waiting on a human decision.</div>
               ) : (
                 visibleGroups.map(g => (
                   g.items.length > 0 && (
                     <div key={g.key} style={{ marginBottom: '26px' }}>
-                      <div style={{ marginBottom: '10px' }}>
-                        <h3 style={{ margin: 0, color: 'var(--primary-color)', fontSize: '1rem' }}>
-                          {g.title} <span style={{ color: '#999', fontWeight: 400 }}>({g.items.length})</span>
-                        </h3>
-                        <p style={{ margin: '2px 0 0', fontSize: '0.82rem', color: '#777' }}>{g.desc}</p>
+                      <div className="section-head">
+                        <div>
+                          <h3>
+                            {g.title}{' '}
+                            <span className={`tag ${g.tagVariant}`}>{g.items.length}</span>
+                          </h3>
+                          <p className="section-sub">{g.desc}</p>
+                        </div>
                       </div>
                       {g.items.map(item => renderCard(item, g))}
                     </div>
@@ -5087,6 +6236,67 @@ function App() {
         showSmtp={showSmtpSettings}
         onToggleSmtp={() => setShowSmtpSettings(s => !s)}
       />
+
+      {/* Auto-prompt: a required attachment is missing — offer to draft the chaser */}
+      {missingPrompt && (
+        <div
+          className="modal-overlay"
+          onClick={() => {
+            missingPromptDismissed.current.add(missingPrompt.emailId)
+            setMissingPrompt(null)
+          }}
+        >
+          <div
+            className="modal-container"
+            style={{ maxWidth: '460px' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3>
+                📎 {missingPrompt.doc === 'si' ? 'Shipping Instruction missing'
+                  : missingPrompt.doc === 'bl' ? 'Draft BL missing'
+                  : 'No documents attached'}
+              </h3>
+              <button
+                className="modal-close-btn"
+                onClick={() => {
+                  missingPromptDismissed.current.add(missingPrompt.emailId)
+                  setMissingPrompt(null)
+                }}
+              >&times;</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: '0.92rem', color: '#444' }}>
+                {missingPrompt.doc === 'si'
+                  ? `The sender asked for a BL comparison but forgot to attach the Shipping Instruction — draft a request to them?`
+                  : `The carrier hasn't issued the draft Bill of Lading for this shipment — draft a chaser email?`}
+              </p>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '18px' }}>
+                <button
+                  onClick={() => {
+                    missingPromptDismissed.current.add(missingPrompt.emailId)
+                    setMissingPrompt(null)
+                  }}
+                  style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-color)', boxShadow: 'none', padding: '8px 16px', fontSize: '0.88rem' }}
+                >
+                  Not now
+                </button>
+                <button
+                  onClick={() => {
+                    const { emailId, doc } = missingPrompt
+                    missingPromptDismissed.current.add(emailId)
+                    setMissingPrompt(null)
+                    openDraftEmail(emailId, null, null, doc)
+                  }}
+                  style={{ background: '#e07a5f', padding: '8px 18px', fontSize: '0.88rem', fontWeight: 600 }}
+                >
+                  ✉️ Draft Email
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
