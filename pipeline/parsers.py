@@ -206,3 +206,19 @@ def extract_shipping_fields_fast(text):
             res['notify_party'] = res['consignee']
 
     return res
+
+
+def extract_inline_si_fields(body):
+    """
+    Detect a Shipping Instruction written directly into an email body
+    (no attachment). Returns the regex-extracted fields dict when the body
+    carries a real SI — >=3 populated core fields including shipper or
+    consignee — otherwise None.
+    """
+    if not body:
+        return None
+    fields = extract_shipping_fields_fast(body)
+    populated = sum(1 for v in fields.values() if str(v).strip())
+    if populated >= 3 and (fields.get('shipper') or fields.get('consignee')):
+        return fields
+    return None

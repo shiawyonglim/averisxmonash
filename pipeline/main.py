@@ -3,7 +3,7 @@ import json
 import time
 from tqdm import tqdm
 
-from pipeline.parsers import extract_text, is_image_file, extract_shipping_fields_fast
+from pipeline.parsers import extract_text, is_image_file, extract_shipping_fields_fast, extract_inline_si_fields
 from pipeline.edge_cases import check_attachments, check_unreadable, check_wrong_doc_type, is_si_attachment
 from pipeline.ai_engine import (
     classify_email_with_provenance,
@@ -87,6 +87,13 @@ def process_email(email_data, bundle_dir=BUNDLE_DIR):
     # 2. Fewer than 2 attachments: decide by sender intent whether a
     #    comparison was actually requested (nothing to compare otherwise).
     if len(atts) < 2:
+        # An SI written into the email body is still real SI content —
+        # record it in the audit trail even though no comparison can run.
+        inline_si = extract_inline_si_fields(body)
+        if inline_si:
+            details["si_fields"] = inline_si
+            details["si_provenance"] = {k: "email_body" for k in CORE_FIELDS}
+            details["si_source"] = "email_body"
         intent, intent_prov = comparison_intent(subj, body)
         details["intent"] = intent
         details["intent_provenance"] = intent_prov
