@@ -214,7 +214,7 @@ def _laya_classify_intent(subject, body, sender=""):
                         _LAYA_INTENT_CRITERIA, sender)
 
 
-def _rules_category_detailed(subject, body, has_attachments):
+def _rules_category_detailed(subject, body, has_attachments, n_attachments=None):
     """
     Deterministic rule-based classification returning:
     (base_category, subcategory_code, display_tag, description)
@@ -222,6 +222,7 @@ def _rules_category_detailed(subject, body, has_attachments):
     s = (subject or "").upper()
     b = (body or "").upper()
     text = s + " " + b
+    si_markers = ["REQUEST SI", "SI NEEDED", "CUST SI", "SI - "]
 
     # 1. SPAM check
     spam_tokens = [
@@ -274,8 +275,14 @@ def _rules_category_detailed(subject, body, has_attachments):
             "Unsolicited bulk email communication"
         )
 
-    # 2. Emails with attachments -> BL_COMPARISON
-    if has_attachments:
+    # 2. Emails with attachments -> BL_COMPARISON. Exception: an SI written
+    #    inline in the body with a single attachment is an SI submission —
+    #    the lone file is the carrier's draft-BL reply, not an SI+BL pair.
+    inline_si_submission = False
+    if has_attachments and n_attachments == 1 and any(k in s for k in si_markers):
+        from pipeline.parsers import extract_inline_si_fields
+        inline_si_submission = bool(extract_inline_si_fields(body))
+    if has_attachments and not inline_si_submission:
         if "AMEND" in s:
             return (
                 "BL_COMPARISON",
@@ -375,7 +382,6 @@ def _rules_category_detailed(subject, body, has_attachments):
         )
 
     # 5. SI_REQUEST patterns
-    si_markers = ["REQUEST SI", "SI NEEDED", "CUST SI", "SI - "]
     is_si = any(k in s for k in si_markers) or (
         bool(re.search(r'\bSI\b', s)) and not any(k in s for k in ["BL", "DRAFT", "DOCS", "AFEMY", "AFPTME", "AFRT", "AIE"])
     )
@@ -428,16 +434,16 @@ def _rules_category_detailed(subject, body, has_attachments):
         "General maritime operational communication"
     )
 
-def _rules_category(subject, body, has_attachments):
-    cat, _, _, _ = _rules_category_detailed(subject, body, has_attachments)
+def _rules_category(subject, body, has_attachments, n_attachments=None):
+    cat, _, _, _ = _rules_category_detailed(subject, body, has_attachments, n_attachments)
     return cat
 
-def classify_email_detailed(subject, body, has_attachments):
+def classify_email_detailed(subject, body, has_attachments, n_attachments=None):
     """
     Returns full dictionary with:
     category, subcategory, display_tag, description
     """
-    cat, subcat, display_tag, desc = _rules_category_detailed(subject, body, has_attachments)
+    cat, subcat, display_tag, desc = _rules_category_detailed(subject, body, has_attachments, n_attachments)
     return {
         "category": cat,
         "subcategory": subcat,
@@ -445,12 +451,12 @@ def classify_email_detailed(subject, body, has_attachments):
         "description": desc
     }
 
-def quick_classify(subject, body, has_attachments):
+def quick_classify(subject, body, has_attachments, n_attachments=None):
     """
     Fast rule-only classification (NO AI fallback). Returns 'GENERAL' when
     no deterministic rule matches. Used by queue/stats endpoints.
     """
-    return _rules_category(subject, body, has_attachments) or "GENERAL"
+    return _rules_category(subject, body, has_attachments, n_attachments) or "GENERAL"
 
 VALID_CATEGORIES = ("BL_COMPARISON", "SI_REQUEST", "INVOICE_QUERY", "GENERAL", "SPAM")
 
@@ -496,7 +502,7 @@ Output only the category name."""
                 best_cat, best_pos = cat, pos
     return best_cat or reasoning.strip()
 
-def classify_email_with_provenance(subject, body, has_attachments, sender=""):
+def classify_email_with_provenance(subject, body, has_attachments, sender="", n_attachments=None):
     """
     Returns (category, provenance) where provenance is
     'laya' | 'rule' | 'model' | 'fallback'.
@@ -512,7 +518,7 @@ def classify_email_with_provenance(subject, body, has_attachments, sender=""):
     if laya_choice and laya_conf >= LAYA_MIN_CONFIDENCE:
         return laya_choice, "laya"
 
-    cat, subcat, _, _ = _rules_category_detailed(subject, body, has_attachments)
+    cat, subcat, _, _ = _rules_category_detailed(subject, body, has_attachments, n_attachments)
     if subcat != "GENERAL_UNMATCHED":
         return cat, "rule"
 
@@ -538,12 +544,12 @@ def classify_email_with_provenance(subject, body, has_attachments, sender=""):
         return laya_choice, "laya"
     return "GENERAL", "fallback"
 
-def classify_email(subject, body, has_attachments):
+def classify_email(subject, body, has_attachments, n_attachments=None):
     """
     Categories: BL_COMPARISON, SI_REQUEST, INVOICE_QUERY, GENERAL, SPAM
     Deterministic rules first, then AI fallback for unclear cases.
     """
-    cat, _ = classify_email_with_provenance(subject, body, has_attachments)
+    cat, _ = classify_email_with_provenance(subject, body, has_attachments, n_attachments=n_attachments)
     return cat
 
 def extract_shipping_fields(text):
@@ -880,6 +886,153 @@ def diagnose_mismatch(email_data, defect_fields, field_comparisons,
         "verdict": laya_choice or "UNCLEAR",
         "explanation": (_LAYA_MISMATCH_CRITERIA.get(laya_choice)
                        or "Could not determine the cause of the mismatch automatically."),
+        "suggested_action": "Route to a human reviewer.",
+        "confidence": round(laya_conf, 3) if laya_conf else None,
+        "provenance": "fallback",
+    }
+
+
+# ── Review adjudication: Laya triage, then Muse with full context ──
+_LAYA_REVIEW_CRITERIA = {
+    "GENUINE_ISSUE": "the escalation is real — a document is genuinely missing, corrupt, unreadable, or the wrong type, and a human must intervene",
+    "RESOLVED_BY_THREAD": "the flagged issue is already resolved by the correspondence — a reply supplies the missing document, an amendment, or an explanation",
+    "EXTRACTION_ARTIFACT": "the escalation is an automated-parsing artifact — the documents look valid but the extractor could not read them",
+    "UNCLEAR": "cannot determine from the available information whether the flagged issue is genuine",
+}
+
+def _laya_diagnose_review(email_data, review_reason, si_fields, bl_fields):
+    """
+    One Laya choice question over a NEEDS_REVIEW escalation. Returns
+    (choice, confidence) or (None, 0.0) when the neural tier is
+    unavailable, errors, or answers outside the criteria space.
+    """
+    agent = get_laya_agent()
+    if agent is None:
+        return None, 0.0
+    state = {
+        "subject": email_data.get("subject", ""),
+        "body": (email_data.get("body") or "")[:1500],
+        "from": email_data.get("from", ""),
+        "review_reason": review_reason,
+        "si_fields": si_fields,
+        "bl_fields": bl_fields,
+    }
+    try:
+        res = agent.system_one(state, {
+            "review": {
+                "type": "choice",
+                "instructions": "An automated audit could not complete verification and escalated this email for human review. What most likely explains the escalation?",
+                "criteria": _LAYA_REVIEW_CRITERIA,
+            }
+        })
+        ans = (res.get("answers") or {}).get("review") or {}
+        choice = str(ans.get("choice") or "").strip().upper()
+        conf = float(ans.get("confidence") or 0.0)
+        if choice in _LAYA_REVIEW_CRITERIA:
+            return choice, conf
+        return None, conf
+    except Exception as e:
+        print(f"[LAYA] review diagnosis error: {e}", flush=True)
+        return None, 0.0
+
+def _llm_diagnose_review(context, review_reason):
+    prompt = f"""You are a senior shipping-documentation auditor at a freight forwarder.
+
+An automated check escalated this email for human review with reason "{review_reason}". You are given the ENTIRE case file: the current email, any attached document text, the extracted fields, and every earlier email and document in this correspondence.
+
+Read everything before answering — earlier messages may contain the missing document, an amendment, or an explanation that accounts for the escalation.
+
+CASE FILE:
+{context}
+
+Task: figure out what could be the issue behind the escalation.
+- Is it a genuine problem a human must fix (a truly missing, corrupt or wrong document)?
+- Is it already resolved by the correspondence (a reply supplied the document or an amendment)?
+- Or is it an extraction/parsing artifact — the documents are valid but the pipeline could not read them?
+
+Output strictly as JSON:
+{{
+  "assessment": "one of: genuine_issue | resolved_by_thread | extraction_artifact | unclear",
+  "explanation": "2-4 sentences naming the specific evidence (which email or document supports your reading)",
+  "suggested_action": "one concrete next step for the ops team"
+}}"""
+    client = get_nvidia_client()
+    res = _chat_with_retry(
+        client,
+        model=MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        # Reasoning models burn most of the budget on chain-of-thought —
+        # the JSON answer only appears at the very end, so keep headroom.
+        max_tokens=6000,
+        temperature=0.0
+    )
+    msg = res.choices[0].message
+    content = ((msg.content or "") or (getattr(msg, "reasoning_content", "") or "")).strip()
+    if content.startswith("```json"):
+        content = content[7:]
+    if content.startswith("```"):
+        content = content[3:]
+    if content.endswith("```"):
+        content = content[:-3]
+    start, end = content.find("{"), content.rfind("}")
+    if start != -1 and end > start:
+        content = content[start:end + 1]
+    try:
+        return json.loads(content.strip(), strict=False)
+    except Exception:
+        pass
+    out = {}
+    for key in ("assessment", "explanation", "suggested_action"):
+        m = re.search(rf'"{key}"\s*:\s*"((?:[^"\\]|\\.)*)', content)
+        if m:
+            out[key] = m.group(1).rstrip('",} \n')
+    if out.get("explanation"):
+        return out
+    cleaned = re.sub(r'\\(?![/"\\bfnrtu])', r'\\\\', content.strip())
+    return json.loads(cleaned, strict=False)
+
+def adjudicate_review(email_data, review_reason, si_fields, bl_fields, context):
+    """
+    Adjudicate a NEEDS_REVIEW escalation. Returns a dict
+    {verdict, explanation, suggested_action, confidence, provenance}
+    where provenance is 'laya' | 'model' | 'fallback'.
+
+    Tier 1 — Laya triages the escalation; a confident non-UNCLEAR answer
+    owns the diagnosis outright.
+    Tier 2 — the LLM reviews the whole correspondence to explain what
+    could be the issue. A sub-threshold Laya answer still beats the
+    blind fallback.
+    """
+    laya_choice, laya_conf = _laya_diagnose_review(
+        email_data, review_reason, si_fields, bl_fields)
+    if laya_choice and laya_choice != "UNCLEAR" and laya_conf >= LAYA_MIN_CONFIDENCE:
+        return {
+            "verdict": laya_choice,
+            "explanation": _LAYA_REVIEW_CRITERIA[laya_choice],
+            "suggested_action": None,
+            "confidence": round(laya_conf, 3),
+            "provenance": "laya",
+        }
+
+    if AI_FALLBACK_ENABLED:
+        try:
+            reply = _cached_llm("review", context,
+                                lambda: _llm_diagnose_review(context, review_reason))
+            if isinstance(reply, dict) and reply.get("explanation"):
+                return {
+                    "verdict": str(reply.get("assessment") or "unclear").upper(),
+                    "explanation": reply["explanation"],
+                    "suggested_action": reply.get("suggested_action"),
+                    "confidence": round(laya_conf, 3) if laya_conf else None,
+                    "provenance": "model",
+                }
+        except Exception as e:
+            print(f"Review diagnosis error: {e}")
+
+    return {
+        "verdict": laya_choice or "UNCLEAR",
+        "explanation": (_LAYA_REVIEW_CRITERIA.get(laya_choice)
+                       or "Could not determine the cause of the escalation automatically."),
         "suggested_action": "Route to a human reviewer.",
         "confidence": round(laya_conf, 3) if laya_conf else None,
         "provenance": "fallback",

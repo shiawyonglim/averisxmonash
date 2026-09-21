@@ -91,6 +91,20 @@ const AUDIT_DOT_COLORS = {
   DOCUMENT_RESTORED: '#6f42c1',
 }
 
+// Engine provenance for the audit trail — which tier produced each decision:
+// Regex = deterministic rules, Laya = neural triage, Muse = the LLM.
+const ENGINE_META = {
+  rule:       { label: 'Regex',    bg: '#e8f5e9', color: '#2e7d32' },
+  regex:      { label: 'Regex',    bg: '#e8f5e9', color: '#2e7d32' },
+  laya:       { label: 'Laya',     bg: '#e8f0fe', color: '#1a73e8' },
+  model:      { label: 'Muse',     bg: '#f3e5f5', color: '#8e24aa' },
+  vision:     { label: 'Vision',   bg: '#fff3e0', color: '#e65100' },
+  email_body: { label: 'Email body', bg: '#f1f1f1', color: '#555555' },
+  fallback:   { label: 'Fallback', bg: '#ffebee', color: '#c62828' },
+  missing:    { label: 'Unextracted', bg: '#f1f1f1', color: '#999999' },
+}
+const engineMeta = e => ENGINE_META[e] || { label: e, bg: '#f1f1f1', color: '#555555' }
+
 // Texts the UI injects when a document can't be shown — never save these back.
 const DOC_PLACEHOLDER_RX = /^\s*\[(MISSING ATTACHMENT|CORRUPTED FILE|NON-COMPARISON|INBOUND CHASER|AWAITING CARRIER|IMAGE DOCUMENT)/i
 
@@ -463,6 +477,30 @@ function VerdictPanel({ result, loading, error, verdictSource, idleHint, loading
               {result.thoughts}
             </div>
           )}
+
+          {/* Adjudication — Laya/Muse explanation for MISMATCH & NEEDS_REVIEW */}
+          {(() => {
+            const diag = result.diagnosis
+              || result.details?.mismatch_diagnosis
+              || result.details?.review_diagnosis
+            if (!diag) return null
+            const via = diag.provenance === 'model' ? `Muse (${diag.model || 'LLM'})`
+              : diag.provenance === 'laya' ? 'Laya'
+              : 'Fallback'
+            return (
+              <div className="reasoning-box">
+                <span className="filter-label" style={{ display: 'block', marginBottom: '4px' }}>
+                  Adjudication — {via}
+                  {diag.confidence != null && ` · confidence ${diag.confidence}`}
+                </span>
+                <div><strong>{diag.verdict}</strong></div>
+                {diag.explanation && <p style={{ margin: '6px 0 0' }}>{diag.explanation}</p>}
+                {diag.suggested_action && (
+                  <p style={{ margin: '6px 0 0' }}><em>Suggested: {diag.suggested_action}</em></p>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Summary Verdict */}
           {result.summary_reason && (
@@ -1114,7 +1152,8 @@ function App() {
       // Filter client-side too — an unknown filter falls through to "match
       // all" server-side, so guard here as well.
       setVerifiedItems((data.emails || []).filter(i =>
-        i.category === 'BL_COMPARISON' && (i.verdict_status === 'OK' || i.resolved)))
+        i.category === 'BL_COMPARISON' && i.attachments_count === 2
+        && (i.verdict_status === 'OK' || i.resolved)))
     } catch (err) {
       console.error('Failed to fetch verified emails:', err)
       setVerifiedItems([])
@@ -2220,13 +2259,7 @@ function App() {
       if (data.verdict) {
         setResult(data.verdict)
         setVerdictSource('stored')
-        if (data.verdict.status === 'MISMATCH' && data.verdict.defect_fields) {
-          const initialRes = {}
-          data.verdict.defect_fields.forEach(f => {
-            initialRes[f] = { type: 'SI', value: data.verdict.si_fields?.[f] || '' }
-          })
-          setResolutions(initialRes)
-        }
+        initResolutions(data.verdict)
       }
       // Stored resolution record (email already resolved by an operator)
       if (data.resolution) {
@@ -2462,13 +2495,7 @@ function App() {
       setResult(data)
       setVerdictSource('fresh')
 
-      if (data.status === 'MISMATCH' && data.defect_fields) {
-        const initialRes = {}
-        data.defect_fields.forEach(f => {
-          initialRes[f] = { type: 'SI', value: data.si_fields?.[f] || '' }
-        })
-        setResolutions(initialRes)
-      }
+      initResolutions(data)
 
       refreshQueue() // verdict may change queue counts
       refreshEmailStatuses() // keep picker status dots in sync
@@ -2585,6 +2612,36 @@ function App() {
       ...prev,
       [field]: { type, value },
     }))
+  }
+
+  // Fields an operator can resolve: defect fields for MISMATCH, plus
+  // missing/blank fields for NEEDS_REVIEW (defaulting to whichever side
+  // actually has a value).
+  const resolvableFields = (r) => {
+    if (!r) return []
+    if (r.status === 'MISMATCH') return r.defect_fields || []
+    if (r.status === 'NEEDS_REVIEW') {
+      const flagged = Object.entries(r.field_comparisons || {})
+        .filter(([, c]) => c?.blank || c?.match === false)
+        .map(([f]) => f)
+      return flagged.length ? flagged : (r.si_fields && Object.keys(r.si_fields).length ? FIELDS : [])
+    }
+    return []
+  }
+
+  const defaultResolutionChoice = (r, f) => {
+    const blank = r?.field_comparisons?.[f]?.blank
+    if (blank === 'si_only') return { type: 'BL', value: r?.bl_fields?.[f] || '' }
+    if (blank === 'both') return { type: 'CUSTOM', value: '' }
+    return { type: 'SI', value: r?.si_fields?.[f] || '' }
+  }
+
+  const initResolutions = (data) => {
+    const init = {}
+    resolvableFields(data).forEach(f => {
+      init[f] = defaultResolutionChoice(data, f)
+    })
+    if (Object.keys(init).length) setResolutions(init)
   }
 
   const handleSubmitResolution = async (andNext = false) => {
@@ -5102,7 +5159,11 @@ function App() {
             )}
 
             {/* INLINE RESOLUTION PANEL (hidden when already resolved) */}
-            {result?.status === 'MISMATCH' && result.defect_fields?.length > 0 && !resolutionRecord && (
+            {(() => {
+              const fieldsToResolve = resolvableFields(result)
+              if (!result || !fieldsToResolve.length || resolutionRecord
+                  || (result.status !== 'MISMATCH' && result.status !== 'NEEDS_REVIEW')) return null
+              return (
               <div className="item-card" style={{ marginTop: '22px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px' }}>
                   <div>
@@ -5115,12 +5176,18 @@ function App() {
                 </div>
 
                 <p style={{ marginBottom: '20px', fontSize: '0.95rem' }}>
-                  The AI verified this document and identified{' '}
-                  <strong>{result.defect_fields.length} discrepancy/discrepancies</strong> requiring operator resolution:
+                  {result.status === 'MISMATCH' ? (
+                    <>The AI verified this document and identified{' '}
+                    <strong>{fieldsToResolve.length} discrepancy/discrepancies</strong> requiring operator resolution:</>
+                  ) : (
+                    <>The AI escalated this document for review
+                    {result.review_reason && <> (<strong>{result.review_reason.replace(/_/g, ' ')}</strong>)</>}
+                    {' '}— resolve the flagged fields below:</>
+                  )}
                 </p>
 
-                {result.defect_fields.map(f => {
-                  const currentChoice = resolutions[f] || { type: 'SI', value: result.si_fields?.[f] }
+                {fieldsToResolve.map(f => {
+                  const currentChoice = resolutions[f] || defaultResolutionChoice(result, f)
                   return (
                     <div key={f} style={{ border: '1px solid #e0d8cf', borderRadius: '8px', padding: '16px', marginBottom: '18px', background: '#fff' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -5224,7 +5291,8 @@ function App() {
                   </button>
                 </div>
               </div>
-            )}
+              )
+            })()}
             </>)}
 
             {/* Paper scan / upload mode — merged Paper Scan page */}
@@ -6111,12 +6179,40 @@ function App() {
           )
         })()}
 
-        {view === 'audit' && (
+        {view === 'audit' && (() => {
+          // How many verdicts each engine touched — quick scoreboard for
+          // tracking which tier (Regex / Laya / Muse) is doing the work.
+          const engineCounts = {}
+          auditEvents.forEach(ev => {
+            (ev.details?.engine_trail || []).forEach(t => {
+              (t.engines || [t.engine]).filter(Boolean).forEach(eng => {
+                engineCounts[eng] = (engineCounts[eng] || 0) + 1
+              })
+            })
+          })
+          return (
           <div className="card-container">
             <div className="page-header">
               <h1>Audit Log</h1>
               <p>Every verdict, chaser, and override — persisted to .cache/audit_state.json and Supabase.</p>
             </div>
+
+            {Object.keys(engineCounts).length > 0 && (
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                {Object.entries(engineCounts).map(([eng, n]) => {
+                  const meta = engineMeta(eng)
+                  return (
+                    <span
+                      key={eng}
+                      className="tag"
+                      style={{ background: meta.bg, color: meta.color }}
+                    >
+                      {meta.label} ×{n}
+                    </span>
+                  )
+                })}
+              </div>
+            )}
 
             <div className="item-card">
               {auditEvents.length === 0 ? (
@@ -6155,13 +6251,35 @@ function App() {
                       {ev.notes && (
                         <p className="meta" style={{ marginTop: '4px' }}>{ev.notes}</p>
                       )}
+                      {Array.isArray(ev.details?.engine_trail) && ev.details.engine_trail.length > 0 && (
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+                          {ev.details.engine_trail.flatMap((t, ti) =>
+                            (t.engines || [t.engine]).filter(Boolean).map((eng, ei) => {
+                              const meta = engineMeta(eng)
+                              const stage = String(t.stage || '').replace(/_/g, ' ')
+                              return (
+                                <span
+                                  key={`${ti}-${ei}`}
+                                  className="tag"
+                                  title={eng === 'model' && t.model ? `${stage} — ${t.model}` : stage}
+                                  style={{ background: meta.bg, color: meta.color }}
+                                >
+                                  {meta.label}
+                                  {stage && <span style={{ opacity: 0.6 }}> · {stage}</span>}
+                                </span>
+                              )
+                            })
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))
               )}
             </div>
           </div>
-        )}
+          )
+        })()}
 
         {/* ========================================================== */}
         {/* VIEW: SUBMISSION                                           */}

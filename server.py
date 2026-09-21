@@ -34,11 +34,11 @@ except ImportError:
     Client = None
 
 # Import our pipeline functions
-from pipeline.ai_engine import extract_shipping_fields, extract_fields_tiered, reason_and_verify_with_ai, classify_email, quick_classify, classify_email_detailed, analyze_document_image, MODEL, get_laya_agent as _shared_laya_agent
+from pipeline.ai_engine import extract_shipping_fields, extract_fields_tiered, reason_and_verify_with_ai, classify_email, quick_classify, classify_email_detailed, analyze_document_image, diagnose_mismatch, adjudicate_review, MODEL, get_laya_agent as _shared_laya_agent
 from pipeline.comparator import compare_fields
 from pipeline.edge_cases import check_wrong_doc_type, diagnose_attachment, is_si_attachment
 from pipeline.parsers import extract_text, is_image_file, validate_image, IMAGE_EXTENSIONS, extract_shipping_fields_fast, extract_inline_si_fields
-from pipeline.main import process_email, submission_row
+from pipeline.main import process_email, submission_row, _case_context, _engine_trail
 import pipeline.ai_engine as _ai_engine
 from pipeline.knowledge_base import build_documents, compute_stats, answer_question, retrieve, invalidate_cache
 from pipeline.agent import run_agent, resume_agent, SYSTEM_PROMPT as AGENT_SYSTEM_PROMPT
@@ -750,7 +750,7 @@ def get_email_content(email_id: str):
                 "reason": reason
             })
 
-        det = classify_email_detailed(email_data.get("subject", ""), email_data.get("body", ""), len(atts) > 0)
+        det = classify_email_detailed(email_data.get("subject", ""), email_data.get("body", ""), len(atts) > 0, n_attachments=len(atts))
         category = det["category"]
         CLASSIFICATIONS_STORE[email_id] = category
         email_info = {
@@ -1804,7 +1804,7 @@ def simulate_carrier_reply(email_id: str, req: SimulateReplyRequest = None):
     body_text = d.get("body", "")
     atts = d.get("attachments", [])
     has_bl = _has_bl_attachment(atts)
-    det = classify_email_detailed(subj, body_text, len(atts) > 0)
+    det = classify_email_detailed(subj, body_text, len(atts) > 0, n_attachments=len(atts))
     cat = det["category"]
 
     sender = (req.sender if req and req.sender else "Ocean Carrier Documentation Desk <ops@msc-oceanline.com>")
@@ -2178,7 +2178,7 @@ def _build_email_dossier(email_id: str, email_data: dict, run_neural: bool = Fal
     else:
         clean_body, laya_state = body, None
 
-    det = classify_email_detailed(subj, body, has_atts)
+    det = classify_email_detailed(subj, body, has_atts, n_attachments=len(atts))
     entities = _extract_shipping_entities(subj, body, atts)
 
     cat = det.get("category", "GENERAL")
@@ -2980,6 +2980,9 @@ def _store_verdict(email_id, resp):
         "field_comparisons": resp.get("field_comparisons", {}),
         "thoughts": resp.get("thoughts"),
         "summary_reason": resp.get("summary_reason"),
+        "engine_trail": resp.get("engine_trail") or (resp.get("details") or {}).get("engine_trail"),
+        "diagnosis": resp.get("diagnosis"),
+        "details": resp.get("details") or {},
         "verified_at": _utcnow()
     }
     _async_save_to_supabase(email_id, VERDICTS_STORE[email_id])
@@ -3045,6 +3048,7 @@ def verify_documents(req: VerificationRequest):
             "defect_fields": [],
             "field_comparisons": {}
         }
+        _attach_adjudication(req.email_id, resp, reason)
         _store_verdict(req.email_id, resp)
         return resp
 
@@ -3061,6 +3065,8 @@ def verify_documents(req: VerificationRequest):
             "defect_fields": [],
             "field_comparisons": {}
         }
+        _attach_adjudication(req.email_id, resp, wrong_doc_err[1],
+                             si_text=si_text, bl_text=bl_text)
         _store_verdict(req.email_id, resp)
         return resp
 
@@ -3068,14 +3074,64 @@ def verify_documents(req: VerificationRequest):
     si_fields, si_prov = extract_fields_tiered(si_text)
     bl_fields, bl_prov = extract_fields_tiered(bl_text)
 
-    resp = _verdict_response(si_fields, bl_fields)
+    resp = _verdict_response(si_fields, bl_fields, si_prov=si_prov,
+                             bl_prov=bl_prov, email_id=req.email_id,
+                             si_text=si_text, bl_text=bl_text)
     resp["si_provenance"] = si_prov
     resp["bl_provenance"] = bl_prov
     _store_verdict(req.email_id, resp)
     return resp
 
 
-def _verdict_response(si_fields, bl_fields):
+def _load_email_record(email_id):
+    """Load the inbox JSON for context; stub record for manual/scan verifies."""
+    try:
+        with open(os.path.join(INBOX_DIR, f"{email_id}.json"), 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {"email_id": email_id or "manual-verify"}
+
+
+def _attach_adjudication(email_id, resp, review_reason=None, defect_fields=None,
+                         field_comparisons=None, si_fields=None, bl_fields=None,
+                         si_text="", bl_text=""):
+    """
+    Run the same Laya -> LLM adjudication chain the batch pipeline uses and
+    attach {diagnosis, engine_trail} to a verify response. Scored verdict
+    is unchanged — the diagnosis explains the escalation/mismatch.
+    """
+    email_data = _load_email_record(email_id)
+    si_doc = {"path": "<si_text>", "text": si_text} if si_text else None
+    bl_doc = {"path": "<bl_text>", "text": bl_text} if bl_text else None
+    details = {
+        "si_provenance": resp.get("si_provenance") or {},
+        "bl_provenance": resp.get("bl_provenance") or {},
+        "field_comparisons": field_comparisons or {},
+    }
+    if defect_fields:
+        context = _case_context(email_data, si_doc, bl_doc,
+                                si_fields or {}, bl_fields or {},
+                                defect_fields, field_comparisons or {}, BUNDLE_DIR)
+        details["mismatch_diagnosis"] = diagnose_mismatch(
+            email_data, defect_fields, field_comparisons or {},
+            si_fields or {}, bl_fields or {}, context)
+    else:
+        context = _case_context(email_data, si_doc, bl_doc,
+                                si_fields or {}, bl_fields or {},
+                                [], field_comparisons or {}, BUNDLE_DIR,
+                                review_reason=review_reason)
+        details["review_diagnosis"] = adjudicate_review(
+            email_data, review_reason, si_fields or {}, bl_fields or {}, context)
+    details["engine_trail"] = _engine_trail(details)
+    resp["diagnosis"] = (details.get("mismatch_diagnosis")
+                         or details.get("review_diagnosis"))
+    resp["engine_trail"] = details["engine_trail"]
+    resp["details"] = details
+    return resp
+
+
+def _verdict_response(si_fields, bl_fields, si_prov=None, bl_prov=None,
+                      email_id="", si_text="", bl_text=""):
     """
     Shared tail of verification: ERROR guard, 7-field comparison,
     missing-value escalation and AI reasoning. Returns the response dict.
@@ -3084,7 +3140,7 @@ def _verdict_response(si_fields, bl_fields):
     # (two all-ERROR dicts would otherwise compare equal -> false OK)
     extracted = list(si_fields.values()) + list(bl_fields.values())
     if any(str(v).strip().upper() == "ERROR" for v in extracted):
-        return {
+        resp = {
             "status": "NEEDS_REVIEW",
             "review_reason": "unreadable",
             "thoughts": "AI field extraction failed and returned 'ERROR' placeholders. Halting automated comparison to prevent a false match.",
@@ -3094,6 +3150,10 @@ def _verdict_response(si_fields, bl_fields):
             "defect_fields": [],
             "field_comparisons": {}
         }
+        _attach_adjudication(email_id, resp, "unreadable",
+                             si_fields=si_fields, bl_fields=bl_fields,
+                             si_text=si_text, bl_text=bl_text)
+        return resp
 
     # Compare Fields with Smart Normalization
     defect_fields, is_missing_val, field_comparisons = compare_fields(si_fields, bl_fields)
@@ -3115,7 +3175,7 @@ def _verdict_response(si_fields, bl_fields):
         ai_reasoning = reason_and_verify_with_ai(
             si_fields, bl_fields, defect_fields, is_missing_val, field_comparisons
         )
-        return {
+        resp = {
             "status": "MISMATCH",
             "review_reason": None,
             "thoughts": ai_reasoning.get("thoughts", "Carefully analyzed field values across documents."),
@@ -3126,10 +3186,15 @@ def _verdict_response(si_fields, bl_fields):
             "field_comparisons": field_comparisons,
             "evidence": evidence
         }
+        _attach_adjudication(email_id, resp, defect_fields=defect_fields,
+                             field_comparisons=field_comparisons,
+                             si_fields=si_fields, bl_fields=bl_fields,
+                             si_text=si_text, bl_text=bl_text)
+        return resp
 
     # Missing values (blank on exactly one side) escalate deterministically
     if is_missing_val:
-        return {
+        resp = {
             "status": "NEEDS_REVIEW",
             "review_reason": "missing_value",
             "thoughts": "Required shipping field contains blank or unreadable tokens.",
@@ -3140,12 +3205,17 @@ def _verdict_response(si_fields, bl_fields):
             "field_comparisons": field_comparisons,
             "evidence": evidence
         }
+        _attach_adjudication(email_id, resp, "missing_value",
+                             field_comparisons=field_comparisons,
+                             si_fields=si_fields, bl_fields=bl_fields,
+                             si_text=si_text, bl_text=bl_text)
+        return resp
 
     # Blank in BOTH documents = the fields could not be extracted at all;
     # reporting OK would be dishonest.
     both_blank = [f for f, c in field_comparisons.items() if c.get("blank") == "both"]
     if both_blank:
-        return {
+        resp = {
             "status": "NEEDS_REVIEW",
             "review_reason": "unreadable",
             "thoughts": f"Field extraction produced no value in either document for: {', '.join(both_blank)}.",
@@ -3156,6 +3226,11 @@ def _verdict_response(si_fields, bl_fields):
             "field_comparisons": field_comparisons,
             "evidence": evidence
         }
+        _attach_adjudication(email_id, resp, "unreadable",
+                             field_comparisons=field_comparisons,
+                             si_fields=si_fields, bl_fields=bl_fields,
+                             si_text=si_text, bl_text=bl_text)
+        return resp
 
     # Reason and think first using AI
     ai_reasoning = reason_and_verify_with_ai(
@@ -3164,7 +3239,7 @@ def _verdict_response(si_fields, bl_fields):
 
     has_defect = len(defect_fields) > 0
 
-    return {
+    resp = {
         "status": "MISMATCH" if has_defect else "OK",
         "review_reason": None,
         "thoughts": ai_reasoning.get("thoughts", "Carefully analyzed field values across documents."),
@@ -3175,6 +3250,12 @@ def _verdict_response(si_fields, bl_fields):
         "field_comparisons": field_comparisons,
         "evidence": evidence
     }
+    resp["engine_trail"] = _engine_trail({
+        "si_provenance": si_prov or {},
+        "bl_provenance": bl_prov or {},
+        "field_comparisons": field_comparisons,
+    })
+    return resp
 
 
 # ---------------------------------------------------------------------------
@@ -3318,7 +3399,10 @@ async def verify_scanned_documents(
     si_fields, si_prov = si_res
     bl_fields, bl_prov = bl_res
 
-    resp = await asyncio.to_thread(_verdict_response, si_fields, bl_fields)
+    resp = await asyncio.to_thread(
+        _verdict_response, si_fields, bl_fields,
+        si_prov=si_prov, bl_prov=bl_prov, email_id=email_id or scan_id,
+        si_text=docs["si"]["text"], bl_text=docs["bl"]["text"])
     resp.update({
         "si_provenance": si_prov,
         "bl_provenance": bl_prov,
@@ -3416,7 +3500,7 @@ def _queue_item(eid, d):
             and missing_bl and not corrupted
             and (verdict or {}).get("review_reason") == "missing_attachment"):
         verdict_status = None
-    det = classify_email_detailed(subj, body, len(atts) > 0)
+    det = classify_email_detailed(subj, body, len(atts) > 0, n_attachments=len(atts))
     category = CLASSIFICATIONS_STORE.get(eid) or det["category"]
     chaser = CHASERS_STORE.get(eid, {})
     chaser_status = chaser.get("status")
@@ -3645,7 +3729,8 @@ def get_stats():
             status_counts["UNVERIFIED"] += 1
 
         det = classify_email_detailed(
-            d.get("subject", ""), d.get("body", ""), len(d.get("attachments", [])) > 0)
+            d.get("subject", ""), d.get("body", ""), len(d.get("attachments", [])) > 0,
+            n_attachments=len(d.get("attachments", [])))
         category = CLASSIFICATIONS_STORE.get(eid) or det["category"]
         categories[category] = categories.get(category, 0) + 1
         disp_tag = det["display_tag"]
@@ -4033,6 +4118,7 @@ def get_audit():
     events = []
 
     for eid, v in VERDICTS_STORE.items():
+        v_details = v.get("details") or {}
         events.append({
             "email_id": eid,
             "action": "AUTO_VERIFIED",
@@ -4042,7 +4128,10 @@ def get_audit():
             "details": {
                 "status": v.get("status"),
                 "review_reason": v.get("review_reason"),
-                "defect_fields": v.get("defect_fields")
+                "defect_fields": v.get("defect_fields"),
+                "engine_trail": v_details.get("engine_trail") or v.get("engine_trail"),
+                "diagnosis": (v_details.get("mismatch_diagnosis") or v_details.get("review_diagnosis")
+                              or v.get("diagnosis"))
             }
         })
 
