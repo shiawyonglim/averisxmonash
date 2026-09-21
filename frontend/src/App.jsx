@@ -113,10 +113,10 @@ const countMissingFields = (result) =>
   }).length
 
 const CHAT_SUGGESTIONS = [
-  { icon: '🔍', text: 'Verify the next 25 unverified emails' },
-  { icon: '🚢', text: 'Which carriers owe us the most draft BLs?' },
-  { icon: '📦', text: 'Run the pipeline and report my score' },
-  { icon: '📋', text: "Summarise today's mismatches" },
+  { text: 'Verify the next 25 unverified emails' },
+  { text: 'Which carriers owe us the most draft BLs?' },
+  { text: 'Run the pipeline and report my score' },
+  { text: "Summarise today's mismatches" },
 ]
 
 const formatChatTime = ts =>
@@ -152,7 +152,7 @@ function FormattedChatContent({ content, onOpenEmail }) {
             onClick={() => onOpenEmail(part)}
             title={`Click to open ${part} in Verification Hub`}
           >
-            📧 {part}
+            {part}
           </span>
         )
       }
@@ -283,22 +283,21 @@ function VerdictPanel({ result, loading, error, verdictSource, idleHint, loading
   return (
     <div className="result-panel">
       {error && (
-        <div style={{ color: '#721c24', background: '#f8d7da', padding: '10px', borderRadius: '6px', marginBottom: '14px' }}>
+        <div className="notice danger">
           <strong>Error:</strong> {error}
         </div>
       )}
 
       {!result && !loading && !error && (
-        <div style={{ opacity: 0.6, textAlign: 'center', marginTop: '120px' }}>
+        <div className="empty-state">
           {idleHint || 'Select a bill above or browse the work queue to run AI extraction and comparison.'}
         </div>
       )}
 
       {loading && (
-        <div style={{ textAlign: 'center', marginTop: '120px' }}>
-          <div style={{ fontSize: '2.5rem' }}>🧠</div>
-          <p style={{ marginTop: '12px', fontWeight: 'bold' }}>{loadingHint || 'Auditing with NVIDIA AI...'}</p>
-          <p style={{ fontSize: '0.85rem', opacity: 0.7 }}>Normalizing abbreviations & checking 7 core fields</p>
+        <div className="empty-state">
+          <p>{loadingHint || 'Analysing…'}</p>
+          <p className="meta">Normalising abbreviations and checking 7 fields</p>
         </div>
       )}
 
@@ -309,13 +308,13 @@ function VerdictPanel({ result, loading, error, verdictSource, idleHint, loading
               Status: {result.status}
             </div>
             {verdictSource && (
-              <span style={{ fontSize: '0.78rem', padding: '2px 8px', borderRadius: '10px', background: verdictSource === 'stored' ? '#e8f0fe' : '#f0f4e8', color: verdictSource === 'stored' ? '#1a73e8' : 'var(--primary-color)', fontWeight: 'bold' }}>
+              <span className={`tag${verdictSource === 'stored' ? '' : ' ok'}`}>
                 {verdictSource === 'stored' ? 'Stored verdict' : 'Fresh run'}
               </span>
             )}
             {result.review_reason && (
-              <span style={{ fontSize: '0.85rem', color: '#856404', fontWeight: 'bold' }}>
-                ({result.review_reason})
+              <span className="meta warn">
+                {result.review_reason}
               </span>
             )}
             {/* Engine Provenance Badge */}
@@ -331,19 +330,19 @@ function VerdictPanel({ result, loading, error, verdictSource, idleHint, loading
               if (hasVision) {
                 return (
                   <span className="provenance-badge provenance-vision" title="Audited via Multimodal Vision OCR & Layout Engine">
-                    👁️ Multimodal Vision Engine
+                    Vision OCR
                   </span>
                 )
               } else if (hasLLM) {
                 return (
                   <span className="provenance-badge provenance-llm" title="Audited via NVIDIA DeepSeek / Qwen LLM Fallback">
-                    🧠 Tier-2 LLM Reasoning
+                    LLM reasoning
                   </span>
                 )
               } else {
                 return (
                   <span className="provenance-badge provenance-regex" title="Audited via Deterministic Fast-Path Engine (<15ms latency)">
-                    ⚡ Deterministic Fast-Path (Regex)
+                    Fast-path
                   </span>
                 )
               }
@@ -352,32 +351,17 @@ function VerdictPanel({ result, loading, error, verdictSource, idleHint, loading
 
           {/* AI Thought Process Box */}
           {result.thoughts && (
-            <div style={{
-              background: '#fcf8f2',
-              borderLeft: '4px solid var(--primary-color)',
-              padding: '12px 16px',
-              borderRadius: '6px',
-              marginBottom: '16px',
-              fontSize: '0.9rem',
-              color: 'var(--text-color)',
-            }}>
-              <strong style={{ display: 'block', marginBottom: '4px', color: 'var(--primary-color)' }}>
-                🧠 AI Thought Process:
-              </strong>
+            <div className="reasoning-box">
+              <span className="filter-label" style={{ display: 'block', marginBottom: '4px' }}>
+                Reasoning
+              </span>
               {result.thoughts}
             </div>
           )}
 
           {/* Summary Verdict */}
           {result.summary_reason && (
-            <div style={{
-              background: result.status === 'OK' ? 'rgba(89, 121, 40, 0.08)' : 'rgba(220, 53, 69, 0.08)',
-              padding: '10px 14px',
-              borderRadius: '6px',
-              marginBottom: '16px',
-              fontSize: '0.9rem',
-              fontWeight: 500,
-            }}>
+            <div className={`notice ${result.status === 'OK' ? 'ok' : 'warn'}`}>
               <strong>Verdict:</strong> {result.summary_reason}
             </div>
           )}
@@ -385,10 +369,12 @@ function VerdictPanel({ result, loading, error, verdictSource, idleHint, loading
           {/* Field Breakdown */}
           {result.si_fields && Object.keys(result.si_fields).length > 0 && (
             <div>
-              <h3 style={{ fontSize: '0.95rem', color: 'var(--primary-color)', marginBottom: '10px' }}>
-                Field Audit ({result.defect_fields?.length || 0} defects
-                {countMissingFields(result) > 0 ? ` · ${countMissingFields(result)} missing` : ''})
-              </h3>
+              <div className="section-head">
+                <h3>
+                  Field Audit ({result.defect_fields?.length || 0} defects
+                  {countMissingFields(result) > 0 ? ` · ${countMissingFields(result)} missing` : ''})
+                </h3>
+              </div>
               <div>
                 {FIELDS.map(f => {
                   const isMismatch = result.defect_fields?.includes(f)
@@ -396,33 +382,25 @@ function VerdictPanel({ result, loading, error, verdictSource, idleHint, loading
                   const isMissing = !isMismatch && (fieldComp?.match === false || Boolean(fieldComp?.blank))
                   const missingLabel = fieldComp?.blank === 'si_only' ? 'Missing on SI'
                     : fieldComp?.blank === 'bl_only' ? 'Missing on BL'
-                    : fieldComp?.blank === 'both' ? 'Missing — Both Docs'
-                    : 'Missing Value'
+                    : fieldComp?.blank === 'both' ? 'Missing on both'
+                    : 'Missing'
                   return (
                     <div key={f} className={`field-comparison ${isMismatch ? 'mismatch' : isMissing ? 'missing' : ''}`}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                         <div>
                           <h4 style={{ margin: 0, display: 'inline-block' }}>{f.replace(/_/g, ' ')}</h4>
-                          <span style={{
-                            marginLeft: '8px',
-                            fontSize: '0.72rem',
-                            color: '#666',
-                            background: '#f0ede6',
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            fontWeight: 500
-                          }}>
+                          <span className="tag" style={{ marginLeft: '8px' }}>
                             {fieldComp?.standard_citation || FIELD_STANDARDS[f] || 'Maritime Standard'}
                           </span>
                         </div>
                         {isMismatch ? (
-                          <span className="diff-chip diff-chip-defect">🔴 Material Defect</span>
+                          <span className="diff-chip diff-chip-defect">Defect</span>
                         ) : isMissing ? (
-                          <span className="diff-chip diff-chip-missing">🟠 {missingLabel}</span>
+                          <span className="diff-chip diff-chip-missing">{missingLabel}</span>
                         ) : (fieldComp?.reason?.toLowerCase().includes('variation accepted') || fieldComp?.reason?.toLowerCase().includes('writing style')) ? (
-                          <span className="diff-chip diff-chip-style">🟡 Style Match</span>
+                          <span className="diff-chip diff-chip-style">Style match</span>
                         ) : (
-                          <span className="diff-chip diff-chip-match">🟢 Exact Match</span>
+                          <span className="diff-chip diff-chip-match">Match</span>
                         )}
                       </div>
 
@@ -430,56 +408,44 @@ function VerdictPanel({ result, loading, error, verdictSource, idleHint, loading
                       <div className="field-val"><span>BL:</span> {result.bl_fields?.[f] || 'N/A'}</div>
 
                       {fieldComp?.reason && (
-                        <div style={{
-                          fontSize: '0.8rem',
-                          marginTop: '4px',
-                          color: isMismatch ? '#dc3545' : isMissing ? '#b3560e' : '#597928',
-                          fontStyle: 'italic',
-                        }}>
-                          ℹ️ {fieldComp.reason}
+                        <div className={`meta ${isMismatch ? 'danger' : isMissing ? 'warn' : 'ok'}`} style={{ marginTop: '4px' }}>
+                          {fieldComp.reason}
                         </div>
                       )}
 
                       {/* Normalization & Decision Trail */}
-                      <details className="norm-decision-trail" style={{
-                        marginTop: '8px',
-                        background: '#faf8f5',
-                        border: '1px solid #e8e3d9',
-                        borderRadius: '6px',
-                        padding: '6px 10px',
-                        fontSize: '0.8rem'
-                      }}>
-                        <summary style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--primary-color)' }}>
-                          🔍 View Normalization & Decision Trail
+                      <details className="norm-decision-trail">
+                        <summary>
+                          Normalisation trail
                         </summary>
-                        <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: '#fff', padding: '8px', borderRadius: '4px', border: '1px solid #eee' }}>
+                        <div className="norm-body">
+                          <div className="norm-grid">
                             <div>
-                              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#888', textTransform: 'uppercase' }}>Raw SI Input</div>
-                              <div style={{ fontFamily: 'monospace', fontSize: '0.78rem', wordBreak: 'break-word', color: '#333' }}>
+                              <div className="filter-label">Raw SI input</div>
+                              <div className="norm-mono">
                                 {fieldComp?.raw_si || result.si_fields[f] || '—'}
                               </div>
-                              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', marginTop: '4px' }}>Normalized SI</div>
-                              <div style={{ fontFamily: 'monospace', fontSize: '0.78rem', wordBreak: 'break-word', color: '#597928', fontWeight: 600 }}>
+                              <div className="filter-label" style={{ marginTop: '4px' }}>Normalized SI</div>
+                              <div className="norm-mono ok">
                                 {fieldComp?.norm_si !== undefined ? String(fieldComp.norm_si) : '—'}
                               </div>
                             </div>
                             <div>
-                              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#888', textTransform: 'uppercase' }}>Raw BL Input</div>
-                              <div style={{ fontFamily: 'monospace', fontSize: '0.78rem', wordBreak: 'break-word', color: '#333' }}>
+                              <div className="filter-label">Raw BL input</div>
+                              <div className="norm-mono">
                                 {fieldComp?.raw_bl || result.bl_fields?.[f] || '—'}
                               </div>
-                              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', marginTop: '4px' }}>Normalized BL</div>
-                              <div style={{ fontFamily: 'monospace', fontSize: '0.78rem', wordBreak: 'break-word', color: isMismatch ? '#dc3545' : '#597928', fontWeight: 600 }}>
+                              <div className="filter-label" style={{ marginTop: '4px' }}>Normalized BL</div>
+                              <div className={`norm-mono ${isMismatch ? 'danger' : 'ok'}`}>
                                 {fieldComp?.norm_bl !== undefined ? String(fieldComp.norm_bl) : '—'}
                               </div>
                             </div>
                           </div>
 
                           {fieldComp?.transformation_steps && fieldComp.transformation_steps.length > 0 && (
-                            <div style={{ background: '#fff', padding: '6px 8px', borderRadius: '4px', border: '1px solid #eee' }}>
-                              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#666', marginBottom: '3px' }}>⚙️ Transformation Steps Applied:</div>
-                              <ol style={{ margin: 0, paddingLeft: '18px', fontSize: '0.75rem', color: '#444' }}>
+                            <div className="norm-steps">
+                              <div className="filter-label" style={{ marginBottom: '3px' }}>Transformations</div>
+                              <ol>
                                 {fieldComp.transformation_steps.map((step, sIdx) => (
                                   <li key={sIdx}>{step}</li>
                                 ))}
@@ -487,7 +453,7 @@ function VerdictPanel({ result, loading, error, verdictSource, idleHint, loading
                             </div>
                           )}
 
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem', color: '#777', paddingTop: '2px' }}>
+                          <div className="norm-foot">
                             <span><strong>Regulatory Reference:</strong> {fieldComp?.standard_citation || FIELD_STANDARDS[f] || 'Standard Shipping Practice'}</span>
                             <span><strong>Confidence:</strong> {fieldComp?.confidence || 'HIGH'}</span>
                           </div>
@@ -513,13 +479,13 @@ function ScanUploadCard({ title, file, preview, transcript, onSelect, onClear })
         {preview ? (
           <img src={preview} alt={`${title} preview`} className="scan-preview" />
         ) : file ? (
-          <div className="scan-filechip">📄 {file.name}</div>
+          <div className="scan-filechip">{file.name}</div>
         ) : (
-          <div className="scan-empty">📷<br />No document yet — photograph or upload a paper {title.includes('BL') ? 'BL' : 'SI'}</div>
+          <div className="scan-empty">No document yet — photograph or upload a paper {title.includes('BL') ? 'BL' : 'SI'}</div>
         )}
         <div className="scan-actions">
           <label className="scan-choose">
-            📷 Choose Photo / File
+            Choose file
             <input
               type="file"
               accept="image/*,.pdf,.docx,.xlsx,.txt"
@@ -545,19 +511,32 @@ function ScanUploadCard({ title, file, preview, transcript, onSelect, onClear })
   )
 }
 
+// Mirrors server-side _detect_carrier: explicit "DIRECT(<code>)" tag first,
+// then container/booking ref prefixes, then carrier names.
+const DIRECT_CARRIER_ALIASES = {
+  OOCL: 'OOCL', PIL: 'PIL', CMA: 'CMA', ONE: 'ONE',
+  YM: 'YANG MING', EVER: 'EVERGREEN', HAPAG: 'HAPAG',
+  MSC: 'MSC', MONTER: 'MONTER', MCLS: 'MONTER',
+}
+const CARRIER_SUBJECT_PATTERNS = [
+  [/\bOOLU/, 'OOCL'], [/\bYMJAI|\bYMLU/, 'YANG MING'], [/\bEGLV/, 'EVERGREEN'],
+  [/\bHLCU/, 'HAPAG'], [/\bMEDU|\bMSCU/, 'MSC'], [/\bONEY/, 'ONE'],
+  [/\bPILU/, 'PIL'], [/\bMCLS/, 'MONTER'], [/\bCMAU|\bCGMU/, 'CMA'],
+  [/\bMSC\b/, 'MSC'], [/\bCMA\b/, 'CMA'], [/\bHAPAG\b/, 'HAPAG'],
+  [/\bOOCL\b/, 'OOCL'], [/\bEVERGREEN\b/, 'EVERGREEN'], [/\bONE\s*\(/, 'ONE'],
+  [/\bPIL\b/, 'PIL'], [/\bYANG\s*MING\b|\bYM\s*\(/, 'YANG MING'],
+  [/\bMONTER\b/, 'MONTER'], [/\bMAERSK\b/, 'MAERSK'],
+]
+
 function detectCarrier(email) {
-  if (!email) return 'Ocean Carrier Desk'
-  const text = `${email.from || ''} ${email.subject || ''} ${email.body || ''}`.toLowerCase()
-  if (text.includes('msc') || text.includes('mediterranean')) return 'Mediterranean Shipping Company (MSC)'
-  if (text.includes('maersk') || text.includes('apm-terminals') || text.includes('sealand')) return 'Maersk Line (A.P. Moller)'
-  if (text.includes('cma') || text.includes('cgm')) return 'CMA CGM Group'
-  if (text.includes('hapag') || text.includes('hlcu')) return 'Hapag-Lloyd AG'
-  if (text.includes('cosco') || text.includes('oocl')) return 'COSCO Shipping Lines'
-  if (text.includes('ocean network') || text.includes('one(') || text.includes('one-line')) return 'Ocean Network Express (ONE)'
-  if (text.includes('evergreen') || text.includes('ever(')) return 'Evergreen Marine'
-  if (text.includes('yang ming') || text.includes('ym(')) return 'Yang Ming Marine Transport'
-  if (text.includes('pil') || text.includes('pacific int')) return 'Pacific International Lines (PIL)'
-  return 'Liner Operations Desk'
+  if (!email) return 'Shipping Line'
+  const subj = (email.subject || '').toUpperCase()
+  const direct = subj.match(/DIRECT\s*\(\s*([A-Z]+)\s*\)/)
+  if (direct && DIRECT_CARRIER_ALIASES[direct[1]]) return DIRECT_CARRIER_ALIASES[direct[1]]
+  for (const [rx, carrier] of CARRIER_SUBJECT_PATTERNS) {
+    if (rx.test(subj)) return carrier
+  }
+  return 'Shipping Line'
 }
 
 function CutoffProgressBar({ stats, onFilter }) {
@@ -574,43 +553,39 @@ function CutoffProgressBar({ stats, onFilter }) {
 
   return (
     <div className="progress-card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+      <div className="section-head" style={{ flexWrap: 'wrap' }}>
         <div>
-          <span style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#888', fontWeight: 'bold' }}>
-            DAILY SHIPPING CUTOFF MONITOR · TARGET: 17:00 SGT
-          </span>
-          <h3 style={{ margin: '2px 0 0', color: 'var(--primary-color)', fontSize: '1.1rem' }}>
-            Port Documentation Clearance Velocity ({pct}% Cleared)
-          </h3>
+          <span className="filter-label">Cutoff 17:00 SGT</span>
+          <h3>{pct}% cleared</h3>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <span
+            className="tag ok clickable"
             onClick={() => onFilter?.('resolved')}
-            style={{ cursor: 'pointer', fontSize: '0.82rem', padding: '4px 10px', background: '#f0f4e8', color: 'var(--primary-color)', borderRadius: '6px', fontWeight: 600 }}
             title="View cleared shipments"
           >
-            ✅ {cleared} Cleared
+            {cleared} cleared
           </span>
           <span
+            className="tag danger clickable"
             onClick={() => onFilter?.('mismatch')}
-            style={{ cursor: 'pointer', fontSize: '0.82rem', padding: '4px 10px', background: '#fdf0ed', color: '#c0392b', borderRadius: '6px', fontWeight: 600 }}
             title="View pending discrepancy queue"
           >
-            🔴 {pendingMismatch} Defect Queue
+            {pendingMismatch} defects
           </span>
           <span
+            className="tag warn clickable"
             onClick={() => onFilter?.('missing_bl')}
-            style={{ cursor: 'pointer', fontSize: '0.82rem', padding: '4px 10px', background: '#fcf4e6', color: '#d35400', borderRadius: '6px', fontWeight: 600 }}
             title="View missing bills awaiting carrier draft"
           >
-            ⏳ {missingBL} Missing Draft BL
+            {missingBL} missing BL
           </span>
           <span
+            className="tag danger clickable"
             onClick={() => onFilter?.('corrupted')}
-            style={{ cursor: 'pointer', fontSize: '0.82rem', padding: '4px 10px', background: '#fdeeed', color: '#c0392b', borderRadius: '6px', fontWeight: 600 }}
             title="View corrupted documents"
           >
-            ⚠️ {corrupted} Corrupted
+            {corrupted} corrupted
           </span>
         </div>
       </div>
@@ -628,26 +603,19 @@ function AutoDraftEmailModal({ open, onClose, draft, onChange, onSend, sending, 
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-container" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>✉️ Auto-Draft & Google SMTP Studio · {draft.email_id}</h3>
+          <h3>Draft email · {draft.email_id}</h3>
           <button className="modal-close-btn" onClick={onClose}>&times;</button>
         </div>
         <div className="modal-body">
           {result && (
-            <div style={{
-              padding: '12px 16px',
-              borderRadius: '8px',
-              background: result.status === 'LIVE_SENT' || result.status === 'SIMULATED_SENT' ? '#d4edda' : '#f8d7da',
-              color: result.status === 'LIVE_SENT' || result.status === 'SIMULATED_SENT' ? '#155724' : '#721c24',
-              border: `1px solid ${result.status === 'LIVE_SENT' || result.status === 'SIMULATED_SENT' ? '#c3e6cb' : '#f5c6cb'}`,
-              fontSize: '0.88rem'
-            }}>
-              <strong>{result.status === 'LIVE_SENT' ? '🚀 Delivered Live:' : (result.status === 'SIMULATED_SENT' ? '⚡ Dispatched (Simulated):' : '⚠️ Alert:')}</strong>{' '}
+            <div className={`notice ${result.status === 'LIVE_SENT' || result.status === 'SIMULATED_SENT' ? 'ok' : 'danger'}`}>
+              <strong>{result.status === 'LIVE_SENT' ? 'Sent:' : (result.status === 'SIMULATED_SENT' ? 'Simulated:' : 'Failed:')}</strong>{' '}
               {result.message}
             </div>
           )}
 
           <div className="email-form-group">
-            <label>Recipient (To):</label>
+            <label>To</label>
             <input
               type="text"
               className="email-input"
@@ -658,7 +626,7 @@ function AutoDraftEmailModal({ open, onClose, draft, onChange, onSend, sending, 
           </div>
 
           <div className="email-form-group">
-            <label>Subject Line:</label>
+            <label>Subject</label>
             <input
               type="text"
               className="email-input"
@@ -668,7 +636,7 @@ function AutoDraftEmailModal({ open, onClose, draft, onChange, onSend, sending, 
           </div>
 
           <div className="email-form-group">
-            <label>Auto-Generated Operational Body (Editable):</label>
+            <label>Body</label>
             <textarea
               className="email-textarea"
               value={draft.body}
@@ -678,9 +646,9 @@ function AutoDraftEmailModal({ open, onClose, draft, onChange, onSend, sending, 
 
           <div className="smtp-accordion">
             <div className="smtp-accordion-header" onClick={onToggleSmtp}>
-              <span>⚙️ Google SMTP Relay Settings {showSmtp ? '▲' : '▼'}</span>
-              <span style={{ fontSize: '0.78rem', color: '#888' }}>
-                {smtpConfig.user ? `Relay: ${smtpConfig.user}` : 'Default: Google SMTP Pipeline Ready'}
+              <span>SMTP settings {showSmtp ? '▲' : '▼'}</span>
+              <span className="meta">
+                {smtpConfig.user ? smtpConfig.user : 'Not configured'}
               </span>
             </div>
             {showSmtp && (
@@ -731,8 +699,8 @@ function AutoDraftEmailModal({ open, onClose, draft, onChange, onSend, sending, 
         </div>
         <div className="modal-footer">
           <button
+            className="btn-secondary"
             onClick={onClose}
-            style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-color)', boxShadow: 'none', padding: '10px 18px', fontSize: '0.88rem' }}
           >
             Close
           </button>
@@ -741,7 +709,7 @@ function AutoDraftEmailModal({ open, onClose, draft, onChange, onSend, sending, 
             onClick={onSend}
             disabled={sending || !draft.to || !draft.subject}
           >
-            {sending ? 'Dispatching via Google SMTP...' : '🚀 Send via Google SMTP'}
+            {sending ? 'Sending…' : 'Send'}
           </button>
         </div>
       </div>
@@ -871,6 +839,7 @@ function App() {
   const [compareLoading, setCompareLoading] = useState(false)
   const [compareError, setCompareError] = useState(null)
   const [diffFilter, setDiffFilter] = useState('')
+  const [showAllDiffs, setShowAllDiffs] = useState(false)
   // ---- Auto Email Getter & Laya Decision Classifier ----
   const [getterSource, setGetterSource] = useState('real') // 'real' (shiawyonglim@gmail.com) | 'dataset' (520 emails)
   const [getterStatus, setGetterStatus] = useState(null)
@@ -1294,7 +1263,7 @@ function App() {
     }
   }, [])
 
-  const fetchGetterEmails = useCallback(async (page = 1, cat = getterCategory, q = getterQueueFilter, search = getterSearch, src = getterSource) => {
+  const fetchGetterEmails = useCallback(async (page = 1, cat = getterCategory, q = getterQueueFilter, search = getterSearch, src = getterSource, aud = getterAudience) => {
     setGetterLoading(true)
     try {
       const params = new URLSearchParams({
@@ -1669,11 +1638,11 @@ function App() {
       const res = await fetch(`${API}/api/supabase/sync-all`, { method: 'POST' })
       if (!res.ok) throw new Error('Sync failed')
       const data = await res.json()
-      setCloudSyncMsg(`✅ ${data.message}`)
+      setCloudSyncMsg({ tone: 'ok', text: data.message })
       fetchCloudRecords()
       fetch(`${API}/api/supabase/status`).then(r => r.json()).then(s => setCloudStats(s)).catch(() => {})
     } catch (err) {
-      setCloudSyncMsg(`❌ Error syncing to Supabase: ${err.message}`)
+      setCloudSyncMsg({ tone: 'danger', text: `Error syncing to Supabase: ${err.message}` })
     } finally {
       setCloudSyncingAll(false)
     }
@@ -1853,7 +1822,7 @@ function App() {
     } catch (err) {
       setChatMessages(prev => [...prev, {
         role: 'assistant',
-        content: `⚠️ Failed to reach the assistant: ${err.message}`,
+        content: `Failed to reach the assistant: ${err.message}`,
         sources: [],
         degraded: true,
         ts: Date.now(),
@@ -1920,7 +1889,7 @@ function App() {
         next[msgIndex] = { ...next[msgIndex], pendingAction: { ...action, decided: 'error' } }
         next.push({
           role: 'assistant',
-          content: `⚠️ Confirmation failed: ${err.message}`,
+          content: `Confirmation failed: ${err.message}`,
           sources: [],
           degraded: true,
           ts: Date.now(),
@@ -2027,11 +1996,11 @@ function App() {
       const remapped = data.remapped?.length
         ? ` Binary attachment repointed to: ${data.remapped.map(r => r.to).join(', ')}.`
         : ''
-      setSaveDocMsg(`💾 ${data.message}${skipped}${remapped}`)
+      setSaveDocMsg({ tone: 'ok', text: `${data.message}${skipped}${remapped}` })
       // Re-run the audit so the verdict reflects the saved text immediately
       await handleVerify()
     } catch (err) {
-      setSaveDocMsg(`❌ Save failed: ${err.message}`)
+      setSaveDocMsg({ tone: 'danger', text: `Save failed: ${err.message}` })
     } finally {
       setSavingDocs(false)
     }
@@ -2050,11 +2019,11 @@ function App() {
       setSiText(data.si_text || '')
       setBlText(data.bl_text || '')
       setDocBackups(data.backups || null)
-      setSaveDocMsg(`↺ ${data.message}`)
+      setSaveDocMsg({ tone: 'ok', text: data.message })
       // Re-run the audit against the restored originals
       if (data.si_text && data.bl_text) await handleVerify(data.si_text, data.bl_text)
     } catch (err) {
-      setSaveDocMsg(`❌ Restore failed: ${err.message}`)
+      setSaveDocMsg({ tone: 'danger', text: `Restore failed: ${err.message}` })
     } finally {
       setRestoringDocs(false)
     }
@@ -2203,13 +2172,13 @@ function App() {
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
-      setReplyNotice(`📨 ${data.message}`)
+      setReplyNotice({ tone: 'ok', text: data.message })
       await refreshThread(eid)
       refreshQueue()
       refreshEmailStatuses()
       fetch(`${API}/api/audit`).then(r => r.json()).then(d => setAuditEvents(d.events || [])).catch(() => {})
     } catch (err) {
-      setReplyNotice(`❌ Reply simulation failed: ${err.message}`)
+      setReplyNotice({ tone: 'danger', text: `Reply simulation failed: ${err.message}` })
     } finally {
       setSimulatingReply(false)
     }
@@ -2227,15 +2196,15 @@ function App() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       if (data.status === 'LIVE_POLL_SUCCESS') {
-        setReplyNotice(`📥 Live inbox poll complete — checked ${data.messages_checked} unread message(s), matched ${data.replies_matched} repl${data.replies_matched === 1 ? 'y' : 'ies'} to active threads.`)
+        setReplyNotice({ tone: 'ok', text: `Inbox poll complete — checked ${data.messages_checked} unread message(s), matched ${data.replies_matched} repl${data.replies_matched === 1 ? 'y' : 'ies'} to active threads.` })
       } else {
-        setReplyNotice(`📥 ${data.message || data.status}`)
+        setReplyNotice({ tone: 'ok', text: data.message || data.status })
       }
       if (selectedEmail) await refreshThread(selectedEmail)
       refreshQueue()
       refreshEmailStatuses()
     } catch (err) {
-      setReplyNotice(`❌ Inbox poll failed: ${err.message}`)
+      setReplyNotice({ tone: 'danger', text: `Inbox poll failed: ${err.message}` })
     } finally {
       setPollingInbox(false)
     }
@@ -2705,7 +2674,7 @@ function App() {
             <div className="page-header chat-header-row">
               <div>
                 <h1>Assistant</h1>
-                <p>An operations agent for the inbox — it can look things up, verify emails, draft chasers and run the pipeline. Write actions ask for your approval first.</p>
+                <p>Looks up emails, verifies documents, drafts replies, and runs the pipeline — it asks before doing anything.</p>
               </div>
               <div className="chat-header-actions">
                 {aiConfig && (
@@ -2725,13 +2694,11 @@ function App() {
             <div className="chat-messages">
               {chatMessages.length === 0 && (
                 <div className="chat-empty">
-                  <div className="chat-empty-icon">💬</div>
-                  <h3>What would you like me to do?</h3>
-                  <p>Ask questions, or let me take actions — I'll always ask before writing or sending anything.</p>
+                  <h3>Ask me anything about the inbox.</h3>
+                  <p>I can look things up, verify emails, draft replies, and run the pipeline — I ask before writing or sending anything.</p>
                   <div className="chat-suggestions">
                     {CHAT_SUGGESTIONS.map(s => (
                       <button key={s.text} className="chat-chip" onClick={() => sendChat(s.text)}>
-                        <span className="chat-chip-icon">{s.icon}</span>
                         <span>{s.text}</span>
                       </button>
                     ))}
@@ -2741,7 +2708,7 @@ function App() {
 
               {chatMessages.map((m, i) => (
                 <div key={i} className={`chat-row ${m.role}`}>
-                  {m.role === 'assistant' && <div className="chat-avatar">🤖</div>}
+                  {m.role === 'assistant' && <div className="chat-avatar">AI</div>}
                   <div className="chat-msg-col">
                     <div className={`chat-bubble ${m.role}`}>
                       {m.degraded && <div className="chat-degraded-tag">degraded mode</div>}
@@ -2750,7 +2717,7 @@ function App() {
                           <summary>{m.steps.length} tool{m.steps.length !== 1 ? 's' : ''} used</summary>
                           {m.steps.map((s, j) => (
                             <div key={j} className={`chat-step ${s.ok ? '' : 'step-failed'}`}>
-                              🔧 {s.tool} → {s.summary}
+                              {s.tool} · {s.summary}
                             </div>
                           ))}
                         </details>
@@ -2761,7 +2728,7 @@ function App() {
                       {m.pendingAction && (
                         <div className={`chat-approval ${m.pendingAction.decided ? 'decided' : ''}`}>
                           <div className="chat-approval-title">
-                            ⚠️ Approval required — <strong>{m.pendingAction.tool}</strong>
+                            Approval required — {m.pendingAction.tool}
                           </div>
                           <div className="chat-approval-summary">{m.pendingAction.summary}</div>
                           {m.pendingAction.args && Object.keys(m.pendingAction.args).length > 0 && (
@@ -2778,10 +2745,10 @@ function App() {
                           )}
                           {m.pendingAction.decided ? (
                             <div className={`chat-approval-decision ${m.pendingAction.decided}`}>
-                              {m.pendingAction.decided === 'approved' ? '✓ Approved' :
-                               m.pendingAction.decided === 'rejected' ? '✗ Rejected' :
-                               m.pendingAction.decided === 'superseded' ? '⊘ Superseded — not executed' :
-                               '⚠ Confirmation failed'}
+                              {m.pendingAction.decided === 'approved' ? 'Approved' :
+                               m.pendingAction.decided === 'rejected' ? 'Rejected' :
+                               m.pendingAction.decided === 'superseded' ? 'Superseded — not executed' :
+                               'Confirmation failed'}
                             </div>
                           ) : (
                             <div className="chat-approval-btns">
@@ -2826,7 +2793,7 @@ function App() {
 
               {chatLoading && (
                 <div className="chat-row assistant">
-                  <div className="chat-avatar">🤖</div>
+                  <div className="chat-avatar">AI</div>
                   <div className="chat-bubble assistant">
                     <div className="chat-typing">
                       <span></span><span></span><span></span>
@@ -2859,7 +2826,7 @@ function App() {
                   disabled={chatLoading || !chatInput.trim()}
                   title="Send (Enter)"
                 >
-                  Send ➤
+                  Send
                 </button>
               </div>
               <div className="chat-composer-hint">
@@ -4060,8 +4027,8 @@ function App() {
 
             {/* Save / restore status banner */}
             {saveDocMsg && (
-              <div className={`notice ${saveDocMsg.startsWith('❌') ? 'danger' : 'ok'}`}>
-                <div>{saveDocMsg}</div>
+              <div className={`notice ${saveDocMsg.tone}`}>
+                <div>{saveDocMsg.text}</div>
                 {docBackups?.has_original && (
                   <span className="meta" style={{ whiteSpace: 'nowrap' }}>
                     Backups: pristine original + {docBackups.snapshots?.length || 0} snapshot(s)
@@ -4166,7 +4133,7 @@ function App() {
             )}
 
             {/* Compact missing-document banner — the auto-prompt modal covers the draft flow */}
-            {emailInfo && emailInfo.category === 'BL_COMPARISON' && missingDoc && (
+            {emailInfo && missingDoc && (
               <div className="action-card chaser">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                   <div>
@@ -4375,7 +4342,7 @@ function App() {
                 </div>
 
                 {threadOpen && replyNotice && (
-                  <div className="thread-notice">{replyNotice}</div>
+                  <div className={`thread-notice ${replyNotice.tone}`}>{replyNotice.text}</div>
                 )}
 
                 {threadOpen && (
@@ -4580,9 +4547,9 @@ function App() {
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '15px', marginTop: '20px' }}>
                   <button
+                    className="btn-secondary"
                     onClick={() => handleSubmitResolution(false)}
                     disabled={savingResolution}
-                    style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-color)', boxShadow: 'none', padding: '10px 18px', fontSize: '0.9rem' }}
                   >
                     {savingResolution ? 'Logging…' : 'Approve only'}
                   </button>
@@ -4890,34 +4857,27 @@ function App() {
           <div style={{ maxWidth: '1200px' }}>
             <div className="cloud-header-banner">
               <div>
-                <span style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.9, fontWeight: 700 }}>
-                  MULTI-USER PERSISTENCE & SHARED CLOUD REGISTRY
-                </span>
-                <h1 style={{ margin: '4px 0 2px', fontSize: '1.6rem', color: '#ffffff' }}>
-                  Shared Records
-                </h1>
-                <p style={{ margin: 0, opacity: 0.85, fontSize: '0.9rem' }}>
-                  Verified results synced to Supabase so the whole team shares one source of truth. Previously scanned emails load instantly with zero recompute.
-                </p>
+                <h1>Shared Records</h1>
+                <p>Verified results synced to Supabase for the whole team — scanned emails load instantly without recomputing.</p>
               </div>
 
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                <span style={{ background: 'rgba(255,255,255,0.2)', padding: '6px 14px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 600 }}>
-                  {cloudStats.connected ? '🟢 Connected to Supabase' : '⚪ Connecting to Supabase...'}
+              <div className="cloud-banner-actions">
+                <span className="cloud-conn-pill">
+                  {cloudStats.connected ? <><span className="status-dot" />Connected</> : 'Connecting…'}
                 </span>
                 <button
+                  className="cloud-sync-btn"
                   onClick={handleBulkSyncAll}
                   disabled={cloudSyncingAll}
-                  style={{ background: '#ffffff', color: '#2b580c', fontWeight: 700, padding: '10px 18px', fontSize: '0.9rem', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                 >
-                  {cloudSyncingAll ? '☁️ Syncing 520 Records...' : '☁️ Bulk Sync All 520 to Supabase'}
+                  {cloudSyncingAll ? 'Syncing…' : 'Sync all to cloud'}
                 </button>
               </div>
             </div>
 
             {cloudSyncMsg && (
-              <div style={{ background: '#d4edda', color: '#155724', padding: '12px 18px', borderRadius: '8px', marginBottom: '16px' }}>
-                {cloudSyncMsg}
+              <div className={`notice ${cloudSyncMsg.tone}`}>
+                {cloudSyncMsg.text}
               </div>
             )}
 
@@ -4925,31 +4885,31 @@ function App() {
             <div className="cloud-metrics-row">
               <div className="kpi-card">
                 <div className="kpi-value">{cloudStats.total_local || 520}</div>
-                <div className="kpi-label">Total Operational Records</div>
+                <div className="kpi-label">Local records</div>
               </div>
-              <div className="kpi-card" onClick={() => setCloudFilter('synced')} style={{ cursor: 'pointer' }}>
-                <div className="kpi-value" style={{ color: '#2e7d32' }}>{cloudStats.total_in_supabase || 0}</div>
-                <div className="kpi-label">🟢 Synced in Supabase Cloud →</div>
+              <div className="kpi-card clickable" onClick={() => setCloudFilter('synced')}>
+                <div className="kpi-value" style={{ color: 'var(--ok)' }}>{cloudStats.total_in_supabase || 0}</div>
+                <div className="kpi-label">Synced</div>
               </div>
-              <div className="kpi-card" onClick={() => setCloudFilter('pending')} style={{ cursor: 'pointer' }}>
-                <div className="kpi-value" style={{ color: '#e65100' }}>{Math.max(0, (cloudStats.total_local || 520) - (cloudStats.total_in_supabase || 0))}</div>
-                <div className="kpi-label">⚪ Pending Local Scan →</div>
+              <div className="kpi-card clickable" onClick={() => setCloudFilter('pending')}>
+                <div className="kpi-value" style={{ color: 'var(--warn)' }}>{Math.max(0, (cloudStats.total_local || 520) - (cloudStats.total_in_supabase || 0))}</div>
+                <div className="kpi-label">Pending</div>
               </div>
-              <div className="kpi-card" onClick={() => setCloudFilter('mismatch')} style={{ cursor: 'pointer' }}>
-                <div className="kpi-value" style={{ color: '#c62828' }}>{cloudRecords.filter(r => r.cloud_status === 'MISMATCH').length}</div>
-                <div className="kpi-label">🔴 Cloud Mismatches →</div>
+              <div className="kpi-card clickable" onClick={() => setCloudFilter('mismatch')}>
+                <div className="kpi-value" style={{ color: 'var(--danger)' }}>{cloudRecords.filter(r => r.cloud_status === 'MISMATCH').length}</div>
+                <div className="kpi-label">Mismatches</div>
               </div>
             </div>
 
             {/* Filter chips & Search */}
             <div className="action-bar" style={{ flexWrap: 'wrap', gap: '10px', marginBottom: '16px' }}>
               {[
-                { key: 'all', label: 'All Records' },
-                { key: 'synced', label: '🟢 Synced to Supabase' },
-                { key: 'pending', label: '⚪ Pending Local Scan' },
-                { key: 'mismatch', label: '🔴 Mismatches' },
-                { key: 'needs_review', label: '⚠️ Needs Review' },
-                { key: 'resolved', label: '✅ Resolved' }
+                { key: 'all', label: 'All' },
+                { key: 'synced', label: 'Synced' },
+                { key: 'pending', label: 'Pending' },
+                { key: 'mismatch', label: 'Mismatches' },
+                { key: 'needs_review', label: 'Needs review' },
+                { key: 'resolved', label: 'Resolved' }
               ].map(f => (
                 <button
                   key={f.key}
@@ -4964,110 +4924,110 @@ function App() {
             <div className="action-bar" style={{ marginBottom: '20px' }}>
               <input
                 type="text"
-                placeholder="Search Cloud Registry by Email ID, Subject, or Carrier..."
+                className="search-input"
+                placeholder="Search by email ID, subject, or carrier"
                 value={cloudSearch}
                 onChange={e => setCloudSearch(e.target.value)}
-                style={{ flex: 1, padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.95rem' }}
               />
-              <button onClick={fetchCloudRecords} style={{ padding: '10px 20px', fontSize: '0.9rem' }}>
-                🔄 Refresh Cloud
+              <button className="btn-secondary btn-sm" onClick={fetchCloudRecords}>
+                Refresh
               </button>
             </div>
 
             {cloudLoading ? (
-              <div style={{ textAlign: 'center', padding: '60px' }}>Loading Supabase Cloud Registry...</div>
+              <div className="empty-state">Loading…</div>
             ) : cloudRecords.length === 0 ? (
-              <div className="item-card" style={{ textAlign: 'center', padding: '40px' }}>
-                <p>No records found matching this cloud filter.</p>
+              <div className="section-card">
+                <div className="empty-state">No records found matching this cloud filter.</div>
               </div>
             ) : (
-              <div style={{ overflowX: 'auto', background: '#ffffff', borderRadius: '12px', border: '1px solid var(--border-color)', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+              <div className="section-card cloud-table-wrap">
+                <table className="data-table">
                   <thead>
-                    <tr style={{ background: '#fbf9f6', borderBottom: '2px solid var(--border-color)', color: '#666' }}>
-                      <th style={{ padding: '14px 16px' }}>Email ID</th>
-                      <th style={{ padding: '14px 16px' }}>Subject & Carrier</th>
-                      <th style={{ padding: '14px 16px' }}>Cloud Differentiation</th>
-                      <th style={{ padding: '14px 16px' }}>Defect Summary</th>
-                      <th style={{ padding: '14px 16px' }}>Last Scanned / Synced</th>
-                      <th style={{ padding: '14px 16px', textAlign: 'right' }}>Actions</th>
+                    <tr>
+                      <th>Email ID</th>
+                      <th>Subject</th>
+                      <th>Status</th>
+                      <th>Defects</th>
+                      <th>Last scanned</th>
+                      <th className="col-actions">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {cloudRecords.slice((cloudPage - 1) * 25, cloudPage * 25).map(r => (
-                      <tr key={r.email_id} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.15s ease' }}>
-                        <td style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--primary-color)' }}>
-                          {r.email_id}
-                        </td>
-                        <td style={{ padding: '12px 16px', maxWidth: '320px' }}>
-                          <div style={{ fontWeight: 600, color: 'var(--text-color)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <tr key={r.email_id}>
+                        <td><span className="cloud-id">{r.email_id}</span></td>
+                        <td>
+                          <div className="cloud-subject">
                             {r.subject || 'No Subject'}
                           </div>
-                          <span style={{ fontSize: '0.78rem', color: '#888' }}>
-                            Carrier: {r.carrier || 'Unknown'} · 📎 {r.attachments_count} doc(s)
+                          <span className="meta">
+                            Carrier: {r.carrier || 'Unknown'} · {r.attachments_count} docs
                           </span>
                         </td>
-                        <td style={{ padding: '12px 16px' }}>
+                        <td>
                           {r.cloud_synced ? (
                             <span className="cloud-badge-synced">
-                              ☁️ Synced ({r.cloud_status})
+                              Synced · {r.cloud_status}
                             </span>
                           ) : (
                             <span className="cloud-badge-pending">
-                              ⚪ Local Only
+                              Local only
                             </span>
                           )}
                           {r.human_verdict && (
                             <span className="cloud-badge-resolved" style={{ marginLeft: '6px' }}>
-                              ✅ Resolved
+                              Resolved
                             </span>
                           )}
                         </td>
-                        <td style={{ padding: '12px 16px' }}>
+                        <td>
                           {r.defect_fields?.length > 0 ? (
-                            <span style={{ color: '#c62828', fontWeight: 600, fontSize: '0.82rem' }}>
-                              🔴 {r.defect_fields.length} defect(s): {r.defect_fields.join(', ')}
+                            <span className="meta danger">
+                              {r.defect_fields.length} defects: {r.defect_fields.join(', ')}
                             </span>
                           ) : r.review_reason ? (
-                            <span style={{ color: '#e65100', fontWeight: 600, fontSize: '0.82rem' }}>
-                              ⚠️ {r.review_reason}
+                            <span className="meta warn">
+                              {r.review_reason}
                             </span>
                           ) : r.cloud_status === 'OK' ? (
-                            <span style={{ color: '#2e7d32', fontWeight: 600, fontSize: '0.82rem' }}>
-                              🟢 7 Fields Matched
+                            <span className="meta ok">
+                              All fields matched
                             </span>
                           ) : (
-                            <span style={{ color: '#888', fontStyle: 'italic', fontSize: '0.82rem' }}>
+                            <span className="meta">
                               Pending verification
                             </span>
                           )}
                         </td>
-                        <td style={{ padding: '12px 16px', fontSize: '0.82rem', color: '#666' }}>
-                          {r.updated_at ? new Date(r.updated_at).toLocaleString() : 'Not synced'}
+                        <td>
+                          <span className="meta">
+                            {r.updated_at ? new Date(r.updated_at).toLocaleString() : 'Not synced'}
+                          </span>
                         </td>
-                        <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                          <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
+                        <td className="col-actions">
+                          <div className="cloud-actions">
                             {r.cloud_synced && (
                               <button
+                                className="btn-sm"
                                 onClick={() => handlePullCloudRecord(r.email_id)}
-                                style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#597928', color: '#fff' }}
                                 title="Pull from Supabase Cloud cache without re-running AI models"
                               >
-                                ⚡ Pull Cloud
+                                Pull
                               </button>
                             )}
                             <button
+                              className="btn-sm btn-dark"
                               onClick={() => openDraftEmail(r.email_id, { subject: r.subject, from: r.sender, attachments: Array(r.attachments_count) }, { status: r.cloud_status, defect_fields: r.defect_fields })}
-                              style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#6e3511', color: '#fff' }}
                               title="Auto-draft email for this shipment"
                             >
-                              ✉️ Draft
+                              Draft
                             </button>
                             <button
+                              className="btn-secondary btn-sm"
                               onClick={() => openEmail(r.email_id)}
-                              style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-color)', boxShadow: 'none' }}
                             >
-                              Inspect →
+                              Inspect
                             </button>
                           </div>
                         </td>
@@ -5077,27 +5037,27 @@ function App() {
                 </table>
 
                 {/* Pagination */}
-                <div style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', background: '#faf8f5' }}>
-                  <span style={{ fontSize: '0.85rem', color: '#666' }}>
+                <div className="pager cloud-pager">
+                  <span className="meta">
                     Showing {Math.min(cloudRecords.length, (cloudPage - 1) * 25 + 1)}–{Math.min(cloudRecords.length, cloudPage * 25)} of {cloudRecords.length} records
                   </span>
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  <div className="cloud-pager-btns">
                     <button
+                      className="btn-secondary btn-sm"
                       disabled={cloudPage <= 1}
                       onClick={() => setCloudPage(p => p - 1)}
-                      style={{ padding: '6px 14px', fontSize: '0.82rem' }}
                     >
-                      ← Prev
+                      Prev
                     </button>
-                    <span style={{ fontSize: '0.85rem', alignSelf: 'center', fontWeight: 600 }}>
+                    <span className="meta">
                       Page {cloudPage} of {Math.max(1, Math.ceil(cloudRecords.length / 25))}
                     </span>
                     <button
+                      className="btn-secondary btn-sm"
                       disabled={cloudPage >= Math.ceil(cloudRecords.length / 25)}
                       onClick={() => setCloudPage(p => p + 1)}
-                      style={{ padding: '6px 14px', fontSize: '0.82rem' }}
                     >
-                      Next →
+                      Next
                     </button>
                   </div>
                 </div>
@@ -5113,53 +5073,45 @@ function App() {
           <div className="card-container">
             <div className="page-header">
               <h1>Audit Log</h1>
-              <p>Immutable enterprise governance trail recording all automated verdicts, ocean carrier chasers, and operator overrides. <em>(Dual-persisted: local on-disk JSON <code>.cache/audit_state.json</code> + Supabase cloud database sync.)</em></p>
+              <p>Every verdict, chaser, and override — persisted to .cache/audit_state.json and Supabase.</p>
             </div>
 
             <div className="item-card">
               {auditEvents.length === 0 ? (
-                <p style={{ textAlign: 'center', padding: '20px', opacity: 0.7 }}>
+                <div className="empty-state">
                   No audit events recorded yet.
-                </p>
+                </div>
               ) : (
                 auditEvents.map((ev, idx) => (
                   <div key={idx} className="timeline-item">
                     <span
                       className="timeline-dot"
-                      style={{ background: AUDIT_DOT_COLORS[ev.action] || '#999' }}
+                      style={{ background: AUDIT_DOT_COLORS[ev.action] || 'var(--text-faint)' }}
                     />
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
                         {String(ev.email_id).startsWith('scan-') ? (
                           <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--primary-color)' }}>
-                            📷 {ev.email_id}
+                            {ev.email_id}
                           </span>
                         ) : (
                           <button
+                            className="link-btn"
                             onClick={() => openEmail(ev.email_id)}
-                            style={{
-                              background: 'transparent',
-                              color: 'var(--primary-color)',
-                              padding: 0,
-                              boxShadow: 'none',
-                              fontWeight: 'bold',
-                              fontSize: '0.9rem',
-                              textDecoration: 'underline',
-                            }}
                           >
                             {ev.email_id}
                           </button>
                         )}
                         <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{ev.action}</span>
-                        <span style={{ fontSize: '0.78rem', color: '#777' }}>
+                        <span className="meta">
                           by {ev.actor || 'system'}
                         </span>
-                        <span style={{ fontSize: '0.78rem', color: '#999', marginLeft: 'auto' }}>
+                        <span className="meta" style={{ marginLeft: 'auto' }}>
                           {ev.timestamp ? new Date(ev.timestamp).toLocaleString() : ''}
                         </span>
                       </div>
                       {ev.notes && (
-                        <p style={{ fontSize: '0.85rem', marginTop: '4px', color: '#555' }}>{ev.notes}</p>
+                        <p className="meta" style={{ marginTop: '4px' }}>{ev.notes}</p>
                       )}
                     </div>
                   </div>
@@ -5181,14 +5133,18 @@ function App() {
             : diffRows
           const shownRows = showAllDiffs ? visibleDiffRows : visibleDiffRows.slice(0, 15)
           const scoreColor =
-            score?.final_score == null ? '#888'
-            : score.final_score >= 0.7 ? '#2e7d32'
-            : score.final_score >= 0.4 ? '#e07a5f' : '#c62828'
+            score?.final_score == null ? 'var(--text-faint)'
+            : score.final_score >= 0.7 ? 'var(--ok)'
+            : score.final_score >= 0.4 ? 'var(--warn)' : 'var(--danger)'
           const scoreGrade =
             score?.final_score == null ? null
             : score.final_score >= 0.9 ? 'Excellent'
             : score.final_score >= 0.7 ? 'Good'
             : score.final_score >= 0.4 ? 'Needs work' : 'Poor'
+          const scoreGradeClass =
+            score?.final_score == null ? ''
+            : score.final_score >= 0.7 ? 'ok'
+            : score.final_score >= 0.4 ? 'warn' : 'danger'
           const hasSubmission = (pipelineStatus?.submission_size ?? 0) > 0
           const step1Done = hasSubmission && !pipelineRunning
           const interrupted =
@@ -5306,7 +5262,7 @@ function App() {
                     </p>
                   </div>
                   <span className={`sub-file-pill ${hasSubmission ? 'has-file' : ''}`}>
-                    {hasSubmission ? `📄 ${pipelineStatus.submission_size}/520 saved` : '📄 No submission yet'}
+                    {hasSubmission ? `${pipelineStatus.submission_size}/520 saved` : 'No submission yet'}
                   </span>
                 </div>
 
@@ -5318,7 +5274,7 @@ function App() {
                         onClick={handleStartPipeline}
                         disabled={genPicker !== null && genSelected.size === 0}
                       >
-                        {hasSubmission ? '▶ Resume Generation' : '▶ Generate Submission'}
+                        {hasSubmission ? 'Resume generation' : 'Generate submission'}
                         {genIsSubset ? ` (${genSelected.size} selected)` : ''}
                       </button>
                       {hasSubmission && pipelineStatus?.finished_at && (
@@ -5475,7 +5431,7 @@ function App() {
                         {pipelineStatus?.skipped ? ` · ${pipelineStatus.skipped} resumed` : ''}
                       </span>
                       <button onClick={handleCancelPipeline} className="sub-cancel-btn">
-                        ⏹ Cancel run
+                        Cancel run
                       </button>
                     </div>
                     {pipelineMsg && <div className="sub-msg">{pipelineMsg}</div>}
@@ -5485,14 +5441,14 @@ function App() {
                 {/* Interrupted run hint */}
                 {interrupted && (
                   <div className="sub-warn">
-                    ⏸ Previous run stopped at {pipelineStatus.processed}/{pipelineStatus.total} emails —
+                    Previous run stopped at {pipelineStatus.processed}/{pipelineStatus.total} emails —
                     press Resume Generation to pick up where it left off.
                   </div>
                 )}
 
                 {pipelineStatus?.error && !pipelineRunning && (
                   <div className="sub-error">
-                    {pipelineStatus.error === 'cancelled' ? '⏹ Run cancelled — partial results were saved.' : `Error: ${pipelineStatus.error}`}
+                    {pipelineStatus.error === 'cancelled' ? 'Run cancelled — partial results were saved.' : `Error: ${pipelineStatus.error}`}
                   </div>
                 )}
 
@@ -5500,17 +5456,17 @@ function App() {
                 {pipelineStatus?.done && !pipelineStatus.error && (
                   <div className="sub-done">
                     <div className="sub-done-text">
-                      <strong>✅ {pipelineStatus.submission_size} records ready</strong>
+                      <strong>{pipelineStatus.submission_size} records ready</strong>
                       {pipelineStatus.supabase && (
                         <span className="sub-done-note">Synced to Supabase: {pipelineStatus.supabase}</span>
                       )}
                     </div>
                     <div className="sub-done-actions">
                       <button onClick={handleDownloadSubmission} className="sub-ghost-btn">
-                        ⬇ Download JSON
+                        Download JSON
                       </button>
                       <button onClick={scrollToScore} className="sub-primary-btn">
-                        Score it →
+                        Score it
                       </button>
                     </div>
                   </div>
@@ -5521,7 +5477,7 @@ function App() {
               <div className="item-card" id="score-card">
                 <div className="sub-card-head">
                   <div>
-                    <h3>Score vs Ground Truth</h3>
+                    <h3>Score</h3>
                     <p className="step-sub">
                       Grades the latest submission.json against data_v2/ground_truth.json —
                       weighted: Stage-1 classification 30% · Stage-3 defects 20% · End-to-end 50%.
@@ -5529,7 +5485,7 @@ function App() {
                   </div>
                   {compareData && (
                     <button onClick={fetchCompare} disabled={compareLoading} className="sub-ghost-btn">
-                      {compareLoading ? 'Scoring…' : '↻ Re-check'}
+                      {compareLoading ? 'Scoring…' : 'Re-check'}
                     </button>
                   )}
                 </div>
@@ -5541,14 +5497,13 @@ function App() {
                 {/* Empty state */}
                 {!compareData && !compareError && (
                   <div className="sub-empty">
-                    <span className="sub-empty-icon">🎯</span>
                     <p>
                       {hasSubmission
                         ? 'Your submission is on disk — run the scorer to see how it grades against ground truth.'
                         : 'No score yet. Generate a submission above, then grade it here.'}
                     </p>
                     <button onClick={fetchCompare} disabled={compareLoading} className="sub-primary-btn">
-                      {compareLoading ? 'Scoring…' : '🎯 Check Score'}
+                      {compareLoading ? 'Scoring…' : 'Check score'}
                     </button>
                   </div>
                 )}
@@ -5562,7 +5517,7 @@ function App() {
                           {score ? fmtPct(score.final_score) : '—'}
                         </div>
                         {scoreGrade && (
-                          <span className="score-grade" style={{ background: scoreColor }}>{scoreGrade}</span>
+                          <span className={`score-grade ${scoreGradeClass}`}>{scoreGrade}</span>
                         )}
                       </div>
                       <div className="score-hero-meta">
@@ -5579,7 +5534,7 @@ function App() {
 
                     {compareData.summary?.missing > 0 && (
                       <div className="sub-warn">
-                        ⚠ {compareData.summary.missing} emails are missing from the submission and score zero —
+                        {compareData.summary.missing} emails are missing from the submission and score zero —
                         re-run generation to fill the gaps.
                       </div>
                     )}
@@ -5605,7 +5560,7 @@ function App() {
                           <div className="kpi-sub">{score.reliability?.pred_review} flagged for review</div>
                         </div>
                         <div className="kpi-card">
-                          <div className="kpi-value" style={{ color: '#e07a5f' }}>
+                          <div className="kpi-value" style={{ color: 'var(--warn)' }}>
                             {score.end_to_end?.success}/{score.end_to_end?.total}
                           </div>
                           <div className="kpi-label">End-to-End Defects Caught</div>
@@ -5684,7 +5639,7 @@ function App() {
                     {score && (
                       <details style={{ marginTop: '14px', fontSize: '0.82rem' }}>
                         <summary style={{ cursor: 'pointer', opacity: 0.7 }}>Raw score JSON</summary>
-                        <pre style={{ marginTop: '8px', background: '#faf8f5', padding: '12px', borderRadius: '8px', overflowX: 'auto' }}>
+                        <pre style={{ marginTop: '8px', background: 'var(--surface-sunken)', padding: '12px', borderRadius: '8px', overflowX: 'auto' }}>
                           {JSON.stringify(score, null, 2)}
                         </pre>
                       </details>
@@ -5705,19 +5660,17 @@ function App() {
                   </div>
                   {submissionData && (
                     <button onClick={loadSubmissionRecords} disabled={subLoading} className="sub-ghost-btn">
-                      {subLoading ? 'Loading…' : '↻ Refresh'}
+                      {subLoading ? 'Loading…' : 'Refresh'}
                     </button>
                   )}
                 </div>
 
                 {!hasSubmission ? (
                   <div className="sub-empty">
-                    <span className="sub-empty-icon">📦</span>
                     <p>Nothing to export yet — generate a submission in step 1 first.</p>
                   </div>
                 ) : !submissionData ? (
                   <div className="sub-empty">
-                    <span className="sub-empty-icon">⏳</span>
                     <p>Loading submission records…</p>
                   </div>
                 ) : (
@@ -5834,7 +5787,7 @@ function App() {
                           onClick={handleDownloadSelected}
                           disabled={selectedEmails.size === 0}
                         >
-                          ⬇ Download selected ({selectedEmails.size})
+                          Download selected ({selectedEmails.size})
                         </button>
                       </div>
                     </div>
@@ -5867,18 +5820,14 @@ function App() {
           const shownFailures = stressShowAllFailures ? filteredFailures : filteredFailures.slice(0, 15)
           const verdictPill = (ok) =>
             ok == null ? null : (
-              <span className="ep-status" style={ok
-                ? { color: '#2e7d32', background: 'rgba(52,168,83,0.12)' }
-                : { color: '#c62828', background: 'rgba(198,40,40,0.10)' }}>
-                {ok ? '✓ PASS' : '✗ FAIL'}
-              </span>
+              <span className={ok ? 'tag ok' : 'tag danger'}>{ok ? 'Pass' : 'Fail'}</span>
             )
 
           return (
             <div className="card-container">
               <div className="page-header">
                 <h1>Stress Lab</h1>
-                <p>Edge-case playground — run the pipeline over the 2,000-email stress dataset and probe individual cases.</p>
+                <p>Run the pipeline over the stress dataset and probe individual edge cases.</p>
               </div>
 
               {/* DATASET OVERVIEW */}
@@ -5892,12 +5841,12 @@ function App() {
                     </p>
                   </div>
                   <span className={`sub-file-pill ${stressDataset?.exists ? 'has-file' : ''}`}>
-                    {stressDataset?.exists ? `📁 ${stressDataset.email_count} emails` : '📁 dataset missing'}
+                    {stressDataset?.exists ? `${stressDataset.email_count} emails` : 'Dataset missing'}
                   </span>
                 </div>
                 {stressDataset && !stressDataset.exists && (
                   <div className="sub-warn">
-                    ⚠ No dataset found at <code>{stressDataset.dataset_dir}</code> — run the generator script first.
+                    No dataset at <code>{stressDataset.dataset_dir}</code> — run the generator script first.
                   </div>
                 )}
                 {stressDataset?.exists && (
@@ -5944,7 +5893,7 @@ function App() {
                     <div className="sub-cta-row">
                       <button className="sub-primary-btn" onClick={handleStartStress}
                         disabled={!stressDataset?.exists}>
-                        ▶ Run stress test
+                        Run stress test
                       </button>
                       {stressStatus?.finished_at && (
                         <span className="sub-last-run">Last run: {stressStatus.finished_at}</span>
@@ -5984,7 +5933,7 @@ function App() {
                     </div>
                     <div className="sub-progress-foot">
                       <span>{stressStatus?.processed ?? 0} / {stressStatus?.total ?? 0} cases</span>
-                      <button onClick={handleCancelStress} className="sub-cancel-btn">⏹ Cancel run</button>
+                      <button onClick={handleCancelStress} className="sub-cancel-btn">Cancel run</button>
                     </div>
                   </div>
                 )}
@@ -6003,10 +5952,10 @@ function App() {
                       <h3>Results</h3>
                       <p className="step-sub">
                         {m.processed}/{m.total} cases in {m.elapsed_seconds}s ·
-                        ~{m.throughput_eps} emails/sec{m.crashes ? ` · ⚠ ${m.crashes} pipeline crashes` : ''}
+                        ~{m.throughput_eps} emails/sec{m.crashes ? ` · ${m.crashes} crashes` : ''}
                       </p>
                     </div>
-                    <button onClick={fetchStressResults} className="sub-ghost-btn">↻ Refresh</button>
+                    <button onClick={fetchStressResults} className="sub-ghost-btn">Refresh</button>
                   </div>
 
                   <div className="kpi-grid" style={{ marginTop: '4px' }}>
@@ -6196,7 +6145,7 @@ function App() {
                     disabled={!stressCaseId || stressCaseLoading}
                     onClick={() => handleRunStressCase(stressCaseId)}
                   >
-                    {stressCaseLoading ? 'Running…' : '▶ Run case'}
+                    {stressCaseLoading ? 'Running…' : 'Run case'}
                   </button>
                 </div>
                 {stressCases.length === 0 && (
@@ -6240,7 +6189,7 @@ function App() {
                     {(stressCaseResult.si_fields && Object.keys(stressCaseResult.si_fields).length > 0) && (
                       <details style={{ marginTop: '10px', fontSize: '0.82rem' }}>
                         <summary style={{ cursor: 'pointer', opacity: 0.7 }}>Extracted fields</summary>
-                        <pre style={{ marginTop: '8px', background: '#faf8f5', padding: '12px', borderRadius: '8px', overflowX: 'auto' }}>
+                        <pre style={{ marginTop: '8px', background: 'var(--surface-sunken)', padding: '12px', borderRadius: '8px', overflowX: 'auto' }}>
                           {JSON.stringify({ si: stressCaseResult.si_fields, bl: stressCaseResult.bl_fields }, null, 2)}
                         </pre>
                       </details>
@@ -6285,7 +6234,7 @@ function App() {
           >
             <div className="modal-header">
               <h3>
-                📎 {missingPrompt.doc === 'si' ? 'Shipping Instruction missing'
+                {missingPrompt.doc === 'si' ? 'Shipping Instruction missing'
                   : missingPrompt.doc === 'bl' ? 'Draft BL missing'
                   : 'No documents attached'}
               </h3>
@@ -6305,11 +6254,11 @@ function App() {
               </p>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '18px' }}>
                 <button
+                  className="btn-secondary"
                   onClick={() => {
                     missingPromptDismissed.current.add(missingPrompt.emailId)
                     setMissingPrompt(null)
                   }}
-                  style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-color)', boxShadow: 'none', padding: '8px 16px', fontSize: '0.88rem' }}
                 >
                   Not now
                 </button>
@@ -6320,9 +6269,8 @@ function App() {
                     setMissingPrompt(null)
                     openDraftEmail(emailId, null, null, doc)
                   }}
-                  style={{ background: '#e07a5f', padding: '8px 18px', fontSize: '0.88rem', fontWeight: 600 }}
                 >
-                  ✉️ Draft Email
+                  Draft email
                 </button>
               </div>
             </div>
