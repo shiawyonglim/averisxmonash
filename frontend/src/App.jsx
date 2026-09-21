@@ -702,7 +702,7 @@ function CutoffProgressBar({ stats, onFilter }) {
   )
 }
 
-function AutoDraftEmailModal({ open, onClose, draft, onChange, onSend, sending, result, smtpConfig, onSmtpChange, showSmtp, onToggleSmtp }) {
+function AutoDraftEmailModal({ open, onClose, draft, onChange, onSend, sending, result, smtpConfig, onSmtpChange, showSmtp, onToggleSmtp, passwordFromEnv }) {
   if (!open) return null
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -795,7 +795,7 @@ function AutoDraftEmailModal({ open, onClose, draft, onChange, onSend, sending, 
                     className="email-input"
                     value={smtpConfig.password}
                     onChange={e => onSmtpChange({ ...smtpConfig, password: e.target.value })}
-                    placeholder="xxxx xxxx xxxx xxxx"
+                    placeholder={passwordFromEnv ? 'Saved in .env — leave blank to use it' : 'xxxx xxxx xxxx xxxx'}
                   />
                 </div>
               </div>
@@ -987,6 +987,16 @@ function App() {
   const [convSelected, setConvSelected] = useState(null)
   const [convDetail, setConvDetail] = useState(null)
   const [convDetailLoading, setConvDetailLoading] = useState(false)
+  const [convComposeOpen, setConvComposeOpen] = useState(false)
+  const [convCompose, setConvCompose] = useState({ to: '', subject: '', body: '' })
+  const [convSending, setConvSending] = useState(false)
+  const [convSendResult, setConvSendResult] = useState(null)
+  const [smtpPasswordFromEnv, setSmtpPasswordFromEnv] = useState(false)
+  const [convChatInput, setConvChatInput] = useState('')
+  const [convChatSending, setConvChatSending] = useState(false)
+  const [convChatNotice, setConvChatNotice] = useState(null)
+  const [convSentBubbles, setConvSentBubbles] = useState([])
+  const convStreamRef = useRef(null)
 
   // ---- Review & Download (submission export picker) ----
   const [submissionData, setSubmissionData] = useState(null)
@@ -1040,6 +1050,7 @@ function App() {
   const [resetLocal, setResetLocal] = useState(true)
   const [resetSupabase, setResetSupabase] = useState(true)
   const [resetThreads, setResetThreads] = useState(true)
+  const [resetUploads, setResetUploads] = useState(true)
   const [resetBusy, setResetBusy] = useState(false)
   const [resetReport, setResetReport] = useState(null)
   const [resetPreview, setResetPreview] = useState(null)
@@ -1138,6 +1149,7 @@ function App() {
           wipe_local: resetLocal,
           wipe_supabase: resetSupabase,
           wipe_threads: resetThreads,
+          wipe_uploads: resetUploads,
           dry_run: dryRun,
         }),
       })
@@ -1161,6 +1173,7 @@ function App() {
         setChatSessionId('')
         setStats(null)
         fetch(`${API}/api/stats`).then(r => r.json()).then(setStats).catch(() => {})
+        fetch(`${API}/api/emails`).then(r => r.json()).then(d => { if (d.emails) setEmails(d.emails) }).catch(() => {})
       }
     } catch (err) {
       setResetError(err.message)
@@ -1545,6 +1558,9 @@ function App() {
   const fetchConversation = useCallback(async (address) => {
     setConvSelected(address)
     setConvDetailLoading(true)
+    setConvChatInput('')
+    setConvChatNotice(null)
+    setConvSentBubbles([])
     try {
       const res = await fetch(`${API}/api/conversations/${encodeURIComponent(address)}`)
       if (res.ok) {
@@ -1559,6 +1575,114 @@ function App() {
       setConvDetailLoading(false)
     }
   }, [])
+
+  const openConvCompose = (to = '') => {
+    setConvCompose({ to, subject: '', body: '' })
+    setConvSendResult(null)
+    setConvComposeOpen(true)
+  }
+
+  // While composing, the correspondent list doubles as a recipient picker.
+  const handleConvPersonClick = (address) => {
+    if (convComposeOpen) {
+      setConvCompose(c => ({ ...c, to: address }))
+    } else {
+      fetchConversation(address)
+    }
+  }
+
+  const handleConvSend = async () => {
+    setConvSending(true)
+    setConvSendResult(null)
+    try {
+      const res = await fetch(`${API}/api/email/send-smtp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email_id: '',
+          to_email: convCompose.to,
+          subject: convCompose.subject,
+          body: convCompose.body,
+          smtp_host: smtpConfig.host,
+          smtp_port: parseInt(smtpConfig.port) || 587,
+          smtp_user: smtpConfig.user,
+          smtp_pass: smtpConfig.password
+        })
+      })
+      if (!res.ok) throw new Error(`HTTP error: ${res.status}`)
+      setConvSendResult(await res.json())
+    } catch (err) {
+      setConvSendResult({
+        status: 'ERROR',
+        message: `Failed to dispatch email: ${err.message}`
+      })
+    } finally {
+      setConvSending(false)
+    }
+  }
+
+  // Prefill SMTP settings from the server (.env) once on mount. The app
+  // password is never sent to the client — the backend falls back to the
+  // SMTP_PASSWORD env var when the field is left blank.
+  useEffect(() => {
+    fetch(`${API}/api/smtp/config`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(cfg => {
+        if (!cfg) return
+        setSmtpConfig({ host: cfg.host, port: cfg.port, user: cfg.user, password: '' })
+        setSmtpPasswordFromEnv(!!cfg.password_set)
+      })
+      .catch(() => {})
+  }, [])
+
+  const handleConvChatSend = async () => {
+    const text = convChatInput.trim()
+    if (!text || !convSelected || convChatSending) return
+    setConvChatSending(true)
+    setConvChatNotice(null)
+    const lastSubject = [...(convDetail?.messages || [])].reverse().find(m => m.subject)?.subject
+    const subject = lastSubject
+      ? (lastSubject.toLowerCase().startsWith('re:') ? lastSubject : `Re: ${lastSubject}`)
+      : `Message to ${convDetail?.display_name || convSelected}`
+    try {
+      const res = await fetch(`${API}/api/email/send-smtp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email_id: '',
+          to_email: convSelected,
+          subject,
+          body: text,
+          smtp_host: smtpConfig.host,
+          smtp_port: parseInt(smtpConfig.port) || 587,
+          smtp_user: smtpConfig.user,
+          smtp_pass: smtpConfig.password
+        })
+      })
+      if (!res.ok) throw new Error(`HTTP error: ${res.status}`)
+      const data = await res.json()
+      if (data.delivered === false || data.status === 'SMTP_ERROR') {
+        setConvChatNotice({ tone: 'danger', text: data.message || 'Send failed' })
+      } else {
+        setConvSentBubbles(prev => [...prev, { body: text, ts: new Date().toISOString(), status: data.status }])
+        setConvChatInput('')
+        setConvChatNotice({
+          tone: 'ok',
+          text: data.status === 'LIVE_SENT' ? 'Sent via Gmail SMTP' : 'Sent (simulated — add SMTP settings to go live)'
+        })
+      }
+    } catch (err) {
+      setConvChatNotice({ tone: 'danger', text: `Failed to send: ${err.message}` })
+    } finally {
+      setConvChatSending(false)
+    }
+  }
+
+  useEffect(() => {
+    if (convStreamRef.current) {
+      convStreamRef.current.scrollTop = convStreamRef.current.scrollHeight
+    }
+  }, [convSentBubbles, convDetail])
 
   useEffect(() => {
     if (view === 'conversations' && convPeople.length === 0) {
@@ -4859,85 +4983,108 @@ function App() {
               </div>
             )}
 
-            <div className="main-container">
-              {/* Column 1: SI Text */}
-              <section className="doc-section glass-panel">
-                <h2>
-                  Shipping Instruction (SI)
-                  {siSource === 'email_body' && (
-                    <span className="tag info" style={{ marginLeft: '8px' }}>from email body</span>
-                  )}
-                </h2>
-                <textarea
-                  placeholder="Paste or load SI text here..."
-                  value={siText}
-                  onChange={(e) => setSiText(e.target.value)}
-                />
-              </section>
-
-              {/* Column 2: BL Text — resolved items show the operator-approved field values */}
-              <section className="doc-section glass-panel">
-                <h2>
-                  Bill of Lading (BL)
-                  {resolutionRecord?.resolutions && (
-                    <span className="tag ok" style={{ marginLeft: '8px' }}>resolved values</span>
-                  )}
-                </h2>
-                {resolutionRecord?.resolutions ? (() => {
-                  const approved = { ...(result?.bl_fields || {}) }
-                  const corrected = {}
-                  for (const [f, r] of Object.entries(resolutionRecord.resolutions)) {
-                    approved[f] = r?.value ?? (r?.type === 'SI' ? result?.si_fields?.[f] : result?.bl_fields?.[f])
-                    corrected[f] = r?.type || 'CUSTOM'
-                  }
-                  const ordered = [
-                    ...Object.keys(FIELD_STANDARDS).filter(k => k in approved),
-                    ...Object.keys(approved).filter(k => !(k in FIELD_STANDARDS)),
-                  ]
-                  return (
-                    <>
-                      <div className="resolved-bl">
-                        {ordered.length === 0 && (
-                          <p className="meta">No BL field values stored for this resolution.</p>
+            {/* Verified/resolved items don't need the three panes — a single
+                card with the final approved values replaces them. */}
+            {(() => {
+              const settled = Boolean(resolutionRecord?.resolutions) || result?.status === 'OK'
+              if (!settled) {
+                return (
+                  <div className="main-container">
+                    {/* Column 1: SI Text */}
+                    <section className="doc-section glass-panel">
+                      <h2>
+                        Shipping Instruction (SI)
+                        {siSource === 'email_body' && (
+                          <span className="tag info" style={{ marginLeft: '8px' }}>from email body</span>
                         )}
-                        {ordered.map(f => (
-                          <div key={f} className="resolved-bl-row">
-                            <span className="resolved-bl-field">{f.replace(/_/g, ' ')}</span>
-                            <span className="resolved-bl-value">{approved[f] || '(blank)'}</span>
-                            {corrected[f] && (
-                              <span className="tag info">
-                                {corrected[f] === 'CUSTOM' ? 'manual override' : `from ${corrected[f].toLowerCase()}`}
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                      <details className="resolved-bl-raw">
-                        <summary>Show original draft text</summary>
-                        <textarea readOnly value={blText} />
-                      </details>
-                    </>
-                  )
-                })() : (
-                  <textarea
-                    placeholder="Paste or load BL text here..."
-                    value={blText}
-                    onChange={(e) => setBlText(e.target.value)}
-                  />
-                )}
-              </section>
+                      </h2>
+                      <textarea
+                        placeholder="Paste or load SI text here..."
+                        value={siText}
+                        onChange={(e) => setSiText(e.target.value)}
+                      />
+                    </section>
 
-              {/* Column 3: AI Output */}
-              <section className="doc-section glass-panel">
-                <h2>Audit Verdict & AI Reasoning</h2>
-                <VerdictPanel
-                  result={result}
-                  loading={loading}
-                  error={error}
-                  verdictSource={verdictSource}
-                />
-              </section>
-            </div>
+                    {/* Column 2: BL Text */}
+                    <section className="doc-section glass-panel">
+                      <h2>Bill of Lading (BL)</h2>
+                      <textarea
+                        placeholder="Paste or load BL text here..."
+                        value={blText}
+                        onChange={(e) => setBlText(e.target.value)}
+                      />
+                    </section>
+
+                    {/* Column 3: AI Output */}
+                    <section className="doc-section glass-panel">
+                      <h2>Audit Verdict & AI Reasoning</h2>
+                      <VerdictPanel
+                        result={result}
+                        loading={loading}
+                        error={error}
+                        verdictSource={verdictSource}
+                      />
+                    </section>
+                  </div>
+                )
+              }
+
+              // Approved field set: the verdict's BL fields, with each
+              // resolved discrepancy swapped for the operator's choice.
+              const baseFields = (result?.bl_fields && Object.keys(result.bl_fields).length
+                ? result.bl_fields
+                : result?.si_fields) || {}
+              const approved = { ...baseFields }
+              const corrected = {}
+              for (const [f, r] of Object.entries(resolutionRecord?.resolutions || {})) {
+                approved[f] = r?.value ?? (r?.type === 'SI' ? result?.si_fields?.[f] : result?.bl_fields?.[f])
+                corrected[f] = r?.type || 'CUSTOM'
+              }
+              const ordered = [
+                ...Object.keys(FIELD_STANDARDS).filter(k => k in approved),
+                ...Object.keys(approved).filter(k => !(k in FIELD_STANDARDS)),
+              ]
+              const isResolved = Boolean(resolutionRecord?.resolutions)
+              return (
+                <div className="settled-doc glass-panel">
+                  <h2>
+                    {isResolved ? 'Resolved Bill of Lading' : 'Verified Bill of Lading'}
+                    <span className={`tag ${isResolved ? 'info' : 'ok'}`} style={{ marginLeft: '8px' }}>
+                      {isResolved ? 'resolved values' : 'verified'}
+                    </span>
+                  </h2>
+                  <div className="resolved-bl">
+                    {ordered.length === 0 && (
+                      <p className="meta">No field values stored for this verdict.</p>
+                    )}
+                    {ordered.map(f => (
+                      <div key={f} className="resolved-bl-row">
+                        <span className="resolved-bl-field">{f.replace(/_/g, ' ')}</span>
+                        <span className="resolved-bl-value">{approved[f] || '(blank)'}</span>
+                        {corrected[f] && (
+                          <span className="tag info">
+                            {corrected[f] === 'CUSTOM' ? 'manual override' : `from ${corrected[f].toLowerCase()}`}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <details className="resolved-bl-raw">
+                    <summary>Show original document text</summary>
+                    <div className="settled-raw-grid">
+                      <div>
+                        <p className="meta">Shipping Instruction (SI)</p>
+                        <textarea readOnly value={siText} />
+                      </div>
+                      <div>
+                        <p className="meta">Draft Bill of Lading (BL)</p>
+                        <textarea readOnly value={blText} />
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              )
+            })()}
 
             {/* Resolution success box */}
             {resolveSuccess && (
@@ -5723,12 +5870,17 @@ function App() {
               <p>Every message involving a correspondent, in one chronological stream.</p>
             </div>
 
-            <div className="getter-split-view">
+            <div className="getter-split-view conv-split-view">
               {/* Left: correspondent list */}
               <div className="getter-table-card">
                 <div className="getter-table-header">
                   <h3>Correspondents</h3>
-                  <span className="meta">{filtered.length} people</span>
+                  <div className="conv-header-actions">
+                    <span className="meta">{filtered.length} people</span>
+                    <button className="btn-secondary btn-sm" onClick={() => openConvCompose()}>
+                      + New Message
+                    </button>
+                  </div>
                 </div>
                 <div className="conv-search-row">
                   <input
@@ -5748,7 +5900,7 @@ function App() {
                       <button
                         key={p.address}
                         className={`conv-person ${convSelected === p.address ? 'active' : ''}`}
-                        onClick={() => fetchConversation(p.address)}
+                        onClick={() => handleConvPersonClick(p.address)}
                       >
                         <div className="conv-person-top">
                           <strong>{p.display_name}</strong>
@@ -5767,29 +5919,192 @@ function App() {
                 </div>
               </div>
 
-              {/* Right: chat stream */}
+              {/* Right: chat stream / compose */}
               <div className="getter-table-card">
                 <div className="getter-table-header">
-                  <h3>{convDetail ? convDetail.display_name : 'Timeline'}</h3>
-                  {convDetail && (
-                    <span className="meta">
-                      {convDetail.stats.message_count} messages · {convDetail.stats.total} from {convDetail.display_name} · {convDetail.stats.dated} dated · {convDetail.stats.undated} undated
-                    </span>
-                  )}
-                </div>
-                <div className="conv-stream">
-                  {convDetailLoading ? (
-                    <div className="empty-state">Loading…</div>
-                  ) : !convDetail ? (
-                    <div className="empty-state">Select a correspondent to read the thread.</div>
-                  ) : convDetail.messages.length === 0 ? (
-                    <div className="empty-state">No messages for this correspondent.</div>
-                  ) : (
-                    <div className="thread-list">
-                      {renderConversationStream(convDetail.messages)}
+                  <h3>{convComposeOpen ? 'New Message' : (convDetail ? convDetail.display_name : 'Timeline')}</h3>
+                  {convComposeOpen ? (
+                    <button className="btn-secondary btn-sm" onClick={() => setConvComposeOpen(false)}>
+                      Back to thread
+                    </button>
+                  ) : convDetail && (
+                    <div className="conv-header-actions">
+                      <span className="meta">
+                        {convDetail.stats.message_count} messages · {convDetail.stats.total} from {convDetail.display_name} · {convDetail.stats.dated} dated · {convDetail.stats.undated} undated
+                      </span>
+                      <button className="btn-secondary btn-sm" onClick={() => openConvCompose(convSelected)}>
+                        Message
+                      </button>
                     </div>
                   )}
                 </div>
+                {convComposeOpen ? (
+                  <div className="conv-compose">
+                    {convSendResult && (
+                      <div className={`notice ${convSendResult.status === 'LIVE_SENT' || convSendResult.status === 'SIMULATED_SENT' ? 'ok' : 'danger'}`}>
+                        <span>
+                          <strong>{convSendResult.status === 'LIVE_SENT' ? 'Sent:' : (convSendResult.status === 'SIMULATED_SENT' ? 'Simulated:' : 'Failed:')}</strong>{' '}
+                          {convSendResult.message}
+                        </span>
+                      </div>
+                    )}
+                    <div className="email-form-group">
+                      <label>To</label>
+                      <input
+                        type="email"
+                        className="email-input"
+                        list="conv-recipient-list"
+                        placeholder="Type an email, or click a correspondent on the left"
+                        value={convCompose.to}
+                        onChange={e => setConvCompose({ ...convCompose, to: e.target.value })}
+                      />
+                      <datalist id="conv-recipient-list">
+                        {convPeople.map(p => (
+                          <option key={p.address} value={p.address}>{p.display_name}</option>
+                        ))}
+                      </datalist>
+                    </div>
+                    <div className="email-form-group">
+                      <label>Subject</label>
+                      <input
+                        type="text"
+                        className="email-input"
+                        placeholder="Subject"
+                        value={convCompose.subject}
+                        onChange={e => setConvCompose({ ...convCompose, subject: e.target.value })}
+                      />
+                    </div>
+                    <div className="email-form-group">
+                      <label>Message</label>
+                      <textarea
+                        className="email-textarea"
+                        placeholder="Write your message…"
+                        value={convCompose.body}
+                        onChange={e => setConvCompose({ ...convCompose, body: e.target.value })}
+                      />
+                    </div>
+                    <div className="smtp-accordion">
+                      <div className="smtp-accordion-header" onClick={() => setShowSmtpSettings(s => !s)}>
+                        <span>SMTP settings {showSmtpSettings ? '▲' : '▼'}</span>
+                        <span className="meta">
+                          {smtpConfig.user ? smtpConfig.user : 'Not configured — sends simulated'}
+                        </span>
+                      </div>
+                      {showSmtpSettings && (
+                        <div className="smtp-accordion-content">
+                          <div className="email-form-group">
+                            <label>SMTP Host</label>
+                            <input
+                              type="text"
+                              className="email-input"
+                              value={smtpConfig.host}
+                              onChange={e => setSmtpConfig({ ...smtpConfig, host: e.target.value })}
+                              placeholder="smtp.gmail.com"
+                            />
+                          </div>
+                          <div className="email-form-group">
+                            <label>SMTP Port</label>
+                            <input
+                              type="number"
+                              className="email-input"
+                              value={smtpConfig.port}
+                              onChange={e => setSmtpConfig({ ...smtpConfig, port: e.target.value })}
+                              placeholder="587"
+                            />
+                          </div>
+                          <div className="email-form-group">
+                            <label>Google Account (Gmail)</label>
+                            <input
+                              type="email"
+                              className="email-input"
+                              value={smtpConfig.user}
+                              onChange={e => setSmtpConfig({ ...smtpConfig, user: e.target.value })}
+                              placeholder="your-email@gmail.com"
+                            />
+                          </div>
+                          <div className="email-form-group">
+                            <label>Google App Password (16-char)</label>
+                            <input
+                              type="password"
+                              className="email-input"
+                              value={smtpConfig.password}
+                              onChange={e => setSmtpConfig({ ...smtpConfig, password: e.target.value })}
+                              placeholder={smtpPasswordFromEnv ? 'Saved in .env — leave blank to use it' : 'xxxx xxxx xxxx xxxx'}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="conv-compose-actions">
+                      <button className="btn-secondary" onClick={() => setConvComposeOpen(false)}>
+                        Cancel
+                      </button>
+                      <button
+                        className="btn-primary-next"
+                        onClick={handleConvSend}
+                        disabled={convSending || !convCompose.to || !convCompose.subject}
+                      >
+                        {convSending ? 'Sending…' : 'Send now'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="conv-stream" ref={convStreamRef}>
+                      {convDetailLoading ? (
+                        <div className="empty-state">Loading…</div>
+                      ) : !convDetail ? (
+                        <div className="empty-state">Select a correspondent to read the thread.</div>
+                      ) : convDetail.messages.length === 0 ? (
+                        <div className="empty-state">No messages for this correspondent.</div>
+                      ) : (
+                        <div className="thread-list">
+                          {renderConversationStream(convDetail.messages)}
+                          {convSentBubbles.map((b, i) => (
+                            <div key={`conv-sent-${i}`} className="thread-row outbound">
+                              <div className="thread-bubble outbound">
+                                <div className="thread-meta">
+                                  <strong>You</strong>
+                                  <span className="thread-ts">{new Date(b.ts).toLocaleTimeString()}</span>
+                                </div>
+                                <div className="thread-body">{b.body}</div>
+                                <div className="thread-foot">
+                                  {b.status === 'LIVE_SENT' ? 'Sent via Gmail SMTP' : 'Simulated send'}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {convDetail && !convDetailLoading && (
+                      <>
+                        {convChatNotice && (
+                          <div className={`conv-chat-notice ${convChatNotice.tone}`}>{convChatNotice.text}</div>
+                        )}
+                        <div className="conv-chat-bar">
+                          <input
+                            type="text"
+                            className="conv-chat-input"
+                            placeholder={`Message ${convDetail.display_name}…`}
+                            value={convChatInput}
+                            onChange={e => setConvChatInput(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') handleConvChatSend() }}
+                            disabled={convChatSending}
+                          />
+                          <button
+                            className="conv-chat-send"
+                            onClick={handleConvChatSend}
+                            disabled={convChatSending || !convChatInput.trim()}
+                            title={`Send to ${convSelected}`}
+                          >
+                            {convChatSending ? '…' : 'Send ➤'}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -7142,12 +7457,13 @@ function App() {
                       <li>Generated submission file &amp; audit state</li>
                       <li>Supabase cloud records (verifications + audit logs)</li>
                       <li>Ingested reply threads</li>
+                      <li>Uploaded dataset emails, attachments &amp; their ground truth</li>
                     </ul>
                   </div>
                   <div>
                     <p className="reset-scope-title">Preserved</p>
                     <ul>
-                      <li>The 520 inbox emails and their attachments</li>
+                      <li>The original 520 inbox emails and their attachments</li>
                       <li>The LLM response cache — re-runs stay fast</li>
                     </ul>
                   </div>
@@ -7177,6 +7493,11 @@ function App() {
                 <input id="reset-threads" type="checkbox" checked={resetThreads}
                   onChange={(e) => setResetThreads(e.target.checked)} />
                 <label htmlFor="reset-threads">Ingested reply threads</label>
+              </div>
+              <div className="sub-option">
+                <input id="reset-uploads" type="checkbox" checked={resetUploads}
+                  onChange={(e) => setResetUploads(e.target.checked)} />
+                <label htmlFor="reset-uploads">Uploaded datasets — keep only the original 520 emails</label>
               </div>
               <div className="sub-cta-row">
                 <button className="sub-primary-btn" onClick={() => postReset(true)}
@@ -7245,6 +7566,14 @@ function App() {
                     {resetPreview.supabase.service_role === false && ' — DELETE unavailable (no service role key)'}
                   </p>
                 )}
+                {resetPreview.uploads?.uploaded_email_ids > 0 && (
+                  <p className="step-sub">
+                    Uploads: {resetPreview.uploads.uploaded_email_ids} added emails,{' '}
+                    {resetPreview.uploads.attachment_files} attachment files and{' '}
+                    {resetPreview.uploads.stress_gt_rows + (resetPreview.uploads.uploaded_gt_rows || 0)} ground-truth rows
+                    would be removed — inbox returns to {resetPreview.uploads.inbox_remaining} emails
+                  </p>
+                )}
               </div>
             )}
 
@@ -7292,6 +7621,14 @@ function App() {
                     </p>
                   )
                 )}
+                {resetReport.uploads?.uploaded_email_ids > 0 && (
+                  <p className="step-sub">
+                    Uploads: removed {resetReport.uploads.email_files} email files,{' '}
+                    {resetReport.uploads.attachment_files} attachment files and{' '}
+                    {resetReport.uploads.stress_gt_rows + (resetReport.uploads.uploaded_gt_rows || 0)} ground-truth rows
+                    — inbox now has {resetReport.uploads.inbox_remaining} emails
+                  </p>
+                )}
                 <div className="sub-cta-row" style={{ marginTop: '14px' }}>
                   <button className="sub-primary-btn" onClick={() => setView('pipeline')}>
                     Run pipeline now
@@ -7317,6 +7654,7 @@ function App() {
         onSmtpChange={setSmtpConfig}
         showSmtp={showSmtpSettings}
         onToggleSmtp={() => setShowSmtpSettings(s => !s)}
+        passwordFromEnv={smtpPasswordFromEnv}
       />
 
       {/* Auto-prompt: a required attachment is missing — offer to draft the chaser */}

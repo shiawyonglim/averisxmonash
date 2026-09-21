@@ -798,6 +798,19 @@ def get_email_content(email_id: str):
 
         if len(atts) < 2:
             verdict = VERDICTS_STORE.get(email_id)
+            # A plain "send the draft BL" request carries no documents to
+            # audit — a missing_attachment NEEDS_REVIEW on a zero-attachment
+            # email is a stale escalation owned by the missing-BL lane.
+            # Suppress it (and the cached cloud row echoing it) so the email
+            # shows as awaiting-docs instead of escalated.
+            if (category == "BL_COMPARISON" and len(atts) == 0
+                    and verdict
+                    and verdict.get("status") == "NEEDS_REVIEW"
+                    and verdict.get("review_reason") == "missing_attachment"
+                    and _is_bl_relevant_subject(email_data.get("subject", ""))
+                    and _email_corrupt_issue(email_data) is None):
+                verdict = None
+                sb_rec = None
             # 'missing_attachment' escalation only makes sense for a real
             # comparison request — an invoice/SI/general email has no
             # attachments to be missing in the first place.
@@ -1615,6 +1628,22 @@ def send_email_smtp(req: SmtpSendRequest):
         _log_to_supabase_audit(req.email_id, "EMAIL_DISPATCHED", result)
 
     return result
+
+
+@app.get("/api/smtp/config")
+def get_smtp_config():
+    """Expose the configured SMTP identity so the UI can prefill send forms.
+
+    The app password itself is never returned — send-smtp falls back to the
+    SMTP_PASSWORD env var at send time when the request leaves it blank."""
+    load_dotenv(override=True)
+    user = (os.getenv("SMTP_USER") or os.getenv("DEFAULT_SENDER") or "").strip()
+    return {
+        "host": os.getenv("SMTP_HOST") or "smtp.gmail.com",
+        "port": int(os.getenv("SMTP_PORT") or 587),
+        "user": user,
+        "password_set": bool((os.getenv("SMTP_PASSWORD") or "").strip()),
+    }
 
 
 # ============================================================
@@ -2988,6 +3017,22 @@ def verify_documents(req: VerificationRequest):
             _store_verdict(req.email_id, resp)
             return resp
 
+        # Awaiting-carrier / inbound-chaser placeholders mean the draft BL
+        # simply hasn't been issued yet — a missing-BL work item, not a
+        # human-review escalation. Return a pending result WITHOUT storing
+        # a verdict so re-verifying can't push it into human review.
+        if "[AWAITING CARRIER" in joined or "[INBOUND CHASER" in joined:
+            return {
+                "status": "AWAITING_BL",
+                "review_reason": None,
+                "thoughts": "The carrier has not issued the draft Bill of Lading yet — this email belongs to the Missing BL work queue. Send a chaser and re-verify once the draft arrives.",
+                "summary_reason": "Awaiting carrier draft BL — nothing to audit.",
+                "si_fields": {},
+                "bl_fields": {},
+                "defect_fields": [],
+                "field_comparisons": {}
+            }
+
         reason = ("unreadable" if "[CORRUPTED" in joined
                   else "missing_attachment")
         resp = {
@@ -3365,6 +3410,12 @@ def _queue_item(eid, d):
     # SI submitted inline in the email body — persists as a tag once the
     # body SI has been materialized, even after a reply BL is ingested.
     si_inline = bool(d.get("generated_si")) or (len(atts) == 0 and bool(extract_inline_si_fields(body)))
+    # Stale escalation on a plain "send the draft BL" request — the
+    # missing-BL lane owns it, not human review.
+    if (verdict_status == "NEEDS_REVIEW" and len(atts) == 0
+            and missing_bl and not corrupted
+            and (verdict or {}).get("review_reason") == "missing_attachment"):
+        verdict_status = None
     det = classify_email_detailed(subj, body, len(atts) > 0)
     category = CLASSIFICATIONS_STORE.get(eid) or det["category"]
     chaser = CHASERS_STORE.get(eid, {})
@@ -4324,6 +4375,7 @@ class ResetRequest(BaseModel):
     wipe_local: bool = True
     wipe_supabase: bool = True
     wipe_threads: bool = True
+    wipe_uploads: bool = True
     dry_run: bool = False
 
 
@@ -4394,6 +4446,141 @@ def _reset_supabase_report(execute: bool):
     return report
 
 
+# Attachment filenames written by /api/stress/upload: u<14-digit ts>_<i>_<j>_<base>
+_UPLOADED_ATT_RX = re.compile(r"^u\d{14}_\d{3}_\d+_")
+
+
+def _reset_uploads_report(execute: bool):
+    """Remove judge-uploaded dataset emails so the inbox returns to the
+    original 520. execute=False only counts (dry run)."""
+    uploaded_ids = set()
+    if os.path.exists(UPLOADS_MANIFEST_PATH):
+        try:
+            with open(UPLOADS_MANIFEST_PATH, 'r', encoding='utf-8') as f:
+                for entry in json.load(f) or []:
+                    uploaded_ids.update(entry.get("emails") or [])
+        except Exception:
+            pass
+    # Anything in the live inbox outside the pristine dataset is added data.
+    original_ids = set()
+    pristine_inbox = os.path.join(os.path.dirname(GROUND_TRUTH_PATH), "inbox")
+    if os.path.isdir(pristine_inbox):
+        original_ids = {f[:-5] for f in os.listdir(pristine_inbox)
+                        if f.endswith(".json")}
+    elif os.path.exists(GROUND_TRUTH_PATH):
+        try:
+            with open(GROUND_TRUTH_PATH, 'r', encoding='utf-8') as f:
+                original_ids = set(json.load(f))
+        except Exception:
+            pass
+    inbox_present = set()
+    if os.path.isdir(INBOX_DIR):
+        inbox_present = {f[:-5] for f in os.listdir(INBOX_DIR)
+                         if f.endswith(".json")}
+    if original_ids:
+        uploaded_ids.update(inbox_present - original_ids)
+
+    # Attachment files owned by the uploaded emails, in both attachment dirs.
+    att_names = set()
+    for eid in uploaded_ids:
+        for d in (INBOX_DIR, STRESS_INBOX_DIR):
+            p = os.path.join(d, f"{eid}.json")
+            if not os.path.exists(p):
+                continue
+            try:
+                with open(p, 'r', encoding='utf-8') as f:
+                    em = json.load(f)
+            except Exception:
+                continue
+            for att in em.get("attachments") or []:
+                att_names.add(os.path.basename(str(att).replace("\\", "/")))
+            for key in ("generated_si", "bl_reply_attachment"):
+                if em.get(key):
+                    att_names.add(os.path.basename(str(em[key]).replace("\\", "/")))
+    att_paths = set()
+    for d in (os.path.join(BUNDLE_DIR, "attachments"),
+              os.path.join(STRESS_DIR, "attachments")):
+        if not os.path.isdir(d):
+            continue
+        for fn in os.listdir(d):
+            stem = fn.rsplit("_SI_from_body", 1)[0].split("_BL_reply_")[0]
+            if fn in att_names or _UPLOADED_ATT_RX.match(fn) or stem in uploaded_ids:
+                att_paths.add(os.path.join(d, fn))
+
+    sgt = _load_stress_gt()
+    ugt = {}
+    if os.path.exists(UPLOADED_GT_PATH):
+        try:
+            with open(UPLOADED_GT_PATH, 'r', encoding='utf-8') as f:
+                ugt = json.load(f)
+        except Exception:
+            ugt = {}
+    sgt_del = {k for k, v in sgt.items()
+               if k in uploaded_ids or k in ugt
+               or (isinstance(v, dict) and v.get("test_type") == "uploaded")}
+
+    email_files = [p for p in
+                   (os.path.join(d, f"{eid}.json")
+                    for eid in uploaded_ids
+                    for d in (INBOX_DIR, STRESS_INBOX_DIR))
+                   if os.path.exists(p)]
+
+    report = {
+        "uploaded_email_ids": len(uploaded_ids),
+        "email_files": len(email_files),
+        "attachment_files": len(att_paths),
+        "stress_gt_rows": len(sgt_del),
+        "uploaded_gt_rows": len(ugt),
+        "inbox_remaining": len(inbox_present - uploaded_ids),
+    }
+    if not execute:
+        report["dry_run"] = True
+        return report
+
+    errors = []
+    for p in email_files + sorted(att_paths):
+        try:
+            os.remove(p)
+        except OSError as e:
+            errors.append(f"{p}: {e}")
+    for eid in uploaded_ids:
+        INBOX_CACHE.pop(eid, None)
+        _DOSSIER_CACHE.pop(eid, None)
+        _STRESS_GT_MAP.pop(eid, None)
+        STRESS_RESULTS.pop(eid, None)
+        for b in (os.path.join(BACKUP_ROOT, "original", eid),
+                  os.path.join(BACKUP_ROOT, eid)):
+            if os.path.isdir(b):
+                shutil.rmtree(b, ignore_errors=True)
+    GETTER_INGESTED_IDS[:] = [i for i in GETTER_INGESTED_IDS
+                              if i not in uploaded_ids]
+    if sgt_del:
+        _atomic_json_dump(STRESS_GT_PATH,
+                          {k: v for k, v in sgt.items() if k not in sgt_del})
+    if os.path.exists(STRESS_RESULTS_PATH):
+        try:
+            with open(STRESS_RESULTS_PATH, 'r', encoding='utf-8') as f:
+                sres = json.load(f)
+            if isinstance(sres, dict):
+                sres = {k: v for k, v in sres.items() if k not in uploaded_ids}
+                _atomic_json_dump(STRESS_RESULTS_PATH, sres)
+        except Exception:
+            pass
+    for f in (UPLOADED_GT_PATH, UPLOADS_MANIFEST_PATH):
+        if os.path.exists(f):
+            try:
+                os.remove(f)
+            except OSError as e:
+                errors.append(f"{f}: {e}")
+    invalidate_cache()
+    if os.path.isdir(INBOX_DIR):
+        report["inbox_remaining"] = len(
+            [f for f in os.listdir(INBOX_DIR) if f.endswith(".json")])
+    if errors:
+        report["errors"] = errors
+    return report
+
+
 @app.post("/api/admin/reset")
 def admin_reset(req: ResetRequest):
     if not req.dry_run and req.confirm != "RESET":
@@ -4404,6 +4591,7 @@ def admin_reset(req: ResetRequest):
     started = time.time()
     local = {}
     supabase = {}
+    uploads = {}
 
     if req.dry_run:
         if req.wipe_local:
@@ -4412,6 +4600,8 @@ def admin_reset(req: ResetRequest):
             local["stores_cleared"] = {k: 0 for k in local["stores"]}
         if req.wipe_supabase:
             supabase = _reset_supabase_report(execute=False)
+        if req.wipe_uploads:
+            uploads = _reset_uploads_report(execute=False)
     else:
         if req.wipe_local:
             local = _reset_local_report(req.wipe_threads)
@@ -4446,6 +4636,8 @@ def admin_reset(req: ResetRequest):
             local["files_deleted"] = files_deleted
         if req.wipe_supabase:
             supabase = _reset_supabase_report(execute=True)
+        if req.wipe_uploads:
+            uploads = _reset_uploads_report(execute=True)
 
     return {
         "status": "ok",
@@ -4453,6 +4645,7 @@ def admin_reset(req: ResetRequest):
         "timestamp": _utcnow(),
         "local": local,
         "supabase": supabase,
+        "uploads": uploads,
         "duration_ms": int((time.time() - started) * 1000),
     }
 

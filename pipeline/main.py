@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import time
 from tqdm import tqdm
 
@@ -10,6 +11,7 @@ from pipeline.ai_engine import (
     extract_fields_tiered,
     comparison_intent,
     analyze_document_image,
+    diagnose_mismatch,
     CORE_FIELDS,
 )
 from pipeline.comparator import compare_fields
@@ -55,6 +57,157 @@ def _evidence_from_comparisons(field_comparisons, si_fields, bl_fields, si_prov,
             entry["confidence"] = comp["confidence"]
         evidence.append(entry)
     return evidence
+
+
+_BOOKING_REF_RE = re.compile(r"\b5[A-Z]{3}-\d{4,6}\b")
+
+def _booking_refs(subject):
+    return set(_BOOKING_REF_RE.findall((subject or "").upper()))
+
+def _related_correspondence(email_data, bundle_dir, max_emails=12):
+    """
+    Collect the rest of the correspondence for a MISMATCH case: every other
+    inbox email from the same sender OR sharing a booking reference
+    (5XXX-NNNNN) in the subject, oldest first. Each entry carries the text
+    of its SI/BL attachments so the adjudicating model sees all previous
+    documents, not just the current pair.
+    """
+    inbox_dir = os.path.join(bundle_dir, "inbox")
+    if not os.path.isdir(inbox_dir):
+        return []
+    cur_id = email_data.get("email_id", "")
+    cur_from = (email_data.get("from") or "").strip().lower()
+    cur_refs = _booking_refs(email_data.get("subject"))
+    related = []
+    for fname in sorted(os.listdir(inbox_dir)):
+        if not fname.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(inbox_dir, fname), "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            continue
+        eid = data.get("email_id", fname[:-5])
+        if eid == cur_id:
+            continue
+        same_sender = bool(cur_from) and (data.get("from") or "").strip().lower() == cur_from
+        if not (same_sender or _booking_refs(data.get("subject")) & cur_refs):
+            continue
+        docs = []
+        for att in data.get("attachments") or []:
+            path = os.path.join(bundle_dir, att)
+            if not os.path.exists(path) or is_image_file(path):
+                continue
+            try:
+                text = extract_text(path)
+            except Exception:
+                continue
+            docs.append({
+                "name": att,
+                "kind": "SI" if is_si_attachment(path, text) else "BL",
+                "text": text,
+            })
+        related.append({
+            "email_id": eid,
+            "from": data.get("from", ""),
+            "subject": data.get("subject", ""),
+            "body": data.get("body", ""),
+            "docs": docs,
+        })
+    related.sort(key=lambda e: e["email_id"])
+    return related[-max_emails:]
+
+def _truncate(text, limit):
+    text = (text or "").strip()
+    return text if len(text) <= limit else text[:limit] + " …[truncated]"
+
+def _thread_replies(email_id):
+    """
+    Inbound/outbound messages captured by the live server's thread tracker
+    (email_threads.json) for this email_id — e.g. the carrier replying with
+    an amended draft BL. Empty when the store does not exist (batch runs).
+    """
+    path = os.path.join(BASE_DIR, "email_threads.json")
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            store = json.load(f)
+    except Exception:
+        return []
+    msgs = store.get(email_id)
+    return msgs if isinstance(msgs, list) else []
+
+def _mismatch_context(email_data, si_doc, bl_doc, si_fields, bl_fields,
+                      defect_fields, field_comparisons, bundle_dir):
+    """
+    Assemble the full case file handed to the adjudicating model: current
+    email + both current documents + extracted fields + flagged mismatches,
+    then all prior correspondence with its SI/BL documents. Prior messages
+    are added newest-first and the oldest are dropped once the prompt-size
+    budget is hit — recent context is the most likely to explain a defect.
+    """
+    parts = [
+        "## CURRENT EMAIL",
+        f"id: {email_data.get('email_id')}\n"
+        f"from: {email_data.get('from')}\n"
+        f"subject: {email_data.get('subject')}\n"
+        f"body:\n{_truncate(email_data.get('body'), 3000)}",
+
+        f"\n## CURRENT SHIPPING INSTRUCTION ({os.path.basename(si_doc.get('path', ''))})",
+        _truncate(si_doc.get("text"), 4000) or "[no text extracted]",
+
+        f"\n## CURRENT DRAFT BILL OF LADING ({os.path.basename(bl_doc.get('path', ''))})",
+        _truncate(bl_doc.get("text"), 4000) or "[no text extracted]",
+
+        "\n## EXTRACTED FIELDS",
+        "SI: " + json.dumps(si_fields, ensure_ascii=False),
+        "BL: " + json.dumps(bl_fields, ensure_ascii=False),
+
+        "\n## FLAGGED MISMATCHES",
+    ]
+    for f in defect_fields:
+        c = field_comparisons.get(f) or {}
+        parts.append(
+            f"- {f}: SI='{c.get('raw_si', si_fields.get(f))}' "
+            f"vs BL='{c.get('raw_bl', bl_fields.get(f))}' — {c.get('reason')}")
+
+    head = "\n".join(parts)
+
+    reply_blocks = []
+    for m in _thread_replies(email_data.get("email_id", "")):
+        att_names = ", ".join(
+            (a.get("filename") if isinstance(a, dict) else str(a))
+            for a in (m.get("attachments") or []))
+        reply_blocks.append(
+            f"\n### [{m.get('direction', 'MSG')}] {m.get('from_addr', '')} "
+            f"({m.get('received_at') or m.get('sent_at') or ''})\n"
+            f"subject: {m.get('subject', '')}\n"
+            f"{_truncate(m.get('body'), 1500)}"
+            + (f"\nattachments: {att_names}" if att_names else ""))
+    if reply_blocks:
+        head += "\n\n## THREAD REPLIES" + "".join(reply_blocks)
+
+    MAX = 24000
+    prior = _related_correspondence(email_data, bundle_dir)
+    tail = []
+    used = len(head)
+    for e in reversed(prior):
+        block_parts = [
+            f"\n### [{e['email_id']}] from: {e['from']} | subject: {e['subject']}",
+            _truncate(e["body"], 1500),
+        ]
+        for d in e["docs"]:
+            block_parts.append(f"-- attachment {d['name']} ({d['kind']}):")
+            block_parts.append(_truncate(d["text"], 2500))
+        block = "\n".join(block_parts)
+        if used + len(block) > MAX:
+            continue
+        tail.insert(0, block)
+        used += len(block)
+    if tail:
+        head += "\n\n## PRIOR CORRESPONDENCE (oldest first)" + "".join(tail)
+    return head
 
 
 def process_email(email_data, bundle_dir=BUNDLE_DIR):
@@ -176,6 +329,16 @@ def process_email(email_data, bundle_dir=BUNDLE_DIR):
     # Precedence: a genuine value-vs-value defect is never swallowed by an
     # escalation; blanks (one-sided or both) go to details/evidence.
     if defect_fields:
+        # Adjudicate the mismatch — Laya triages first; when it cannot
+        # answer, the LLM reviews the whole correspondence (all prior
+        # emails and their SI/BL documents plus this pair) to explain
+        # what could be the issue. The scored verdict stays MISMATCH.
+        context = _mismatch_context(email_data, si_doc, bl_doc, si_fields,
+                                    bl_fields, defect_fields, field_comparisons,
+                                    bundle_dir)
+        details["mismatch_diagnosis"] = diagnose_mismatch(
+            email_data, defect_fields, field_comparisons,
+            si_fields, bl_fields, context)
         return _verdict(category, "MISMATCH", None, True, defect_fields, details), si_fields, bl_fields
 
     if is_missing_val:

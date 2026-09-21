@@ -2414,6 +2414,93 @@
   padding: 16px 20px;
 }
 
+.conv-compose {
+  max-height: 700px;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.conv-compose .email-textarea {
+  min-height: 220px;
+}
+
+.conv-compose-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.conv-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Chat-style quick message bar */
+.conv-chat-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-sunken);
+}
+
+.conv-chat-input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--text-color);
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.conv-chat-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(89, 121, 40, 0.12);
+}
+
+.conv-chat-send {
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: none;
+  background: var(--primary-color);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.conv-chat-send:hover:not(:disabled) {
+  background: #465f1f;
+}
+
+.conv-chat-send:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.conv-chat-notice {
+  padding: 8px 20px;
+  font-size: 0.78rem;
+  border-top: 1px solid var(--line);
+}
+
+.conv-chat-notice.ok {
+  color: var(--ok);
+}
+
+.conv-chat-notice.danger {
+  color: var(--danger);
+}
+
 .conv-stream .thread-list {
   max-height: none;
   overflow: visible;
@@ -2891,6 +2978,11 @@
   grid-template-columns: 1.15fr 0.85fr;
   gap: 20px;
   align-items: flex-start;
+}
+
+/* Conversations: narrow correspondent side panel, wide chat stream */
+.getter-split-view.conv-split-view {
+  grid-template-columns: minmax(260px, 0.7fr) 1.6fr;
 }
 
 /* Ingested Stream Table Card */

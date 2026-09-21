@@ -725,6 +725,167 @@ def comparison_intent(subject, body, sender=""):
     return "OTHER", "fallback"
 
 
+# ── Mismatch adjudication: Laya triage, then Muse with full context ──
+
+_LAYA_MISMATCH_CRITERIA = {
+    "GENUINE_DISCREPANCY": "the draft Bill of Lading truly conflicts with the Shipping Instruction — a real defect that must be corrected before the BL can be approved",
+    "FORMAT_VARIANT": "the values carry the same meaning in a different representation (abbreviation, word order, punctuation, unit formatting)",
+    "EXTRACTION_ARTIFACT": "the apparent difference is caused by OCR, parsing or truncation of the documents, not by the underlying content",
+    "LEGITIMATE_AMENDMENT": "the BL reflects a legitimate amendment or newer instruction already agreed in the email correspondence",
+    "UNCLEAR": "the cause of the mismatch cannot be determined from the documents alone",
+}
+
+def _laya_diagnose_mismatch(email_data, defect_fields, field_comparisons,
+                            si_fields, bl_fields):
+    """
+    One Laya choice question over the flagged mismatch. Returns (choice,
+    confidence) or (None, 0.0) when the neural tier is unavailable, errors,
+    or answers outside the criteria space.
+    """
+    agent = get_laya_agent()
+    if agent is None:
+        return None, 0.0
+    mismatches = {
+        f: {"si": (field_comparisons.get(f) or {}).get("raw_si", si_fields.get(f)),
+            "bl": (field_comparisons.get(f) or {}).get("raw_bl", bl_fields.get(f))}
+        for f in (defect_fields or [])
+    }
+    state = {
+        "subject": email_data.get("subject", ""),
+        "body": (email_data.get("body") or "")[:1500],
+        "from": email_data.get("from", ""),
+        "mismatched_fields": mismatches,
+        "si_fields": si_fields,
+        "bl_fields": bl_fields,
+    }
+    try:
+        res = agent.system_one(state, {
+            "mismatch": {
+                "type": "choice",
+                "instructions": "An automated audit flagged field mismatches between a Shipping Instruction and the draft Bill of Lading. What most likely explains the differences?",
+                "criteria": _LAYA_MISMATCH_CRITERIA,
+            }
+        })
+        ans = (res.get("answers") or {}).get("mismatch") or {}
+        choice = str(ans.get("choice") or "").strip().upper()
+        conf = float(ans.get("confidence") or 0.0)
+        if choice in _LAYA_MISMATCH_CRITERIA:
+            return choice, conf
+        return None, conf
+    except Exception as e:
+        print(f"[LAYA] mismatch diagnosis error: {e}", flush=True)
+        return None, 0.0
+
+def _llm_diagnose_mismatch(context):
+    prompt = f"""You are a senior shipping-documentation auditor at a freight forwarder.
+
+An automated check compared a customer's Shipping Instruction (SI) against the carrier's draft Bill of Lading (BL) and flagged field mismatches. You are given the ENTIRE case file: the current email and both attached documents, the extracted fields, the flagged differences, and every earlier email and document in this correspondence.
+
+Read everything before answering — earlier messages may contain an amended SI, a corrected draft, a booking change, or an explanation that accounts for the difference.
+
+CASE FILE:
+{context}
+
+Task: figure out what could be the issue behind the mismatch.
+- Is it a genuine discrepancy the carrier must fix (a wrong value carried into the BL)?
+- A formatting or wording variant of the same value?
+- A legitimate amendment already agreed earlier in the thread?
+- An extraction/OCR artifact of the automated pipeline?
+
+Output strictly as JSON:
+{{
+  "diagnosis": "one of: genuine_discrepancy | format_variant | legitimate_amendment | extraction_artifact | unclear",
+  "explanation": "2-4 sentences naming the specific evidence (quote the conflicting field values and which email or document supports your reading)",
+  "suggested_action": "one concrete next step for the ops team"
+}}"""
+    client = get_nvidia_client()
+    res = _chat_with_retry(
+        client,
+        model=MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        # Reasoning models burn most of the budget on chain-of-thought —
+        # the JSON answer only appears at the very end, so keep headroom.
+        max_tokens=6000,
+        temperature=0.0
+    )
+    msg = res.choices[0].message
+    content = ((msg.content or "") or (getattr(msg, "reasoning_content", "") or "")).strip()
+    if content.startswith("```json"):
+        content = content[7:]
+    if content.startswith("```"):
+        content = content[3:]
+    if content.endswith("```"):
+        content = content[:-3]
+    # Reasoning models may wrap the JSON in chain-of-thought or prose —
+    # extract the outermost object literal before parsing.
+    start, end = content.find("{"), content.rfind("}")
+    if start != -1 and end > start:
+        content = content[start:end + 1]
+    try:
+        return json.loads(content.strip(), strict=False)
+    except Exception:
+        pass
+    # Salvage a token-budget-truncated reply: pull each field out
+    # individually so a cut mid-JSON still yields the conclusion.
+    out = {}
+    for key in ("diagnosis", "explanation", "suggested_action"):
+        m = re.search(rf'"{key}"\s*:\s*"((?:[^"\\]|\\.)*)', content)
+        if m:
+            out[key] = m.group(1).rstrip('",} \n')
+    if out.get("explanation"):
+        return out
+    cleaned = re.sub(r'\\(?![/"\\bfnrtu])', r'\\\\', content.strip())
+    return json.loads(cleaned, strict=False)
+
+def diagnose_mismatch(email_data, defect_fields, field_comparisons,
+                      si_fields, bl_fields, context):
+    """
+    Adjudicate a flagged MISMATCH. Returns a dict
+    {verdict, explanation, suggested_action, confidence, provenance}
+    where provenance is 'laya' | 'model' | 'fallback'.
+
+    Tier 1 — Laya classifies the mismatch type; a confident non-UNCLEAR
+    answer owns the diagnosis outright.
+    Tier 2 — the LLM reviews the whole correspondence (all prior emails and
+    their SI/BL documents plus the current pair) and explains what could be
+    the issue. A sub-threshold Laya answer still beats the blind fallback.
+    """
+    laya_choice, laya_conf = _laya_diagnose_mismatch(
+        email_data, defect_fields, field_comparisons, si_fields, bl_fields)
+    if laya_choice and laya_choice != "UNCLEAR" and laya_conf >= LAYA_MIN_CONFIDENCE:
+        return {
+            "verdict": laya_choice,
+            "explanation": _LAYA_MISMATCH_CRITERIA[laya_choice],
+            "suggested_action": None,
+            "confidence": round(laya_conf, 3),
+            "provenance": "laya",
+        }
+
+    if AI_FALLBACK_ENABLED:
+        try:
+            reply = _cached_llm("diagnose", context,
+                                lambda: _llm_diagnose_mismatch(context))
+            if isinstance(reply, dict) and reply.get("explanation"):
+                return {
+                    "verdict": str(reply.get("diagnosis") or "unclear").upper(),
+                    "explanation": reply["explanation"],
+                    "suggested_action": reply.get("suggested_action"),
+                    "confidence": round(laya_conf, 3) if laya_conf else None,
+                    "provenance": "model",
+                }
+        except Exception as e:
+            print(f"Mismatch diagnosis error: {e}")
+
+    return {
+        "verdict": laya_choice or "UNCLEAR",
+        "explanation": (_LAYA_MISMATCH_CRITERIA.get(laya_choice)
+                       or "Could not determine the cause of the mismatch automatically."),
+        "suggested_action": "Route to a human reviewer.",
+        "confidence": round(laya_conf, 3) if laya_conf else None,
+        "provenance": "fallback",
+    }
+
+
 def _image_to_data_uri(image_path, max_dim=1600):
     """
     Load a photo/scan, downscale it (vision tokens + NIM payload limits),
