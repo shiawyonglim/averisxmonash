@@ -1,0 +1,10 @@
+{
+  "email_id": "ood_010",
+  "from": "export-ops@velum-logistics.example",
+  "subject": "Compare SI vs draft BL — TPEB-00922",
+  "body": "Please verify the two attached documents.",
+  "attachments": [
+    "attachments/ood_010_SI.txt",
+    "attachments/ood_010_BL.txt"
+  ]
+}

@@ -1,0 +1,26 @@
+# Render.com blueprint — backend web service
+# Dashboard: New > Blueprint > point at this repo, then set env vars
+# from .env.example (NVIDIA_API_KEY is the only hard requirement).
+services:
+  - type: web
+    name: sdoc-verification-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/config
+    envVars:
+      - key: AI_FALLBACK
+        value: "1"
+      - key: AI_MAX_CALLS
+        value: "30"
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: NVIDIA_BASE_URL
+        value: https://integrate.api.nvidia.com/v1
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false

@@ -1,0 +1,9 @@
+DRAFT BILL OF LADING
+========================================
+Despatching Firm: NORDPULP GMBH
+Cnee: HORIZON CARTON INC
+Notify To: HORIZON CARTON INC
+Loading Wharf: ANTWERP, BELGIUM (BEANR)
+Unload Port: NEW YORK, US (USNYC)
+Qty of Cntrs: 3 x 40'HC
+G.W.: 61,300 KG

@@ -1,0 +1,10 @@
+{
+  "email_id": "ood_006",
+  "from": "export-ops@velum-logistics.example",
+  "subject": "SI + BL for checking — TPEB-00918",
+  "body": "Attached SI and draft BL for verification.",
+  "attachments": [
+    "attachments/ood_006_SI.txt",
+    "attachments/ood_006_BL.txt"
+  ]
+}

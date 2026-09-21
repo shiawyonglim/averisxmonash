@@ -15,6 +15,32 @@ MODEL = (os.getenv("AI_MODEL") or os.getenv("KIMI_MODEL")
 # degrades to "value not extracted" / "GENERAL" rather than silently matching.
 AI_FALLBACK_ENABLED = os.getenv("AI_FALLBACK", "1").lower() not in ("0", "false", "no")
 
+# Hard cap on live (uncached) LLM calls per process. Cache reads are free —
+# only calls that would actually hit the network count. Once exhausted the
+# engine behaves exactly as if AI_FALLBACK were disabled: extraction blanks
+# stay 'missing', classification returns GENERAL/'fallback', intent returns
+# OTHER/'fallback'.
+AI_MAX_CALLS = int(os.getenv("AI_MAX_CALLS", "30"))
+_LLM_CALL_COUNT = 0
+_LLM_BUDGET_LOGGED = False
+
+def _budget_gate():
+    """
+    Consume one unit of the live-LLM budget. Returns True while calls may hit
+    the network; False once AI_MAX_CALLS is exhausted — the caller must then
+    take its deterministic fallback path. Logs exactly once when the budget
+    trips.
+    """
+    global _LLM_CALL_COUNT, _LLM_BUDGET_LOGGED
+    if _LLM_CALL_COUNT >= AI_MAX_CALLS:
+        if not _LLM_BUDGET_LOGGED:
+            _LLM_BUDGET_LOGGED = True
+            print(f"AI call budget exhausted (AI_MAX_CALLS={AI_MAX_CALLS}); "
+                  "remaining requests degrade to deterministic fallback.")
+        return False
+    _LLM_CALL_COUNT += 1
+    return True
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _LLM_CACHE_PATH = os.path.join(BASE_DIR, ".cache", "llm_cache.json")
 _LLM_CACHE = None
@@ -40,6 +66,8 @@ def _cached_llm(task, text, call_fn):
     cache = _llm_cache()
     if key in cache:
         return cache[key]
+    if not _budget_gate():
+        return None
     result = call_fn()
     if result is not None:
         cache[key] = result
@@ -338,10 +366,28 @@ Output only the category name."""
         client,
         model=MODEL,
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=16,
+        # Reasoning models (e.g. meta/muse-glimmer-30b) spend tokens on
+        # chain-of-thought before emitting content — a tiny budget starves
+        # the actual answer (content='' with finish_reason='length').
+        max_tokens=512,
         temperature=0.0
     )
-    return (res.choices[0].message.content or "").strip()
+    msg = res.choices[0].message
+    content = (getattr(msg, "content", None) or "").strip()
+    if content:
+        return content
+    # Budget exhausted by reasoning: the chain-of-thought usually names the
+    # final category near the end, so scan reasoning_content for the LAST
+    # valid-category mention (the conclusion), not the first (the model
+    # often restates the category list from the prompt up front).
+    reasoning = getattr(msg, "reasoning_content", "") or ""
+    best_cat, best_pos = "", -1
+    for cat in VALID_CATEGORIES:
+        for variant in (cat, cat.replace("_", " ")):
+            pos = reasoning.upper().rfind(variant)
+            if pos > best_pos:
+                best_cat, best_pos = cat, pos
+    return best_cat or reasoning.strip()
 
 def classify_email_with_provenance(subject, body, has_attachments):
     """
@@ -359,9 +405,15 @@ def classify_email_with_provenance(subject, body, has_attachments):
                             lambda: _llm_classify(subject, body))
         if reply:
             normalized = reply.strip().upper()
+            # Reasoning content can echo the whole category list before the
+            # conclusion — take the LAST word-bounded category mention.
+            best_cat, best_idx = None, -1
             for valid in VALID_CATEGORIES:
-                if valid in normalized:
-                    return valid, "model"
+                for m in re.finditer(rf"\b{valid}\b", normalized):
+                    if m.start() > best_idx:
+                        best_cat, best_idx = valid, m.start()
+            if best_cat:
+                return best_cat, "model"
     except Exception as e:
         print(f"Classification error: {e}")
     return "GENERAL", "fallback"
@@ -500,10 +552,14 @@ Output only the label."""
         client,
         model=MODEL,
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=16,
+        max_tokens=512,
         temperature=0.0
     )
-    return (res.choices[0].message.content or "").strip()
+    msg = res.choices[0].message
+    # Reasoning models (e.g. muse-glimmer) emit chain-of-thought in
+    # reasoning_content and may leave content empty when truncated —
+    # scan it too so the answer isn't lost.
+    return ((msg.content or "") or (getattr(msg, "reasoning_content", "") or "")).strip()
 
 def comparison_intent(subject, body):
     """
@@ -527,10 +583,17 @@ def comparison_intent(subject, body):
             reply = _cached_llm("intent", f"{subject}\n{body}",
                                 lambda: _llm_comparison_intent(subject, body))
             if reply:
-                normalized = reply.strip().upper()
+                normalized = reply.strip().upper().replace(" ", "_")
+                # Reasoning text echoes the label list before concluding —
+                # take the LAST word-bounded occurrence (not the first,
+                # and not inside words like "ANOTHER").
+                best, best_idx = None, -1
                 for label in ("REQUEST_DOCS", "COMPARE_NOW", "OTHER"):
-                    if label in normalized:
-                        return label, "model"
+                    for m in re.finditer(rf"\b{label}\b", normalized):
+                        if m.start() > best_idx:
+                            best, best_idx = label, m.start()
+                if best:
+                    return best, "model"
         except Exception as e:
             print(f"Intent classification error: {e}")
     return "OTHER", "fallback"
@@ -562,6 +625,14 @@ def analyze_document_image(image_path):
       fields -> the same 7-field dict produced by extract_shipping_fields
       meta   -> {"document_type", "legibility", "transcription"}
     """
+    # Vision pass is a live LLM call — skipped when the fallback flag is off
+    # or the AI_MAX_CALLS budget is exhausted (degrades to 'unreadable').
+    if not AI_FALLBACK_ENABLED or not _budget_gate():
+        return {
+            "shipper": "ERROR", "consignee": "ERROR", "notify_party": "ERROR",
+            "port_of_loading": "ERROR", "port_of_discharge": "ERROR",
+            "container_count": "ERROR", "gross_weight_kg": "ERROR"
+        }, {"document_type": "OTHER", "legibility": "ILLEGIBLE", "transcription": ""}
     client = get_nvidia_client()
     prompt = """
     You are an expert shipping document digitizer. The image shows a paper
@@ -644,10 +715,26 @@ def analyze_document_image(image_path):
         }, {"document_type": "OTHER", "legibility": "ILLEGIBLE", "transcription": ""}
 
 
+def _reasoning_fallback(defect_fields):
+    """Deterministic reasoning text used when the LLM is unavailable."""
+    if defect_fields:
+        return {
+            "thoughts": "Evaluated all 7 fields against shipping standards. Identified genuine discrepancy in the highlighted fields.",
+            "summary_reason": f"Discrepancy detected in: {', '.join(defect_fields)}."
+        }
+    return {
+        "thoughts": "Evaluated all 7 fields including negotiable phrasing, port designations, and packaging units. All operational details correspond accurately.",
+        "summary_reason": "All 7 critical shipping fields match accurately."
+    }
+
 def reason_and_verify_with_ai(si_data, bl_data, defect_fields, is_missing_value, field_comparisons):
     """
     Uses NVIDIA NIM to formulate a reasoned explanation and thought process before finalizing.
     """
+    # Live LLM call — skipped when AI_FALLBACK is off or the AI_MAX_CALLS
+    # budget is exhausted; the deterministic wording is used instead.
+    if not AI_FALLBACK_ENABLED or not _budget_gate():
+        return _reasoning_fallback(defect_fields)
     client = get_nvidia_client()
     prompt = f"""
     You are a senior maritime shipping auditor reviewing an automated comparison between a Shipping Instruction (SI) and a Bill of Lading (BL).
@@ -704,13 +791,4 @@ def reason_and_verify_with_ai(si_data, bl_data, defect_fields, is_missing_value,
             return json.loads(cleaned, strict=False)
     except Exception as e:
         print(f"Reasoning error: {e}")
-        if defect_fields:
-            return {
-                "thoughts": "Evaluated all 7 fields against shipping standards. Identified genuine discrepancy in the highlighted fields.",
-                "summary_reason": f"Discrepancy detected in: {', '.join(defect_fields)}."
-            }
-        else:
-            return {
-                "thoughts": "Evaluated all 7 fields including negotiable phrasing, port designations, and packaging units. All operational details correspond accurately.",
-                "summary_reason": "All 7 critical shipping fields match accurately."
-            }
+        return _reasoning_fallback(defect_fields)

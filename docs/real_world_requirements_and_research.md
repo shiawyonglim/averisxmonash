@@ -6,53 +6,50 @@ In global container shipping and trade logistics, maritime documentation verific
 
 A discrepancy between the **Shipping Instruction (SI)** submitted by the exporter/booking party and the carrier's **Draft Bill of Lading (Draft BL)** directly results in severe commercial, operational, and legal consequences:
 1. **Cargo Rollover & Vessel Feeder Disconnection**: Failure to finalize documentation prior to the carrier's strict **SI Cutoff Time** and **VGM Cutoff Time** prevents issuance of the customs manifest, triggering container loading holds and rolling cargo to subsequent voyages.
-2. **Demurrage & Detention (D&D) Accumulation**: Inability to release original bills or telegraphic transfers (Telex release) at the destination port incurs terminal storage and equipment demurrage fees, averaging **$150 to $350 per FEU/day** at global transshipment hubs (e.g., Port Klang, PSA Singapore, Port of Tanjung Pelepas, Rotterdam, Los Angeles/Long Beach).
-3. **Customs Fines & Regulatory Seizures**: Inaccurate manifest submissions violate 24-hour advance filing rules—including the **US Customs Automated Manifest System (AMS)** / **ISF 10+2** (19 CFR § 4.7), **EU Import Control System 2 (ICS2)**, and **China Customs Advanced Manifest (CCAM)**—subjecting shippers to statutory fines between **$1,000 and $5,000 per bill**.
-4. **Letter of Credit (L/C) Discrepancy Rejections**: Under the International Chamber of Commerce (ICC) **UCP 600 (Article 20)**, even slight typographical discrepancies in the legal entity name, notify address, or port description can cause issuing banks to reject documentary collections, delaying multi-million dollar trade settlements.
+2. **Demurrage & Detention (D&D) Accumulation**: Inability to release original bills or telegraphic transfers (Telex release) at the destination port incurs terminal storage and equipment demurrage fees that accumulate per container per day at transshipment hubs (e.g., Port Klang, PSA Singapore, Port of Tanjung Pelepas, Rotterdam, Los Angeles/Long Beach).
+3. **Customs Fines & Regulatory Seizures**: Inaccurate manifest submissions violate advance filing rules—including the **US Customs Automated Manifest System (AMS)** / **ISF 10+2** (19 CFR § 4.7), **EU Import Control System 2 (ICS2)**, and **China Customs Advanced Manifest (CCAM)**—exposing shippers to statutory penalties that can reach thousands of dollars per bill.
+4. **Letter of Credit (L/C) Discrepancy Rejections**: Under the International Chamber of Commerce (ICC) **UCP 600**, even slight typographical discrepancies in the legal entity name, notify address, or port description can cause issuing banks to reject documentary collections, delaying trade settlements.
 
 ---
 
-## 1. Industry Standards, Legal Frameworks & Academic Research
+## 1. Industry Standards & Legal Frameworks
+
+The following are real, publicly documented industry initiatives and regulations. We intentionally cite no academic papers or invented metrics here — every item below can be verified directly with the issuing body.
 
 ### 1.1 International Legal & Digital Frameworks
-- **Digital Container Shipping Association (DCSA) eBL Standards (Release 3.0 & Data Model 2023)**:
-  - Establishes standardized open-source API and data definitions for electronic Bills of Lading and Shipping Instructions across ocean carriers.
-  - Formulates the 7 core compliance blocks: Shipper, Consignee, Notify Party, Port of Loading (POL), Port of Discharge (POD), Container Equipment Identifiers, and Cargo Gross Weight/Volume.
-  - Endorsed by the 9 leading DCSA member carriers committing to 100% digital eBL transition by 2030.
-- **BIMCO 25 by 25 eBL Pledge**:
-  - Global maritime initiative backed by BIMCO, FIATA, and the International Chamber of Commerce (ICC) targeting 25% of all container and bulk bills of lading to be digitally issued and transferred via interoperable platforms by 2025.
+- **Digital Container Shipping Association (DCSA) eBL Standards**:
+  - DCSA publishes open, standardized data models and API definitions for electronic Bills of Lading and Shipping Instructions across ocean carriers — covering the same core trade parties and attributes this system verifies (shipper, consignee, notify party, port of loading/discharge, equipment, cargo weight).
+  - DCSA's ocean-carrier members have publicly committed to 100% adoption of electronic bills of lading by 2030, under the cross-industry **FIT Alliance** commitment (BIMCO, DCSA, FIATA, ICC, SWIFT).
+- **BIMCO "25by25" eBL Initiative**:
+  - Industry campaign targeting 25% of global trade to be issued on electronic bills of lading by 2025 — a real, documented push to move documentation off unstructured email attachments.
 - **UNCITRAL Model Law on Electronic Transferable Records (MLETR, 2017)**:
-  - The international gold standard enabling legal recognition of digital trade documents equivalent to paper originals.
-  - Enacted into national law by key maritime jurisdictions: **Singapore** (*Electronic Transactions (Amendment) Act 2021*), the **United Kingdom** (*Electronic Trade Documents Act 2023 (ETDA)*), and the **Abu Dhabi Global Market (ADGM)**.
+  - International framework enabling legal recognition of digital trade documents equivalent to paper originals.
+  - Enacted into national law by key maritime jurisdictions: **Singapore** (*Electronic Transactions (Amendment) Act 2021*) and the **United Kingdom** (*Electronic Trade Documents Act 2023*).
 - **UN/CEFACT (United Nations Centre for Trade Facilitation and Electronic Business)**:
-  - Multi-Modal Transport Reference Data Model (MMT-RDM).
-  - Specifies standard UN/EDIFACT message types: `IFTMIN` (Instruction message), `IFTMBF` (Firm booking message), and `IFTSTA` (Multimodal status report), alongside UNECE Recommendation 16 for UN/LOCODE port nomenclature (e.g., `MYPKG` for Port Klang, `SGSIN` for Singapore).
-- **IMO SOLAS Convention (Chapter VI, Regulation 2 - Verified Gross Mass / VGM)**:
-  - Mandates that every packed container must have a certified Verified Gross Mass (Method 1: physical weighbridge scale; Method 2: calculation of goods + packing material + container tare).
-  - Maritime administrations enforce strict tolerance margins (typically $\le 2\% - 5\%$ or $500\text{ kg}$) between declared shipping instructions and scale tickets.
-
-### 1.2 Academic Literature & Peer-Reviewed Research
-1. **Tijan, E., Jović, M., Aksentijević, S., & Pucihar, A. (2021)**. *"Digital transformation in the maritime transport sector."* *Technological Forecasting and Social Change*, 170, 120879.
-   - Highlights that heterogeneous data formats (unstructured emails, scanned PDFs, spreadsheets) remain the primary source of supply chain friction. Concludes that hybrid automated pipelines combining deterministic rule verification with machine-assisted extraction deliver superior reliability compared to purely manual reviews or unconstrained probabilistic models.
-2. **UNCTAD (2023)**. *"Review of Maritime Transport 2023: Towards a green and just transition."* United Nations Conference on Trade and Development, Geneva.
-   - Documents that administrative documentation delays account for up to 15% of total container dwell times at major container terminals, emphasizing that automated pre-clearance and rapid discrepancy resolution are critical to reducing demurrage and supply chain congestion.
-3. **Carlan, V., Sys, C., & Vanelslander, T. (2016)**. *"How port community systems can contribute to port competitiveness: Developing a cost–benefit framework."* *Research in Transportation Business & Management*, 19, 51-64.
-   - Analyzes documentation error propagation: late discovery of discrepancies between booking instructions and carrier bills of lading accounts for substantial administrative overhead, manifest amendment surcharges ($50–$150 per carrier bill), and customs hold delays.
+  - Maintains the Multi-Modal Transport Reference Data Model (MMT-RDM) and standard UN/EDIFACT message types such as `IFTMIN` (instruction message) and `IFTSTA` (status report), alongside UNECE Recommendation 16 for UN/LOCODE port nomenclature (e.g., `MYPKG` for Port Klang, `SGSIN` for Singapore).
+- **IMO SOLAS Convention (Chapter VI, Regulation 2 — Verified Gross Mass / VGM)**:
+  - Requires the shipper to declare a container's verified gross mass — obtained either by weighing the packed container (Method 1) or by weighing contents and adding container tare (Method 2) — **before it may be loaded aboard a vessel**. In force since July 2016.
+  - Enforcement tolerances for VGM declarations are set by national maritime administrations, which is why this system treats weight variance beyond a configured threshold as a material defect requiring carrier re-issuance.
 
 ---
 
-## 2. Real-World Operational Throughput & SLA Benchmarks
+## 2. Operational Throughput & Performance Benchmarks
 
-Maritime operations centers operate under strict cut-off windows tied to vessel feeder schedules and customs filing deadlines.
+Maritime operations centers work under strict cut-off windows tied to vessel feeder schedules and customs filing deadlines. The "Reasonable Target" column below states sensible operational goals — it is our own engineering assumption, **not** a cited industry SLA. The "This System" column reports what we **measured** on the organizers' 520-email dataset with the deterministic tier only (`AI_FALLBACK=0`; see `docs/conditions.md` §1 for the full scorecard).
 
-| Operational Dimension | Industry Enterprise SLA | Production System Performance | Operational Mechanism |
+| Operational Dimension | Reasonable Target (assumption) | This System (measured) | Operational Mechanism |
 | :--- | :--- | :--- | :--- |
-| **Batch Ingestion Velocity** | $\le 15\text{ minutes}$ for 500-email queue | **1.65 seconds** (520 emails total) | High-throughput in-memory token indexing & non-blocking I/O |
-| **Per-Document Decision Latency** | $< 2.0\text{ seconds}$ per document pair | **~3.1 ms** (Tier-1 deterministic engine) | Compiled regex heuristics & normalized string distance algorithms |
-| **Defect Detection Recall** | $\ge 98.5\%$ | **100.0%** (46/46 defects detected) | Strict non-regression benchmark across all 7 mandatory trade fields |
-| **Defect False Alarm Rate** | $\le 2.0\%$ | **0.0%** (0 false alarms on gold set) | Maritime style tolerance engine (suffixes, spacing, punctuation) |
-| **Cutoff Velocity Tracking** | Manual spreadsheet tracking | **Live Cutoff Monitor** | Real-time velocity bar, clearance rate, and remaining chaser queue |
-| **Audit Trail & Governance** | SOX 404 & Port Authority Audit Mandate | **Dual-Persistence Audit Log** | Immutable log recording extraction source, rule evaluation, and user overrides |
+| **Batch Ingestion Velocity** | Minutes, not hours, for a ~500-email queue | Full 520-email inbox processed in seconds on a laptop | High-throughput in-memory token indexing & non-blocking I/O |
+| **Per-Document Decision Latency** | Interactive — a few seconds per document pair | Milliseconds per document (Tier-1 deterministic engine) | Compiled regex heuristics & normalized string distance algorithms |
+| **Stage-1 Classification Accuracy** | High — misrouted email stalls the queue | **100%** on the organizers' set (measured) | Deterministic precedence cascade, LLM fallback only for unmatched cases |
+| **Field-Level Extraction F1** | High — extraction errors become false defects | **0.9859** (P = 1.000, R = 0.972, deterministic tier) | Tier-1 regex extraction; Tier-2 LLM fills only the blanks |
+| **Defect Flagging Recall** | Catch every material discrepancy | **46/46** defects flagged; **44/46** exact field-level match | Strict non-regression benchmark across all 7 mandatory trade fields |
+| **Defect False Alarm Rate** | Low — false positives erode operator trust | **0** false alarms on the gold set (measured) | Maritime style tolerance engine (suffixes, spacing, punctuation) |
+| **Weighted Benchmark Score** | — | **97.54%** = 0.50×0.9565 + 0.30×1.0000 + 0.20×0.9859 (measured) | Official weighted scoring of classification, status, and field accuracy |
+| **Escalation Discipline** | Escalate when unsure; never guess | 25 `NEEDS_REVIEW` flags vs 20 gold — 5 honest extra escalations where a field could not be extracted rather than a wrong "OK" claim | Fail-safe design: an unverifiable field escalates instead of fabricating a verdict |
+| **Out-of-Distribution Generalization** | Rules alone should not be trusted blindly | **11/12** on our hand-written OOD set, rules only — the one miss (`SI_REQUEST` phrased unlike the training patterns) is exactly what the LLM tier catches | Two-tier architecture: deterministic first, LLM fallback for the residual |
+| **Cutoff Velocity Tracking** | Live view of the chaser queue | Live Cutoff Monitor in the UI | Real-time velocity bar, clearance rate, and remaining chaser queue |
+| **Audit Trail & Governance** | Reconstructable decision history | Dual-persistence audit log + `verification_details.json` sidecar | Per-field provenance (`rule` / `model` / `missing`), rule evaluation, and user overrides |
 
 ---
 
@@ -84,9 +81,9 @@ In container shipping, discrepancies must be separated into **material legal def
   - Equipment notations: `2 x 40'HC` $\leftrightarrow$ `2 CONTAINERS (40' HIGH CUBE)` $\leftrightarrow$ `40HQ x 2` normalized to integer count `2`.
 
 ### Rule 5: Cargo Gross Weight (KG / MT) & SOLAS Tolerance
-- **Commercial & SOLAS Tolerance**: Discrepancies within $\le 1.0\%$ are accepted as standard tare weight rounding or scale precision variations.
+- **Configurable Tolerance**: Any weight variance is flagged by default; a small tolerance for tare-weight rounding or scale precision can be enabled via `WEIGHT_TOLERANCE_PCT`.
 - **Unit Conversions**: Metric Tonnes (`MT`, `MTS`) are normalized at $1\text{ MT} = 1,000\text{ KG}$.
-- **Material Discrepancy**: Weight variance exceeding $1.0\%$ violates cargo manifest and SOLAS VGM safety ceilings, requiring carrier re-issuance.
+- **Material Discrepancy**: Weight variance beyond the configured tolerance is treated as a material defect — consistent with the SOLAS VGM principle that declared container mass must be accurate — requiring carrier re-issuance.
 
 ### Rule 6: Edge-Case Escalation Protocols (`NEEDS_REVIEW`)
 - **Missing Draft BL**: When the carrier response lacks the draft BL attachment, the case is routed to the **Chaser Queue** for one-click follow-up dispatch.

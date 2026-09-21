@@ -2,6 +2,7 @@
 .env
 .env.*
 *.env
+!.env.example
 kimik3.txt
 muse-glimmer.txt
 glm5-3.txt
@@ -58,3 +59,14 @@ server_smoke.log
 
 # LLM response cache
 .cache/
+
+# Organizers' answer key + data generator (kept on disk for local scoring,
+# never committed to a public submission repo)
+sdoc-hackathon-docker/data_v2/ground_truth.json
+sdoc-hackathon-docker/data_v2/generate.py
+sdoc-hackathon-docker/data_v2/edgecases.py
+sdoc-hackathon-docker/data_v2/pools.py
+sdoc-hackathon-docker/data_v2/render.py
+sdoc-hackathon-docker/data_v2/emails.py
+sdoc-hackathon-docker/data_v2/shipment.py
+sdoc-hackathon-docker/data_v2/README.md

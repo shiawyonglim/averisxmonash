@@ -1,0 +1,9 @@
+DRAFT BILL OF LADING
+========================================
+Despatching Firm: AURUM FIBRE AG
+Cnee: POLESTAR PACKAGING PTY LTD
+Notify To: POLESTAR PACKAGING PTY LTD
+Loading Wharf: HAMBURG, GERMANY (DEHAM)
+Unload Port: SINGAPORE (SGSIN)
+Qty of Cntrs: 6 x 40'HC
+G.W.: 122.54 MT

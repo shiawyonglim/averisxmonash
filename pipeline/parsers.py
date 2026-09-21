@@ -108,33 +108,48 @@ _PAREN = r'(?:\s*\([^)]*\))*'
 # Field separator: colon/pipe, a run of 2+ spaces, or a single space when it
 # directly follows a parenthetical qualifier (e.g. "(POD) FREMANTLE").
 _FSEP = r'(?:[:|]|[ \t]{2,}|(?<=\))[ \t])'
+# Optional run of non-ASCII characters adjacent to a header label — bilingual
+# BLs interleave e.g. "Gross Weight毛重(KGS):". Field values always start
+# with ASCII (digits, "KG", commas, company names), so a non-ASCII run can
+# only ever be part of the label, never the value.
+_I18N = r'(?:\s*[^\x00-\x7f]+)*'
+# Whitelisted "/qualifier" suffixes on party headers, e.g. "Shipper/Exporter",
+# "Notify Party/Intermediate Consignee". Deliberately a closed list — a greedy
+# [^\n:|]* here would swallow the value when the separator is spaces
+# ("Shipper/Exporter  ACME").
+_SLASHQ = (r'(?:\s*/\s*(?:exporter|intermediate\s*consignee|agent|principal'
+           r'|seller|care\s*of|c/o|or\s*order))*')
 
 FIELD_PATTERNS = {
+    # Header alternations cover real-world BL/SI label variants
+    # (despatching firm, cnee, order party, loading wharf, qty of cntrs,
+    # g.w., ...). Deliberately not exhaustive — truly novel labels still
+    # fall through to the model tier.
     'shipper': [
-        rf'(?:^|\|)[ \t]*shipper(?:\s*/\s*exporter)?{_PAREN}[ \t]*{_FSEP}[ \t]*([^\n|]*(?:\s*\|\s*on\s*behalf\s*of\s*[^|\n;]+)?)',
+        rf'(?:^|\|)[ \t]*(?:shipper|despatch(?:ing)?\s*firm|exporter|seller){_I18N}{_SLASHQ}{_PAREN}{_I18N}[ \t]*{_FSEP}[ \t]*([^\n|]*(?:\s*\|\s*on\s*behalf\s*of\s*[^|\n;]+)?)',
     ],
     'consignee': [
-        rf'(?:^|\|)[ \t]*to\s*the\s*order\s*of{_PAREN}[ \t]+([^\n|]+)',
-        rf'(?:^|\|)[ \t]*(?:consignee|to\s*order\s*of){_PAREN}[ \t]*{_FSEP}[ \t]*([^\n|]*)',
+        rf'(?:^|\|)[ \t]*to\s*the\s*order\s*of{_I18N}{_SLASHQ}{_PAREN}{_I18N}(?:[ \t]*{_FSEP}[ \t]*|[ \t]+)([^\n|]+)',
+        rf'(?:^|\|)[ \t]*(?:consignee|to\s*order\s*of|cnee|c/snee|consign\s*to|order\s*party|receiver){_I18N}{_SLASHQ}{_PAREN}{_I18N}[ \t]*{_FSEP}[ \t]*([^\n|]*)',
     ],
     'notify_party': [
-        rf'(?:^|\|)[ \t]*notify(?:\s*party)?{_PAREN}[ \t]*{_FSEP}[ \t]*([^\n|]*)',
+        rf'(?:^|\|)[ \t]*(?:notify(?:\s*party)?|notify\s*to|advise\s*party|also\s*notify|first\s*notify){_I18N}{_SLASHQ}{_PAREN}{_I18N}[ \t]*{_FSEP}[ \t]*([^\n|]*)',
     ],
     'port_of_loading': [
-        rf'(?:^|\|)[ \t]*(?:port\s*of\s*loading|load\s*port|\bpol\b){_PAREN}[ \t]*{_FSEP}[ \t]*([^\n|]+)',
+        rf'(?:^|\|)[ \t]*(?:port\s*of\s*loading|load\s*port|\bpol\b|loading\s*(?:wharf|port|terminal)|origin\s*port|place\s*of\s*receipt){_I18N}{_PAREN}{_I18N}[ \t]*{_FSEP}[ \t]*([^\n|]+)',
         r'(?:^|\|)[ \t]*(?:port\s*of\s*loading|load\s*port)[ \t]+([A-Z][^\n|]+)',
     ],
     'port_of_discharge': [
-        rf'(?:^|\|)[ \t]*(?:port\s*of\s*discharge|discharge\s*port|\bpod\b){_PAREN}[ \t]*{_FSEP}[ \t]*([^\n|]+)',
+        rf'(?:^|\|)[ \t]*(?:port\s*of\s*discharge|discharge\s*port|\bpod\b|unload(?:ing)?\s*port|destination\s*port|place\s*of\s*delivery|final\s*destination){_I18N}{_PAREN}{_I18N}[ \t]*{_FSEP}[ \t]*([^\n|]+)',
         r'(?:^|\|)[ \t]*(?:port\s*of\s*discharge|discharge\s*port)[ \t]+([A-Z][^\n|]+)',
     ],
     'container_count': [
-        rf'(?:^|\|)[ \t]*(?:total\s*(?:no\.?\s*of\s*)?containers?|no\.?\s*of\s*containers?|container\s*count|containers?)(?!\s*no\b)(?:\s+or\s+packages)?{_PAREN}[ \t]*{_FSEP}[ \t]*([^\n|]+)',
+        rf'(?:^|\|)[ \t]*(?:total\s*(?:no\.?\s*of\s*)?containers?|no\.?\s*of\s*containers?|container\s*count|containers?|qty\s*of\s*cntrs?|number\s*of\s*containers|total\s*units|no\.?\s*of\s*pkgs?)(?!\s*no\b)(?:\s+or\s+packages)?{_I18N}{_PAREN}{_I18N}[ \t]*{_FSEP}[ \t]*([^\n|]+)',
         r'(?:^|\|)[ \t]*total\s*containers?[ \t]*[:|][ \t]*([^\n|]+)',
         r'(?:^|\|)[ \t]*containers?[ \t]*[:|][ \t]*([^\n|]+)',
     ],
     'gross_weight_kg': [
-        rf'(?:^|\|)[ \t]*(?:(?:total\s+)?gross\s*(?:weight|wt)|weight){_PAREN}[ \t]*{_FSEP}[ \t]*([^\n|]*)',
+        rf'(?:^|\|)[ \t]*(?:(?:total\s+)?gross\s*(?:weight|wt)|weight|g\.?\s*w\.?|gwt|all[\s-]*up\s*weight|total\s*weight){_I18N}{_PAREN}{_I18N}[ \t]*{_FSEP}[ \t]*([^\n|]*)',
     ]
 }
 

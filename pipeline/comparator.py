@@ -222,12 +222,16 @@ def compare_fields(si_data, bl_data):
         if field in ["port_of_loading", "port_of_discharge"]:
             si_name, si_code = split_port(si_raw)
             bl_name, bl_code = split_port(bl_raw)
+            # A bare UN/LOCODE carries no printed name — compare via its
+            # canonical name instead, same as clean_port does.
+            si_cmp = si_name or (PORT_LOCODES.get(si_code, "") if si_code else "")
+            bl_cmp = bl_name or (PORT_LOCODES.get(bl_code, "") if bl_code else "")
             if not is_match:
-                si_toks, bl_toks = si_name.split(), bl_name.split()
+                si_toks, bl_toks = si_cmp.split(), bl_cmp.split()
                 is_match = (
                     _is_subsequence(si_toks, bl_toks)
                     or _is_subsequence(bl_toks, si_toks)
-                    or (si_name and si_name.replace(" ", "") == bl_name.replace(" ", ""))
+                    or (si_cmp and si_cmp.replace(" ", "") == bl_cmp.replace(" ", ""))
                 )
             if not is_match and si_code and si_code == bl_code:
                 reason = (f"Port name mismatch (SI '{si_raw}' vs BL '{bl_raw}') while both "

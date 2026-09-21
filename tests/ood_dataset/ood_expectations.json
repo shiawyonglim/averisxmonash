@@ -1,0 +1,58 @@
+{
+  "ood_001": {
+    "category": "BL_COMPARISON",
+    "status": "OK"
+  },
+  "ood_002": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "consignee"
+    ]
+  },
+  "ood_003": {
+    "category": "BL_COMPARISON",
+    "status": "OK"
+  },
+  "ood_004": {
+    "category": "BL_COMPARISON",
+    "status": "MISMATCH",
+    "defect_fields": [
+      "port_of_discharge"
+    ]
+  },
+  "ood_005": {
+    "category": "BL_COMPARISON",
+    "status": "OK"
+  },
+  "ood_006": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "review_reason": "wrong_doc_type"
+  },
+  "ood_007": {
+    "category": "BL_COMPARISON",
+    "status": "OK"
+  },
+  "ood_008": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "review_reason": "missing_attachment"
+  },
+  "ood_009": {
+    "category": "BL_COMPARISON",
+    "status": "OK"
+  },
+  "ood_010": {
+    "category": "BL_COMPARISON",
+    "status": "OK"
+  },
+  "ood_011": {
+    "category": "BL_COMPARISON",
+    "status": "NEEDS_REVIEW",
+    "review_reason": "missing_value"
+  },
+  "ood_012": {
+    "category": "SI_REQUEST"
+  }
+}

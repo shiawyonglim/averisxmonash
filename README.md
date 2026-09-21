@@ -11,25 +11,38 @@ rules, and the Shipping Document Verification use case).
 
 ## How it works
 
-For every email in `sdoc-hackathon-bundle/inbox/`:
+The pipeline is **two-tier**: a deterministic tier does the bulk of the work
+with zero LLM calls, and an LLM tier (`AI_FALLBACK`) resolves only what the
+rules cannot. For every email in the inbox:
 
-1. **Classify** — rule-based + LLM classification into
+1. **Classify** — deterministic precedence rules first into
    `BL_COMPARISON`, `SI_REQUEST`, `INVOICE_QUERY`, `GENERAL`, or `SPAM`.
    Category keywords are matched on the subject only (bodies contain forwarded
-   threads that mention BL/docs for unrelated reasons).
-2. **Edge cases** — missing/corrupt attachments, unreadable files, and
-   wrong-document-type detection (e.g. a commercial invoice sent instead of a
-   BL) short-circuit to `NEEDS_REVIEW` with a `review_reason`.
-3. **Extract** — an LLM (NVIDIA NIM, `meta/llama-3.2-11b-vision-instruct` by
-   default, swappable via env vars) reads `.txt` / `.pdf` / `.xlsx` / `.docx`
-   attachments and extracts the 7 fields. Camera photos / scans of paper
-   documents (`.png` / `.jpg` / `.jpeg` / `.webp` / `.gif` / `.bmp` / `.tif`)
-   go through the same model's vision pass — handwriting, stamps, skew and
-   poor lighting included — which also reports document type, legibility and
-   a transcription.
+   threads that mention BL/docs for unrelated reasons). The LLM is consulted
+   **only** when the rules fall through to the unmatched `GENERAL` fallback.
+2. **Intent + edge cases** — for comparison-shaped emails with fewer than 2
+   attachments, sender intent is resolved (`COMPARE_NOW` vs `REQUEST_DOCS`,
+   deterministic rules first, LLM only when inconclusive): a sender who
+   believes the documents are attached gets flagged
+   `NEEDS_REVIEW / missing_attachment`, while a routine "please send the draft
+   BL" request is not a defect and routes to the chaser queue. Corrupt /
+   unreadable files and wrong-document-type detection (e.g. a commercial
+   invoice sent instead of a BL) also short-circuit to `NEEDS_REVIEW` with a
+   `review_reason`.
+3. **Extract (two-tier)** — `extract_fields_tiered`: a deterministic regex
+   pass extracts the 7 fields from `.txt` / `.pdf` / `.xlsx` / `.docx`
+   attachments; **only the fields left blank** escalate to one cached LLM call
+   (NVIDIA NIM, `meta/llama-3.2-11b-vision-instruct` by default, swappable via
+   env vars). Every field carries a **provenance** tag — `rule`, `model`, or
+   `missing`. Camera photos / scans of paper documents (`.png` / `.jpg` /
+   `.jpeg` / `.webp` / `.gif` / `.bmp` / `.tif`) go through the model's vision
+   pass — handwriting, stamps, skew and poor lighting included — which also
+   reports document type, legibility and a transcription.
 4. **Compare** — SI vs BL with per-field normalization (company-name
    punctuation, UN/LOCODE stripping, weight/count numeric extraction).
    Writing-style variations are accepted; value differences are flagged.
+   A field that cannot be extracted escalates to `NEEDS_REVIEW` rather than
+   fabricating an `OK`.
 
 **Compared fields:** `shipper`, `consignee`, `notify_party`,
 `port_of_loading`, `port_of_discharge`, `container_count`, `gross_weight_kg`
@@ -37,6 +50,19 @@ For every email in `sdoc-hackathon-bundle/inbox/`:
 **Statuses:** `OK` (all match) · `MISMATCH` (≥1 field differs →
 `defect_fields`) · `NEEDS_REVIEW` (`wrong_doc_type` | `missing_attachment` |
 `unreadable` | `missing_value`)
+
+**Outputs:** `submission.json` (per-email verdicts) plus a
+`verification_details.json` sidecar with per-field provenance, extracted
+values, and classification/intent provenance for auditing.
+
+**Measured performance** (deterministic tier only, `AI_FALLBACK=0`, on the
+organizers' 520-email set): **97.54%** weighted score, 100% category
+accuracy, field-level F1 0.9859, 46/46 defects flagged with 0 false alarms,
+25 `NEEDS_REVIEW` escalations vs 20 gold (the 5 extras are honest escalations
+where a field could not be extracted). See `docs/conditions.md` §1 for the
+full scorecard, including the hand-written OOD set (`tests/eval_ood.py`)
+where rules-only scoring leaves a residual gap the LLM tier is designed to
+catch.
 
 ## Project layout
 
@@ -52,6 +78,9 @@ pipeline/
 frontend/               React 19 + Vite UI (dashboard, queue, verify,
                         paper scan, audit, stress lab)
 sdoc-hackathon-bundle/  Dataset: inbox/ (520 emails) + attachments/
+sdoc-hackathon-docker/  Organizers' bundle: docker-compose.yml, server/,
+                        data_v2/ dataset (its ground_truth.json and
+                        generator sources are gitignored — kept local only)
 tests/
   generate_synthetic_dataset.py   400-case generalization benchmark
   generate_stress_dataset.py      2,020-case edge/stress suite ->
@@ -83,6 +112,15 @@ AI_MODEL=...
 # or scoped alternatives, each with its own key:
 KIMI_MODEL=...        NVIDIA_KIMI_API_KEY=...
 MUSE_MODEL=...        NVIDIA_MUSE_API_KEY=...
+
+# Optional — enable the LLM tier (default 1). Set to 0 for a fully
+# deterministic run with no API calls: extraction blanks stay 'missing'
+# and unmatched classifications fall back to GENERAL
+AI_FALLBACK=1
+
+# Optional — hard cap on live (uncached) LLM calls per process; cache reads
+# are free and exhaustion degrades to deterministic fallbacks (default 30)
+AI_MAX_CALLS=30
 
 # Optional — Supabase (schema in supabase_schema.sql; not required to run)
 SUPABASE_URL=...
@@ -142,3 +180,26 @@ by the organizers' `score_cli.py`.
 - **Database:** Supabase (managed Postgres) — schema in `supabase_schema.sql`
 - **AI:** NVIDIA NIM vision LLM (swappable via `AI_MODEL` / `KIMI_MODEL` /
   `MUSE_MODEL`)
+
+## Deploy
+
+The backend honors the `PORT` env var and a `render.yaml` blueprint is
+included at the repo root.
+
+**Backend → Render (or Railway):**
+
+1. New Web Service → point at this repo (Render auto-detects `render.yaml`),
+   or set manually:
+   - Build: `pip install -r requirements.txt`
+   - Start: `uvicorn server:app --host 0.0.0.0 --port $PORT`
+   - Health check path: `/api/config`
+2. Set env vars from `.env.example` (at minimum `NVIDIA_API_KEY`; add
+   `AI_FALLBACK=1`, `AI_MAX_CALLS`, and `SUPABASE_*` if using persistence).
+3. Note the deployed URL, e.g. `https://<service>.onrender.com`.
+
+**Frontend → Vercel:**
+
+1. Import the repo in Vercel (`vercel.json` already configures the Vite build).
+2. Set `VITE_API_URL=https://<service>.onrender.com` in the project env.
+3. Deploy — CORS on the backend is open (`allow_origins=["*"]`), so the
+   frontend origin works without extra config.
