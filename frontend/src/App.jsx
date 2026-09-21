@@ -3049,17 +3049,15 @@ function App() {
             <div className="getter-hero-banner">
               <div className="getter-hero-top">
                 <div>
-                  <h1>⚡ Auto Email Getter & Intelligent Classifier</h1>
-                  <p>
-                    Continuous mailbox polling and real-time operational triage powered by <strong>Laya Decision Model (Convai Innovations)</strong>.
-                    Directly connected to <strong>shiawyonglim@gmail.com</strong> via Google IMAP SSL (Port 993) & SMTP (Port 587).
-                  </p>
+                  <h1>Auto Collect</h1>
+                  <p>Polls the mailbox and classifies each message as it arrives.</p>
+                  <p className="meta">shiawyonglim@gmail.com · IMAP 993 / SMTP 587 · Laya v0.3.4 (Convai Innovations)</p>
                 </div>
                 <div className="getter-live-badge">
                   <span className="getter-pulse-dot"></span>
                   {getterSource === 'real'
-                    ? (isLiveStreaming ? 'LIVE GMAIL STREAM (1.8s)' : 'IMAP SSL READY · 30,000+ MSGS')
-                    : (isLiveStreaming ? 'LIVE POLLING ACTIVE (1.8s)' : 'DATASET READY · 520 MSGS')}
+                    ? (isLiveStreaming ? 'Streaming' : 'Idle · 30,292 messages')
+                    : (isLiveStreaming ? 'Streaming' : 'Idle · 520 messages')}
                 </div>
               </div>
 
@@ -3072,7 +3070,7 @@ function App() {
                     fetchGetterEmails(1, getterCategory, getterQueueFilter, getterSearch, 'real')
                   }}
                 >
-                  📬 Live Personal Gmail (shiawyonglim@gmail.com)
+                  Live Gmail
                 </button>
                 <button
                   className={`getter-source-btn ${getterSource === 'dataset' ? 'active' : ''}`}
@@ -3081,37 +3079,33 @@ function App() {
                     fetchGetterEmails(1, getterCategory, getterQueueFilter, getterSearch, 'dataset')
                   }}
                 >
-                  📁 Dataset Mailbox (520 Emails)
+                  Dataset (520)
                 </button>
               </div>
 
               {/* 4-Step Pipeline Flow */}
               <div className="getter-pipeline-flow">
                 <div className="getter-flow-step">
-                  <div className="flow-step-icon">📡</div>
                   <div className="flow-step-text">
-                    <span className="flow-step-title">1. Real IMAP SSL</span>
+                    <span className="flow-step-title">1. IMAP fetch</span>
                     <span className="flow-step-desc">imap.gmail.com:993 (shiawyonglim)</span>
                   </div>
                 </div>
                 <div className="getter-flow-step">
-                  <div className="flow-step-icon">🔍</div>
                   <div className="flow-step-text">
-                    <span className="flow-step-title">2. Laya Preprocessor</span>
+                    <span className="flow-step-title">2. Preprocess</span>
                     <span className="flow-step-desc">clean_email_body + email_state</span>
                   </div>
                 </div>
                 <div className="getter-flow-step">
-                  <div className="flow-step-icon">🧠</div>
                   <div className="flow-step-text">
-                    <span className="flow-step-title">3. Laya System-1</span>
+                    <span className="flow-step-title">3. Classify</span>
                     <span className="flow-step-desc">Non-Autoregressive Decision Schema</span>
                   </div>
                 </div>
                 <div className="getter-flow-step">
-                  <div className="flow-step-icon">🎯</div>
                   <div className="flow-step-text">
-                    <span className="flow-step-title">4. Smart Router</span>
+                    <span className="flow-step-title">4. Route</span>
                     <span className="flow-step-desc">7-Field Audit, Billing, SI, Chaser</span>
                   </div>
                 </div>
@@ -3129,7 +3123,7 @@ function App() {
               </div>
               <div className="getter-metric-card">
                 <span className="getter-metric-label">Classifier Engine</span>
-                <span className="getter-metric-val" style={{ color: '#7e22ce' }}>
+                <span className="getter-metric-val">
                   Laya v0.3.4
                 </span>
                 <span className="getter-metric-sub">
@@ -3138,7 +3132,7 @@ function App() {
               </div>
               <div className="getter-metric-card">
                 <span className="getter-metric-label">Inference Latency</span>
-                <span className="getter-metric-val" style={{ color: '#15803d' }}>
+                <span className="getter-metric-val">
                   {getterStatus?.avg_latency_ms ? `~${Math.round(getterStatus.avg_latency_ms)} ms` : 'pending'}
                 </span>
                 <span className="getter-metric-sub">
@@ -3147,8 +3141,8 @@ function App() {
               </div>
               <div className="getter-metric-card">
                 <span className="getter-metric-label">Mailbox Status</span>
-                <span className="getter-metric-val" style={{ fontSize: '1.05rem', color: '#1e293b' }}>
-                  {getterSource === 'real' ? 'LIVE IMAP SSL' : 'STATIC DATASET'}
+                <span className="getter-metric-val">
+                  {getterSource === 'real' ? 'Live (IMAP)' : 'Dataset'}
                 </span>
                 <span className="getter-metric-sub">
                   <span>{getterSource === 'real' ? 'shiawyonglim@gmail.com' : 'shipping.docs@aprilasia.com'}</span>
@@ -3162,71 +3156,66 @@ function App() {
                 {getterSource === 'real' ? (
                   <>
                     <button
-                      className="getter-btn primary"
-                      style={{ background: '#15803d', borderColor: '#15803d' }}
+                      className="btn-sm"
                       onClick={handlePollRealGmail}
                       disabled={pollingRealGmail}
                     >
-                      {pollingRealGmail ? '⏳ Polling Gmail IMAP...' : '🔄 Poll Real Gmail Inbox (IMAP SSL)'}
+                      {pollingRealGmail ? 'Polling…' : 'Poll Gmail'}
                     </button>
                     <button
-                      className="getter-btn"
-                      style={{ background: '#f5f3ff', borderColor: '#c084fc', color: '#7e22ce', fontWeight: 700 }}
+                      className="btn-secondary btn-sm"
                       onClick={handleSendRealTestEmail}
                       disabled={sendingRealTest}
                     >
-                      {sendingRealTest ? '⏳ Dispatching via SMTP...' : '✉️ Send Real Test Email to Myself & Classify'}
+                      {sendingRealTest ? 'Sending…' : 'Send test email'}
                     </button>
                     <button
-                      className={`getter-btn ${isLiveStreaming ? 'active-stream' : ''}`}
+                      className={`btn-secondary btn-sm ${isLiveStreaming ? 'active-stream' : ''}`}
                       onClick={() => setIsLiveStreaming(prev => !prev)}
                     >
-                      {isLiveStreaming ? '⏸️ Pause Auto-Polling' : '▶️ Live Auto-Poll (1.8s)'}
+                      {isLiveStreaming ? 'Pause' : 'Auto-poll'}
                     </button>
                   </>
                 ) : (
                   <>
                     <button
-                      className={`getter-btn ${isLiveStreaming ? 'active-stream' : 'primary'}`}
+                      className={`btn-sm ${isLiveStreaming ? 'btn-secondary active-stream' : ''}`}
                       onClick={() => setIsLiveStreaming(prev => !prev)}
                     >
-                      {isLiveStreaming ? '⏸️ Pause Auto-Polling' : '▶️ Start Live Stream (1.8s)'}
+                      {isLiveStreaming ? 'Pause' : 'Start stream'}
                     </button>
                     <button
-                      className="getter-btn"
+                      className="btn-secondary btn-sm"
                       onClick={() => handleFetchBatch(10)}
                       disabled={isLiveStreaming}
                     >
-                      📥 Ingest Next Batch (+10)
+                      Ingest 10
                     </button>
                     <button
-                      className="getter-btn"
+                      className="btn-secondary btn-sm"
                       onClick={() => handleFetchBatch(520)}
                       disabled={isLiveStreaming}
                     >
-                      ⚡ Ingest All Available (520)
+                      Ingest all
                     </button>
                     <button
-                      className="getter-btn"
+                      className="btn-secondary btn-sm"
                       onClick={handleResetGetter}
                       disabled={isLiveStreaming}
                     >
-                      🔄 Reset Stream (25)
+                      Reset
                     </button>
                     <button
-                      className="getter-btn"
-                      style={{ background: '#f0fdf4', borderColor: '#86efac', color: '#166534' }}
+                      className="btn-secondary btn-sm"
                       onClick={() => setCustomModalOpen(true)}
                     >
-                      ➕ Simulate Custom Inbound Email
+                      Simulate email
                     </button>
                   </>
                 )}
               </div>
               {getterMsg && (
-                <div style={{ fontSize: '0.82rem', color: '#166534', fontWeight: 600 }}>
-                  ✓ {getterMsg}
-                </div>
+                <span className="meta ok">{getterMsg}</span>
               )}
             </div>
 
@@ -3236,7 +3225,7 @@ function App() {
                 <input
                   type="text"
                   className="getter-search-input"
-                  placeholder="🔍 Filter ingested stream by Subject, Email ID, Booking Ref (e.g. 5AKR-), BL Ref, or Carrier..."
+                  placeholder="Search subject, email ID, booking ref, BL ref, or carrier"
                   value={getterSearch}
                   onChange={e => {
                     setGetterSearch(e.target.value)
@@ -3247,9 +3236,7 @@ function App() {
 
               {/* Category Pills */}
               <div className="getter-pill-row">
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
-                  Category:
-                </span>
+                <span className="filter-label">Category:</span>
                 {[
                   { key: 'all', label: `All Categories (${getterStatus?.ingested_count || 0})` },
                   { key: 'BL_COMPARISON', label: `BL Comparison (${getterStatus?.categories?.BL_COMPARISON || 0})` },
@@ -3273,9 +3260,7 @@ function App() {
 
               {/* Queue Destination Pills */}
               <div className="getter-pill-row">
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
-                  Smart Queue:
-                </span>
+                <span className="filter-label">Queue:</span>
                 {[
                   { key: 'all', label: 'All Destinations' },
                   { key: 'comparator', label: `7-Field Comparator Studio (${getterStatus?.queues?.comparator_ready || 0})` },
@@ -3303,21 +3288,17 @@ function App() {
               {/* Left Column: Stream Table */}
               <div className="getter-table-card">
                 <div className="getter-table-header">
-                  <h3>📥 Ingested & Classified Stream ({getterTotal} items)</h3>
-                  <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                  <h3>Stream ({getterTotal})</h3>
+                  <div className="meta">
                     Page {getterPage} of {Math.max(1, Math.ceil(getterTotal / getterLimit))}
                   </div>
                 </div>
 
                 <div className="getter-table-wrap">
                   {getterLoading ? (
-                    <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
-                      <p>Loading email stream from mailbox...</p>
-                    </div>
+                    <div className="empty-state">Loading…</div>
                   ) : getterEmails.length === 0 ? (
-                    <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
-                      <p>No ingested emails match the selected filters.</p>
-                    </div>
+                    <div className="empty-state">No ingested emails match the selected filters.</div>
                   ) : (
                     <table className="getter-table">
                       <thead>
@@ -3347,24 +3328,22 @@ function App() {
                               <td style={{ fontFamily: 'monospace', fontWeight: 700 }}>
                                 {item.email_id}
                                 {item.source === 'real_gmail' ? (
-                                  <span style={{ marginLeft: 4, fontSize: '0.64rem', color: '#15803d', background: '#dcfce7', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>
-                                    ●GMAIL
-                                  </span>
+                                  <span className="tag ok" style={{ marginLeft: 4 }}>Gmail</span>
                                 ) : item.is_custom_simulation ? (
-                                  <span style={{ marginLeft: 4, fontSize: '0.68rem', color: '#16a34a' }}>●LIVE</span>
+                                  <span className="tag" style={{ marginLeft: 4 }}>Live</span>
                                 ) : null}
                               </td>
                               <td>
                                 <span className={`cat-badge ${catClass}`}>
-                                  {cat === 'BL_COMPARISON' ? '📄 BL AUDIT'
-                                    : cat === 'INVOICE_QUERY' ? '💼 INVOICE'
-                                    : cat === 'SI_REQUEST' ? '📝 SI REQUEST'
-                                    : cat === 'SPAM' ? '🛡️ SPAM'
-                                    : '🌐 GENERAL'}
+                                  {cat === 'BL_COMPARISON' ? 'BL audit'
+                                    : cat === 'INVOICE_QUERY' ? 'Invoice'
+                                    : cat === 'SI_REQUEST' ? 'SI request'
+                                    : cat === 'SPAM' ? 'Spam'
+                                    : 'General'}
                                 </span>
                               </td>
                               <td>
-                                <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: '#0f172a', fontWeight: 600 }}>
+                                <span className="meta-mono">
                                   {item.entities.booking_ref !== 'N/A' ? item.entities.booking_ref
                                     : item.entities.bl_ref !== 'N/A' ? item.entities.bl_ref
                                     : item.entities.invoice_no !== 'N/A' ? `INV ${item.entities.invoice_no}`
@@ -3375,19 +3354,10 @@ function App() {
                                 <span title={item.subject}>{item.subject}</span>
                               </td>
                               <td style={{ textAlign: 'center' }}>
-                                <span style={{
-                                  fontSize: '0.74rem',
-                                  padding: '2px 7px',
-                                  borderRadius: 10,
-                                  background: item.attachments_count >= 2 ? '#dcfce7' : item.attachments_count === 1 ? '#fef9c3' : '#f1f5f9',
-                                  color: item.attachments_count >= 2 ? '#166534' : '#475569',
-                                  fontWeight: 700
-                                }}>
-                                  📎 {item.attachments_count}
-                                </span>
+                                <span className="tag">{item.attachments_count}</span>
                               </td>
                               <td>
-                                <span style={{ fontSize: '0.78rem', color: '#475569', fontWeight: 600 }}>
+                                <span className="meta">
                                   {item.classification.target_queue}
                                 </span>
                               </td>
@@ -3400,9 +3370,9 @@ function App() {
                 </div>
 
                 {/* Pagination */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 18px', borderTop: '1px solid #e2e8f0', background: '#fafbfc' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 18px', borderTop: '1px solid var(--line)', background: 'var(--surface-sunken)' }}>
                   <button
-                    className="getter-btn"
+                    className="btn-secondary btn-sm"
                     disabled={getterPage <= 1}
                     onClick={() => {
                       const prevPage = getterPage - 1
@@ -3410,13 +3380,13 @@ function App() {
                       fetchGetterEmails(prevPage)
                     }}
                   >
-                    ← Prev
+                    Prev
                   </button>
-                  <span style={{ fontSize: '0.82rem', color: '#64748b' }}>
+                  <span className="meta">
                     Showing {(getterPage - 1) * getterLimit + 1} - {Math.min(getterTotal, getterPage * getterLimit)} of {getterTotal}
                   </span>
                   <button
-                    className="getter-btn"
+                    className="btn-secondary btn-sm"
                     disabled={getterPage >= Math.ceil(getterTotal / getterLimit)}
                     onClick={() => {
                       const nextPage = getterPage + 1
@@ -3424,7 +3394,7 @@ function App() {
                       fetchGetterEmails(nextPage)
                     }}
                   >
-                    Next →
+                    Next
                   </button>
                 </div>
               </div>
@@ -3436,19 +3406,17 @@ function App() {
                     <div className="getter-inspector-header">
                       <div className="getter-inspector-title-row">
                         <div>
-                          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
-                            Email Dossier Inspector
-                          </span>
+                          <span className="filter-label">Inspector</span>
                           <h3 style={{ marginTop: 4 }}>
                             {selectedGetterEmail.email_id}
                           </h3>
                         </div>
                         <span className={`prio-badge ${(selectedGetterEmail.classification.priority || 'NORMAL').toLowerCase()}`}>
-                          {selectedGetterEmail.classification.priority || 'NORMAL'} PRIORITY
+                          {(selectedGetterEmail.classification.priority || 'NORMAL').charAt(0) + (selectedGetterEmail.classification.priority || 'NORMAL').slice(1).toLowerCase()}
                         </span>
                       </div>
 
-                      <div style={{ fontSize: '0.82rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <div className="meta" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <div><strong>From:</strong> {selectedGetterEmail.from}</div>
                         <div><strong>To:</strong> {selectedGetterEmail.to}</div>
                         <div><strong>Subject:</strong> {selectedGetterEmail.subject}</div>
@@ -3459,21 +3427,21 @@ function App() {
                       {/* Classification Box */}
                       <div className="getter-section-box">
                         <div className="getter-section-title">
-                          <span>🏷️ Automated Classification Dossier</span>
+                          <span>Classification</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                           <span className={`cat-badge ${selectedGetterEmail.classification.category.toLowerCase()}`} style={{ fontSize: '0.82rem', padding: '4px 12px' }}>
                             {selectedGetterEmail.classification.display_tag}
                           </span>
-                          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#16a34a' }}>
+                          <span className="meta ok" style={{ fontWeight: 700 }}>
                             Confidence: {Math.round((selectedGetterEmail.classification.confidence || 0.99) * 100)}%
                           </span>
                         </div>
-                        <p style={{ fontSize: '0.82rem', color: '#475569', margin: '0 0 10px 0', lineHeight: 1.4 }}>
+                        <p className="meta" style={{ margin: '0 0 10px 0', lineHeight: 1.4 }}>
                           {selectedGetterEmail.classification.description}
                         </p>
-                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                          <strong>Engine Provenance:</strong> <code>{selectedGetterEmail.classification.provenance}</code>
+                        <div className="meta">
+                          <strong>Engine:</strong> <code>{selectedGetterEmail.classification.provenance}</code>
                         </div>
                       </div>
 
@@ -3482,9 +3450,9 @@ function App() {
                         <div className="getter-laya-card">
                           <div className="getter-laya-header">
                             <div className="getter-laya-title">
-                              <span>🧠 Laya Decision Model (Convai Innovations)</span>
+                              <span>Laya decision model</span>
                             </div>
-                            <span style={{ fontSize: '0.7rem', background: '#e9d5ff', color: '#6b21a8', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>
+                            <span className="tag info">
                               {selectedGetterEmail.laya_decision?.inference === 'real'
                                 ? 'NEURAL VERIFIED · SYSTEM-1'
                                 : selectedGetterEmail.laya_decision?.inference === 'pending'
@@ -3496,21 +3464,21 @@ function App() {
                           <div className="getter-laya-grid">
                             <div className="getter-laya-item">
                               <div className="getter-laya-label">
-                                <span>Question: Category</span>
-                                <span>type: choice</span>
+                                <span>Category</span>
+                                <span>choice</span>
                               </div>
-                              <div className="getter-laya-val" style={{ color: '#6b21a8' }}>
+                              <div className="getter-laya-val" style={{ color: 'var(--info)' }}>
                                 {selectedGetterEmail.laya_decision.answers?.category?.choice || selectedGetterEmail.classification.category}
                               </div>
-                              <div style={{ fontSize: '0.72rem', color: '#16a34a', marginTop: 2 }}>
-                                Calibrated Confidence: {Math.round((selectedGetterEmail.laya_decision.answers?.category?.confidence || 0.96) * 100)}%
+                              <div className="meta ok" style={{ marginTop: 2 }}>
+                                Confidence: {Math.round((selectedGetterEmail.laya_decision.answers?.category?.confidence || 0.96) * 100)}%
                               </div>
                             </div>
 
                             <div className="getter-laya-item">
                               <div className="getter-laya-label">
-                                <span>Question: Urgency</span>
-                                <span>type: score (0-2.0)</span>
+                                <span>Urgency</span>
+                                <span>score 0–2</span>
                               </div>
                               <div className="getter-laya-val">
                                 {selectedGetterEmail.laya_decision.answers?.urgency?.level || 'ROUTINE'} ({selectedGetterEmail.laya_decision.answers?.urgency?.score ?? 0.2})
@@ -3525,37 +3493,37 @@ function App() {
 
                             <div className="getter-laya-item">
                               <div className="getter-laya-label">
-                                <span>Question: Needs Reply</span>
-                                <span>type: noul</span>
+                                <span>Needs reply</span>
+                                <span>boolean</span>
                               </div>
-                              <div className="getter-laya-val" style={{ color: (selectedGetterEmail.laya_decision.answers?.needs_reply?.probability ?? 0.5) > 0.5 ? '#b45309' : '#15803d' }}>
-                                {(selectedGetterEmail.laya_decision.answers?.needs_reply?.probability ?? 0.5) > 0.5 ? 'YES — ACTION REQUIRED' : 'NO — INFORMATIONAL'}
+                              <div className="getter-laya-val" style={{ color: (selectedGetterEmail.laya_decision.answers?.needs_reply?.probability ?? 0.5) > 0.5 ? 'var(--warn)' : 'var(--ok)' }}>
+                                {(selectedGetterEmail.laya_decision.answers?.needs_reply?.probability ?? 0.5) > 0.5 ? 'Yes' : 'No'}
                               </div>
-                              <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                              <div className="meta" style={{ marginTop: 2 }}>
                                 Probability: {selectedGetterEmail.laya_decision.answers?.needs_reply?.probability ?? 0.5}
                               </div>
                             </div>
 
                             <div className="getter-laya-item">
                               <div className="getter-laya-label">
-                                <span>Question: Is Spam</span>
-                                <span>type: noul</span>
+                                <span>Spam</span>
+                                <span>boolean</span>
                               </div>
-                              <div className="getter-laya-val" style={{ color: (selectedGetterEmail.laya_decision.answers?.is_spam?.probability ?? 0) > 0.5 ? '#dc2626' : '#15803d' }}>
-                                {(selectedGetterEmail.laya_decision.answers?.is_spam?.probability ?? 0) > 0.5 ? 'QUARANTINED' : 'CLEAN INBOX'}
+                              <div className="getter-laya-val" style={{ color: (selectedGetterEmail.laya_decision.answers?.is_spam?.probability ?? 0) > 0.5 ? 'var(--danger)' : 'var(--ok)' }}>
+                                {(selectedGetterEmail.laya_decision.answers?.is_spam?.probability ?? 0) > 0.5 ? 'Spam' : 'Clean'}
                               </div>
-                              <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                              <div className="meta" style={{ marginTop: 2 }}>
                                 Probability: {selectedGetterEmail.laya_decision.answers?.is_spam?.probability ?? 0.02}
                               </div>
                             </div>
                           </div>
 
                           {selectedGetterEmail.laya_decision.clean_state && (
-                            <div style={{ background: '#ffffff', border: '1px solid #e9d5ff', borderRadius: 6, padding: '8px 10px' }}>
-                              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#6b21a8', textTransform: 'uppercase', marginBottom: 4 }}>
-                                Laya Preprocessed State (Signatures & Disclaimers Stripped):
+                            <div style={{ background: 'var(--surface)', border: '1px solid var(--info-line)', borderRadius: 6, padding: '8px 10px' }}>
+                              <div className="filter-label" style={{ marginBottom: 4 }}>
+                                Preprocessed body
                               </div>
-                              <div style={{ fontSize: '0.74rem', color: '#475569', maxHeight: '75px', overflowY: 'auto', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+                              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', maxHeight: '75px', overflowY: 'auto', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
                                 {selectedGetterEmail.laya_decision.clean_state.body || selectedGetterEmail.snippet}
                               </div>
                             </div>
@@ -3566,7 +3534,7 @@ function App() {
                       {/* Extracted Shipping Entities */}
                       <div className="getter-section-box">
                         <div className="getter-section-title">
-                          <span>📦 Extracted Shipping Entities</span>
+                          <span>Entities</span>
                         </div>
                         <div className="getter-entities-grid">
                           <div className="getter-entity-item">
@@ -3595,7 +3563,7 @@ function App() {
                       {/* Decision Signals / Why Classified */}
                       <div className="getter-section-box">
                         <div className="getter-section-title">
-                          <span>🔍 Decision Signals & Trigger Reasoning</span>
+                          <span>Signals</span>
                         </div>
                         <ul className="getter-signals-list">
                           {selectedGetterEmail.classification.signals?.map((sig, idx) => (
@@ -3610,7 +3578,7 @@ function App() {
                       {/* Downstream Smart Action Card */}
                       <div className="getter-action-banner">
                         <div className="getter-action-title">
-                          <span>🚀 Downstream Automated Action</span>
+                          <span>Next action</span>
                         </div>
                         <div className="getter-action-desc">
                           {selectedGetterEmail.classification.recommended_action}
@@ -3624,39 +3592,37 @@ function App() {
                                 setView('verify')
                               }}
                             >
-                              🔍 Open in 7-Field Verify Studio
+                              Open in Verify
                             </button>
                           ) : selectedGetterEmail.classification.category === 'INVOICE_QUERY' ? (
                             <button
                               className="getter-btn primary"
-                              style={{ background: '#b45309', borderColor: '#b45309' }}
                               onClick={() => {
                                 setSelectedEmail(selectedGetterEmail.email_id)
                                 openDraftEmail(selectedGetterEmail.email_id, selectedGetterEmail)
                               }}
                             >
-                              ✉️ Auto-Draft Billing / THC Reply
+                              Draft billing reply
                             </button>
                           ) : selectedGetterEmail.classification.category === 'SI_REQUEST' ? (
                             <button
                               className="getter-btn primary"
-                              style={{ background: '#047857', borderColor: '#047857' }}
                               onClick={() => {
                                 setSelectedEmail(selectedGetterEmail.email_id)
                                 openDraftEmail(selectedGetterEmail.email_id, selectedGetterEmail)
                               }}
                             >
-                              ✉️ Auto-Draft Shipping Instructions
+                              Draft SI reply
                             </button>
                           ) : (
                             <button
-                              className="getter-btn"
+                              className="getter-btn primary"
                               onClick={() => {
                                 setSelectedEmail(selectedGetterEmail.email_id)
                                 openDraftEmail(selectedGetterEmail.email_id, selectedGetterEmail)
                               }}
                             >
-                              ✉️ Auto-Draft Operational Email
+                              Draft reply
                             </button>
                           )}
                         </div>
@@ -3665,15 +3631,15 @@ function App() {
                       {/* Raw Body Snippet */}
                       <div className="getter-section-box">
                         <div className="getter-section-title">
-                          <span>✉️ Raw Message Body</span>
+                          <span>Message body</span>
                         </div>
                         <pre style={{
-                          background: '#fff',
-                          border: '1px solid #e2e8f0',
+                          background: 'var(--surface)',
+                          border: '1px solid var(--line)',
                           padding: 12,
                           borderRadius: 8,
                           fontSize: '0.78rem',
-                          color: '#334155',
+                          color: 'var(--text-color)',
                           whiteSpace: 'pre-wrap',
                           maxHeight: '180px',
                           overflowY: 'auto',
@@ -3685,9 +3651,7 @@ function App() {
                     </div>
                   </>
                 ) : (
-                  <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>
-                    <p>Select an email from the stream to view its classified dossier.</p>
-                  </div>
+                  <div className="empty-state">Select an email to inspect it.</div>
                 )}
               </div>
             </div>
@@ -3697,7 +3661,7 @@ function App() {
               <div className="getter-modal-overlay" onClick={() => setCustomModalOpen(false)}>
                 <div className="getter-modal-card" onClick={e => e.stopPropagation()}>
                   <div className="getter-modal-header">
-                    <h3>➕ Ingest & Classify Custom Inbound Email</h3>
+                    <h3>Simulate inbound email</h3>
                     <button
                       onClick={() => setCustomModalOpen(false)}
                       style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer' }}
@@ -3710,9 +3674,7 @@ function App() {
                     <div className="getter-modal-body">
                       {/* Presets */}
                       <div>
-                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                          ⚡ Quick Simulation Presets:
-                        </span>
+                        <span className="filter-label">Presets</span>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
                           <button
                             type="button"
@@ -3725,7 +3687,7 @@ function App() {
                               attachments: ['attachments/email_custom_SI.txt', 'attachments/email_custom_BL.txt']
                             })}
                           >
-                            Preset 1: Draft BL Arrival (2 Atts)
+                            Draft BL arrival
                           </button>
                           <button
                             type="button"
@@ -3738,7 +3700,7 @@ function App() {
                               attachments: []
                             })}
                           >
-                            Preset 2: Invoice & THC Query (0 Atts)
+                            Invoice query
                           </button>
                           <button
                             type="button"
@@ -3751,14 +3713,14 @@ function App() {
                               attachments: []
                             })}
                           >
-                            Preset 3: Urgent SI Request (0 Atts)
+                            Urgent SI request
                           </button>
                         </div>
                       </div>
 
                       <div>
-                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>
-                          Sender Address (From):
+                        <label className="filter-label" style={{ display: 'block', marginBottom: 4 }}>
+                          From
                         </label>
                         <input
                           type="email"
@@ -3771,8 +3733,8 @@ function App() {
                       </div>
 
                       <div>
-                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>
-                          Subject Line:
+                        <label className="filter-label" style={{ display: 'block', marginBottom: 4 }}>
+                          Subject
                         </label>
                         <input
                           type="text"
@@ -3785,8 +3747,8 @@ function App() {
                       </div>
 
                       <div>
-                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>
-                          Email Body:
+                        <label className="filter-label" style={{ display: 'block', marginBottom: 4 }}>
+                          Body
                         </label>
                         <textarea
                           rows={4}
@@ -3799,8 +3761,8 @@ function App() {
                       </div>
 
                       <div>
-                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>
-                          Attachments Simulation:
+                        <label className="filter-label" style={{ display: 'block', marginBottom: 4 }}>
+                          Attachments
                         </label>
                         <div style={{ display: 'flex', gap: 12 }}>
                           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem' }}>
@@ -3813,7 +3775,7 @@ function App() {
                                 attachments: ['attachments/email_custom_SI.txt', 'attachments/email_custom_BL.txt']
                               })}
                             />
-                            2 Attachments (SI + Draft BL)
+                            SI + draft BL
                           </label>
                           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem' }}>
                             <input
@@ -3822,7 +3784,7 @@ function App() {
                               checked={customForm.attachments.length === 0}
                               onChange={() => setCustomForm({ ...customForm, attachments: [] })}
                             />
-                            0 Attachments (Text Inquiry / Chaser)
+                            None
                           </label>
                         </div>
                       </div>
@@ -3841,7 +3803,7 @@ function App() {
                         className="getter-btn primary"
                         disabled={customIngesting}
                       >
-                        {customIngesting ? 'Ingesting...' : '⚡ Ingest & Classify Now'}
+                        {customIngesting ? 'Ingesting…' : 'Ingest'}
                       </button>
                     </div>
                   </form>
@@ -3866,24 +3828,24 @@ function App() {
                 className={`chip ${verifyMode === 'email' ? 'active' : ''}`}
                 onClick={() => setVerifyMode('email')}
               >
-                📥 Inbox Email
+                Inbox email
               </button>
               <button
                 className={`chip ${verifyMode === 'scan' ? 'active' : ''}`}
                 onClick={() => setVerifyMode('scan')}
               >
-                📷 Paper Scan / Upload
+                Paper scan
               </button>
               {verifyMode === 'scan' && (
                 <>
                   <button
+                    className="btn-sm"
                     onClick={handleScanVerify}
                     disabled={scanLoading || !scanSi?.file || !scanBl?.file}
-                    style={{ padding: '8px 18px', fontSize: '0.85rem' }}
                   >
-                    {scanLoading ? 'Reading documents via vision AI...' : '⚡ Verify Scanned Documents'}
+                    {scanLoading ? 'Reading…' : 'Verify scans'}
                   </button>
-                  <span style={{ fontSize: '0.82rem', color: '#777', alignSelf: 'center' }}>
+                  <span className="meta" style={{ alignSelf: 'center' }}>
                     Photos (JPG/PNG), scans, PDF, DOCX, XLSX, TXT · max 15 MB each
                   </span>
                 </>
@@ -3957,34 +3919,34 @@ function App() {
                   )}
                 </div>
 
-                <button onClick={handleVerify} disabled={loading || !selectedEmail} style={{ padding: '8px 16px', fontSize: '0.9rem' }}>
-                  {loading ? 'Analyzing via NVIDIA NIM...' : 'Re-verify'}
+                <button className="btn-sm" onClick={handleVerify} disabled={loading || !selectedEmail}>
+                  {loading ? 'Analysing…' : 'Re-verify'}
                 </button>
 
                 <button
+                  className="btn-sm"
                   onClick={handleSaveDocuments}
                   disabled={savingDocs || loading || !selectedEmail
                     || (emailInfo?.attachments?.length || 0) < 2
                     || (DOC_PLACEHOLDER_RX.test(siText) && DOC_PLACEHOLDER_RX.test(blText))}
                   title="Write the edited SI/BL text back to this email's attachment files — originals are snapshotted to _backups/ first"
-                  style={{ padding: '8px 16px', fontSize: '0.9rem', background: '#e07a5f' }}
                 >
-                  {savingDocs ? 'Saving…' : '💾 Save Doc Edits'}
+                  {savingDocs ? 'Saving…' : 'Save edits'}
                 </button>
 
                 {docBackups?.has_original && (
                   <button
+                    className="btn-secondary btn-sm"
                     onClick={handleRestoreDocuments}
                     disabled={restoringDocs || loading}
                     title={`Restore pristine email + attachments from backup (${docBackups.snapshots?.length || 0} snapshot(s) kept)`}
-                    style={{ padding: '8px 16px', fontSize: '0.9rem', background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-color)', boxShadow: 'none' }}
                   >
-                    {restoringDocs ? 'Restoring…' : '↺ Restore Original'}
+                    {restoringDocs ? 'Restoring…' : 'Restore original'}
                   </button>
                 )}
 
                 {adjacentInfo && (
-                  <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 600, padding: '4px 10px', background: '#f5efe6', borderRadius: '6px' }}>
+                  <span className="tag">
                     Item {adjacentInfo.index} of {adjacentInfo.total} {queueFilter ? `(${queueFilter})` : ''}
                   </span>
                 )}
@@ -3997,7 +3959,7 @@ function App() {
                   onClick={() => adjacentInfo?.prev && openEmail(adjacentInfo.prev)}
                   title={adjacentInfo?.prev ? `Go to previous: ${adjacentInfo.prev}` : 'No previous item'}
                 >
-                  ◀ Prev
+                  Prev
                 </button>
                 <button
                   className="queue-nav-btn"
@@ -4005,47 +3967,40 @@ function App() {
                   onClick={() => adjacentInfo?.next && openEmail(adjacentInfo.next)}
                   title={adjacentInfo?.next ? `Go to next: ${adjacentInfo.next}` : 'No next item'}
                 >
-                  Next ▶
+                  Next
                 </button>
                 <button
+                  className="btn-sm"
                   onClick={() => openDraftEmail(selectedEmail)}
                   disabled={!selectedEmail}
-                  style={{ background: '#6e3511', color: '#fff', border: 'none', borderRadius: '8px', padding: '7px 14px', fontSize: '0.85rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
                   title="Auto-draft and send email via Google SMTP"
                 >
-                  {emailInfo?.category === 'INVOICE_QUERY' ? '✉️ Reply to Invoice Query' :
-                   emailInfo?.category === 'SI_REQUEST' ? '✉️ Reply with SI' :
-                   emailInfo?.category === 'GENERAL' ? '✉️ Reply to Inquiry' :
-                   '✉️ Auto-Draft Email'}
+                  {emailInfo?.category === 'INVOICE_QUERY' ? 'Reply about invoice' :
+                   emailInfo?.category === 'SI_REQUEST' ? 'Reply with SI' :
+                   emailInfo?.category === 'GENERAL' ? 'Reply to inquiry' :
+                   'Draft reply'}
                 </button>
                 <div className="keyboard-shortcuts-hint">
                   <span title="Keyboard shortcuts: Press [Q] for Previous, [W] for Next, [E] to Auto-Draft">
-                    ⚡ <kbd>Q</kbd> Prev · <kbd>W</kbd> Next · <kbd>E</kbd> Draft
+                    <kbd>Q</kbd> Prev · <kbd>W</kbd> Next · <kbd>E</kbd> Draft
                   </span>
                 </div>
                 <button
+                  className="btn-secondary btn-sm"
                   onClick={() => setView('queue')}
-                  style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-color)', boxShadow: 'none', padding: '7px 14px', fontSize: '0.85rem' }}
                 >
-                  Inbox 📥
+                  Back to inbox
                 </button>
               </div>
             </div>
 
             {/* Save / restore status banner */}
             {saveDocMsg && (
-              <div
-                className="redirect-banner"
-                style={{
-                  background: saveDocMsg.startsWith('❌') ? '#f8d7da' : '#e8f5e9',
-                  borderColor: saveDocMsg.startsWith('❌') ? '#f5c6cb' : '#c8e6c9',
-                  color: saveDocMsg.startsWith('❌') ? '#721c24' : '#155724',
-                }}
-              >
+              <div className={`notice ${saveDocMsg.startsWith('❌') ? 'danger' : 'ok'}`}>
                 <div>{saveDocMsg}</div>
                 {docBackups?.has_original && (
-                  <span style={{ fontSize: '0.75rem', opacity: 0.8, whiteSpace: 'nowrap' }}>
-                    🗄️ Backups: pristine original + {docBackups.snapshots?.length || 0} snapshot(s)
+                  <span className="meta" style={{ whiteSpace: 'nowrap' }}>
+                    Backups: pristine original + {docBackups.snapshots?.length || 0} snapshot(s)
                   </span>
                 )}
               </div>
@@ -4055,20 +4010,20 @@ function App() {
             {cloudSyncInfo && (
               <div className="cloud-cache-banner">
                 <div>
-                  <strong>☁️ Cloud-cached verdict:</strong> {cloudSyncInfo.status || 'OK'}{cloudSyncInfo.updated_at ? ` · synced ${new Date(cloudSyncInfo.updated_at).toLocaleTimeString()}` : ''}
+                  <strong>Cloud-cached verdict:</strong> {cloudSyncInfo.status || 'OK'}{cloudSyncInfo.updated_at ? ` · synced ${new Date(cloudSyncInfo.updated_at).toLocaleTimeString()}` : ''}
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button
+                    className="btn-sm"
                     onClick={() => openDraftEmail(selectedEmail)}
-                    style={{ padding: '6px 14px', fontSize: '0.82rem', background: '#6e3511', color: '#fff' }}
                   >
-                    ✉️ Draft Email
+                    Draft email
                   </button>
                   <button
+                    className="btn-secondary btn-sm"
                     onClick={handleVerify}
-                    style={{ padding: '6px 14px', fontSize: '0.82rem', background: '#597928', color: '#fff' }}
                   >
-                    🔄 Force Local Re-Scan
+                    Re-scan locally
                   </button>
                 </div>
               </div>
@@ -4076,25 +4031,22 @@ function App() {
 
             {/* Contextual Action Card: Inbound Invoice & Local Charges Query */}
             {emailInfo && emailInfo.category === 'INVOICE_QUERY' && (
-              <div className="action-card query" style={{ background: '#fdf9f4', border: '1px solid #eadbc8', borderRadius: '10px', padding: '14px 18px', marginBottom: '16px' }}>
+              <div className="action-card invoice">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '1.3rem' }}>💼</span>
-                    <div>
-                      <strong style={{ color: '#8c4308', display: 'block' }}>
-                        Inbound Billing & Local Charges Inquiry (from {emailInfo.from})
-                      </strong>
-                      <span style={{ fontSize: '0.84rem', color: '#555' }}>
-                        Sender is inquiring about invoice charges, THC, or telex release fees. Reply directly with the fee schedule.
-                      </span>
-                    </div>
+                  <div>
+                    <strong style={{ display: 'block' }}>
+                      Invoice query from {emailInfo.from}
+                    </strong>
+                    <span className="meta">
+                      Asks about invoice charges, THC, or telex release fees.
+                    </span>
                   </div>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
+                      className="btn-sm"
                       onClick={() => openDraftEmail(selectedEmail)}
-                      style={{ background: '#8c4308', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 18px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}
                     >
-                      ✉️ Reply with Charges Breakdown
+                      Reply with charges
                     </button>
                   </div>
                 </div>
@@ -4103,25 +4055,22 @@ function App() {
 
             {/* Contextual Action Card: Inbound Shipping Instruction Request */}
             {emailInfo && emailInfo.category === 'SI_REQUEST' && (
-              <div className="action-card query" style={{ background: '#f4f8fa', border: '1px solid #cfe2ec', borderRadius: '10px', padding: '14px 18px', marginBottom: '16px' }}>
+              <div className="action-card si">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '1.3rem' }}>📄</span>
-                    <div>
-                      <strong style={{ color: '#006699', display: 'block' }}>
-                        Inbound Shipping Instruction Request (from {emailInfo.from})
-                      </strong>
-                      <span style={{ fontSize: '0.84rem', color: '#555' }}>
-                        Customer or freight forwarder is requesting Shipping Instructions for this booking.
-                      </span>
-                    </div>
+                  <div>
+                    <strong style={{ display: 'block' }}>
+                      SI request from {emailInfo.from}
+                    </strong>
+                    <span className="meta">
+                      Requesting shipping instructions for this booking.
+                    </span>
                   </div>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
+                      className="btn-sm"
                       onClick={() => openDraftEmail(selectedEmail)}
-                      style={{ background: '#006699', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 18px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}
                     >
-                      ✉️ Reply with Shipping Instructions
+                      Reply with SI
                     </button>
                   </div>
                 </div>
@@ -4130,25 +4079,22 @@ function App() {
 
             {/* Contextual Action Card: Inbound General Logistics Inquiry */}
             {emailInfo && emailInfo.category === 'GENERAL' && (
-              <div className="action-card query" style={{ background: '#f8f9fa', border: '1px solid #e2e6ea', borderRadius: '10px', padding: '14px 18px', marginBottom: '16px' }}>
+              <div className="action-card general">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '1.3rem' }}>🌐</span>
-                    <div>
-                      <strong style={{ color: '#495057', display: 'block' }}>
-                        General Logistics Inquiry (from {emailInfo.from})
-                      </strong>
-                      <span style={{ fontSize: '0.84rem', color: '#555' }}>
-                        General correspondence regarding vessel schedule, tracking, or booking status.
-                      </span>
-                    </div>
+                  <div>
+                    <strong style={{ display: 'block' }}>
+                      General inquiry from {emailInfo.from}
+                    </strong>
+                    <span className="meta">
+                      Vessel schedule, tracking, or booking status.
+                    </span>
                   </div>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
+                      className="btn-sm"
                       onClick={() => openDraftEmail(selectedEmail)}
-                      style={{ background: '#495057', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 18px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}
                     >
-                      ✉️ Reply to Inquiry
+                      Reply
                     </button>
                   </div>
                 </div>
@@ -4157,36 +4103,33 @@ function App() {
 
             {/* Compact missing-document banner — the auto-prompt modal covers the draft flow */}
             {emailInfo && emailInfo.category === 'BL_COMPARISON' && missingDoc && (
-              <div className="action-card chaser" style={{ padding: '14px 18px' }}>
+              <div className="action-card chaser">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '1.3rem' }}>📎</span>
-                    <div>
-                      <strong style={{ color: '#b3560e' }}>
-                        {missingDoc === 'si' ? 'Shipping Instruction missing'
-                          : missingDoc === 'bl' ? 'Draft BL missing'
-                          : 'No documents attached'}
-                      </strong>
-                      <span style={{ fontSize: '0.85rem', color: '#555', marginLeft: '8px' }}>
-                        {missingDoc === 'si'
-                          ? 'the sender forgot to attach it'
-                          : `the ${detectCarrier(emailInfo)} desk hasn't issued it yet`}
-                      </span>
-                    </div>
+                  <div>
+                    <strong>
+                      {missingDoc === 'si' ? 'Shipping Instruction missing'
+                        : missingDoc === 'bl' ? 'Draft BL missing'
+                        : 'No documents attached'}
+                    </strong>
+                    <span className="meta" style={{ marginLeft: '8px' }}>
+                      {missingDoc === 'si'
+                        ? 'the sender forgot to attach it'
+                        : `the ${detectCarrier(emailInfo)} desk hasn't issued it yet`}
+                    </span>
                   </div>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
+                      className="btn-sm"
                       onClick={() => openDraftEmail(selectedEmail, null, null, missingDoc)}
-                      style={{ background: '#e07a5f', padding: '8px 16px', fontSize: '0.85rem', fontWeight: 600 }}
                     >
-                      ✉️ Draft {missingDoc === 'si' ? 'Request' : 'Chaser'} Email
+                      Draft {missingDoc === 'si' ? 'request' : 'chaser'}
                     </button>
                     {missingDoc !== 'si' && (
                       <button
+                        className="btn-secondary btn-sm"
                         onClick={() => handleChase(selectedEmail)}
-                        style={{ background: 'transparent', border: '1px solid #e07a5f', color: '#e07a5f', boxShadow: 'none', padding: '8px 16px', fontSize: '0.85rem', fontWeight: 600 }}
                       >
-                        ⚡ Quick Send
+                        Quick send
                       </button>
                     )}
                   </div>
@@ -4199,34 +4142,31 @@ function App() {
               <div className="action-card corrupt">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
                   <div>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#c62828' }}>
-                      UNREADABLE ATTACHMENT · REMEDIATION PROTOCOL
-                    </span>
-                    <h3 style={{ margin: '4px 0', color: '#c62828' }}>
-                      Document Corruption / Truncation Detected
+                    <h3 style={{ margin: '0 0 4px', color: 'var(--danger)', fontSize: '1rem' }}>
+                      Attachment unreadable
                     </h3>
-                    <p style={{ fontSize: '0.88rem', color: '#555', margin: 0 }}>
+                    <p className="meta" style={{ margin: 0 }}>
                       {corruptWarning?.details || corruptWarning?.reason || 'Document binary stream is truncated or unreadable.'}
                     </p>
                   </div>
                   <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                     <button
+                      className="btn-secondary"
                       onClick={() => handleCorruptAction(selectedEmail, 'REUPLOAD_REQUESTED')}
-                      style={{ background: '#597928', padding: '8px 16px', fontSize: '0.85rem' }}
                     >
-                      🔄 Request Re-upload from Shipper
+                      Request re-upload
                     </button>
                     <button
+                      className="btn-secondary"
                       onClick={() => setVerifyMode('scan')}
-                      style={{ background: '#6e3511', padding: '8px 16px', fontSize: '0.85rem' }}
                     >
-                      📷 Route to Paper Scan / OCR
+                      Use paper scan
                     </button>
                     <button
+                      className="btn-danger btn-sm"
                       onClick={() => handleCorruptAction(selectedEmail, 'REJECTED')}
-                      style={{ background: '#dc3545', padding: '8px 16px', fontSize: '0.85rem' }}
                     >
-                      ❌ Reject Document
+                      Reject
                     </button>
                   </div>
                 </div>
@@ -4235,9 +4175,9 @@ function App() {
 
             {/* Banner: Discrepancy resolved by an operator (stored record) */}
             {resolutionRecord && (
-              <div className="redirect-banner" style={{ background: '#d4edda', borderColor: '#c3e6cb', color: '#155724' }}>
+              <div className="notice ok">
                 <div>
-                  <strong>✅ Resolved by {resolutionRecord.resolved_by || 'operator'}:</strong>{' '}
+                  <strong>Resolved by {resolutionRecord.resolved_by || 'operator'}</strong>{' '}
                   {resolutionRecord.timestamp ? new Date(resolutionRecord.timestamp).toLocaleString() : ''}
                   {resolutionRecord.notes ? ` — ${resolutionRecord.notes}` : ''}
                 </div>
@@ -4246,9 +4186,9 @@ function App() {
 
             {/* Banner: Mismatch Detected — resolution panel is rendered below */}
             {result?.status === 'MISMATCH' && !resolutionRecord && (
-              <div className="redirect-banner">
+              <div className="notice warn">
                 <div>
-                  <strong>⚠️ Discrepancy Found:</strong> {result.defect_fields?.length} field mismatch(es) detected — resolve below.
+                  <strong>Discrepancy:</strong> {result.defect_fields?.length} field mismatch(es) detected — resolve below.
                 </div>
               </div>
             )}
@@ -4258,11 +4198,9 @@ function App() {
               <div className="glass-panel" style={{ marginBottom: '22px', background: '#ffffff' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', marginBottom: '12px' }}>
                   <div>
-                    <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: '#888', fontWeight: 'bold' }}>
-                      INBOX MESSAGE &bull; {emailInfo.email_id}
-                    </span>
-                    <h3 style={{ color: 'var(--primary-color)', margin: '4px 0 2px' }}>{emailInfo.subject}</h3>
-                    <p style={{ fontSize: '0.85rem', color: '#555' }}><strong>From:</strong> {emailInfo.from}</p>
+                    <span className="meta-mono">{emailInfo.email_id}</span>
+                    <h3 style={{ margin: '4px 0 2px' }}>{emailInfo.subject}</h3>
+                    <p className="meta"><strong>From:</strong> {emailInfo.from}</p>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
                     <span
@@ -4276,38 +4214,27 @@ function App() {
                 </div>
 
                 {/* Email Body preview */}
-                <div style={{ background: '#faf8f5', padding: '10px 14px', borderRadius: '6px', fontSize: '0.88rem', whiteSpace: 'pre-wrap', maxHeight: '110px', overflowY: 'auto', border: '1px solid #efe8df', marginBottom: '12px' }}>
+                <div style={{ background: 'var(--surface-sunken)', padding: '10px 14px', borderRadius: '6px', fontSize: '0.88rem', whiteSpace: 'pre-wrap', maxHeight: '110px', overflowY: 'auto', border: '1px solid var(--line)', marginBottom: '12px' }}>
                   {emailInfo.body}
                 </div>
 
                 {/* Attachments Chips */}
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#666' }}>
+                  <span className="meta" style={{ fontWeight: 600 }}>
                     Attachments ({emailInfo.attachments?.length || 0}):
                   </span>
                   {emailInfo.attachments?.length === 0 && (
-                    <span style={{ fontSize: '0.8rem', color: '#856404', fontStyle: 'italic' }}>
+                    <span className="meta warn">
                       No attachments (Draft BL Pending from shipping line)
                     </span>
                   )}
                   {emailInfo.attachments?.map((a, idx) => (
-                    <span key={idx} style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '4px 10px',
-                      borderRadius: '6px',
-                      fontSize: '0.8rem',
-                      fontFamily: 'monospace',
-                      background: a.is_corrupt ? '#ffebee' : '#f0f4e8',
-                      color: a.is_corrupt ? '#c62828' : '#2e5b15',
-                      border: `1px solid ${a.is_corrupt ? '#ffcdd2' : '#dcedc8'}`,
-                    }}>
-                      📎 {a.path.split('/').pop()}
+                    <span key={idx} className={`attach-chip${a.is_corrupt ? ' corrupt' : ''}`}>
+                      {a.path.split('/').pop()}
                       <span style={{ opacity: 0.7 }}>
                         ({a.size > 0 ? `${(a.size / 1024).toFixed(1)} KB` : '0 B'})
                       </span>
-                      {a.is_corrupt && <strong style={{ color: '#d32f2f' }}>[CORRUPT]</strong>}
+                      {a.is_corrupt && <span className="tag danger">Corrupt</span>}
                     </span>
                   ))}
                 </div>
@@ -4323,13 +4250,11 @@ function App() {
                     style={{ cursor: 'pointer', userSelect: 'none' }}
                     title={threadOpen ? 'Collapse thread' : 'Expand thread'}
                   >
-                    <h3 style={{ margin: 0, color: 'var(--primary-color)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontSize: '0.8rem' }}>{threadOpen ? '▾' : '▸'}</span>
-                      📨 Correspondence
+                      Correspondence
                       {emailThreads.length > 0 && (
-                        <span style={{ fontSize: '0.78rem', fontWeight: 700, background: '#f0f4e8', color: 'var(--primary-color)', borderRadius: '10px', padding: '1px 9px' }}>
-                          {emailThreads.length}
-                        </span>
+                        <span className="tag">{emailThreads.length}</span>
                       )}
                     </h3>
                   </div>

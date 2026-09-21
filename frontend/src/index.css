@@ -581,20 +581,21 @@ button:disabled {
 
 /* Contextual Action Cards */
 .action-card {
-  background: #ffffff;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 24px;
-  margin-bottom: 24px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 16px;
 }
 
 .action-card.chaser {
-  border-top: 5px solid #e07a5f;
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-line);
 }
 
 .action-card.corrupt {
-  border-top: 5px solid #c62828;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-line);
 }
 
 .email-preview-box {
@@ -1050,4 +1051,12 @@ button:disabled {
 .search-input:focus {
   outline: none;
   border-color: var(--line-strong);
+}
+
+.filter-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
 }
