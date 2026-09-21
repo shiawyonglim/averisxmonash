@@ -33,7 +33,7 @@ except ImportError:
 from pipeline.ai_engine import extract_shipping_fields, extract_fields_tiered, reason_and_verify_with_ai, classify_email, quick_classify, classify_email_detailed, analyze_document_image, MODEL
 from pipeline.comparator import compare_fields
 from pipeline.edge_cases import check_wrong_doc_type, diagnose_attachment, is_si_attachment
-from pipeline.parsers import extract_text, is_image_file, validate_image, IMAGE_EXTENSIONS, extract_shipping_fields_fast
+from pipeline.parsers import extract_text, is_image_file, validate_image, IMAGE_EXTENSIONS, extract_shipping_fields_fast, extract_inline_si_fields
 from pipeline.main import process_email, submission_row
 from pipeline.knowledge_base import build_documents, compute_stats, answer_question, retrieve, invalidate_cache
 from pipeline.agent import run_agent, resume_agent, SYSTEM_PROMPT as AGENT_SYSTEM_PROMPT
@@ -374,6 +374,103 @@ def _init_verdicts_from_submission():
 
 _init_verdicts_from_submission()
 
+SI_FIELD_LABELS = {
+    "shipper": "Shipper",
+    "consignee": "Consignee",
+    "notify_party": "Notify Party",
+    "port_of_loading": "Port of Loading",
+    "port_of_discharge": "Port of Discharge",
+    "container_count": "Container Count",
+    "gross_weight_kg": "Gross Weight (KG)",
+}
+
+def _materialize_inline_si(email_id, email_data):
+    """
+    When a Shipping Instruction lives inside the email body rather than an
+    attachment, persist it as a real document file
+    (attachments/{eid}_SI_from_body.txt) so it behaves like a document
+    downstream — shown in the SI pane, editable via save-documents,
+    diffable, auditable.
+
+    The pointer is stored under 'generated_si' in the email JSON —
+    deliberately NOT in attachments[] — so classification, corrupt-scan and
+    submission verdicts are unaffected. Idempotent: reuses the file once
+    written (operator edits to it are preserved).
+    Returns the bundle-relative path, or None when nothing was written.
+    """
+    gen = email_data.get("generated_si")
+    if gen and os.path.exists(os.path.join(BUNDLE_DIR, gen)):
+        return gen
+
+    body = email_data.get("body", "")
+    if not extract_inline_si_fields(body):
+        return None
+
+    fields, prov = extract_fields_tiered(body)
+    if not any(str(v).strip() and str(v).strip().upper() != "ERROR"
+               for v in (fields or {}).values()):
+        return None
+
+    lines = [
+        "SHIPPING INSTRUCTION",
+        f"(Auto-extracted from email body - {email_id})",
+        "",
+    ]
+    for f in DEFECT_FIELDS:
+        val = str((fields or {}).get(f) or "").strip()
+        if not val or val.upper() == "ERROR":
+            val = "MISSING_VALUE"
+        lines.append(f"{SI_FIELD_LABELS[f]}: {val}")
+    lines += [
+        "",
+        f"--- Source: email body of {email_id} ---",
+        body.strip(),
+        "",
+    ]
+
+    rel = f"attachments/{email_id}_SI_from_body.txt"
+    try:
+        os.makedirs(os.path.join(BUNDLE_DIR, "attachments"), exist_ok=True)
+        _backup_email_files(email_id)  # snapshot the JSON before adding the pointer
+        with open(os.path.join(BUNDLE_DIR, rel), "w", encoding="utf-8") as fh:
+            fh.write("\n".join(lines))
+        email_data["generated_si"] = rel
+        email_data["generated_si_fields"] = fields
+        email_data["generated_si_provenance"] = prov
+        with open(os.path.join(INBOX_DIR, f"{email_id}.json"), "w", encoding="utf-8") as fh:
+            json.dump(email_data, fh, indent=2, ensure_ascii=False)
+        INBOX_CACHE[email_id] = email_data
+        _append_backup_manifest({"timestamp": _utcnow(), "email_id": email_id,
+                                 "action": "materialize_si", "files": {"si": rel}})
+        _log_to_supabase_audit(email_id, "SI_MATERIALIZED", {"file": rel})
+        return rel
+    except Exception as e:
+        print(f"Inline SI materialization failed for {email_id}: {e}")
+        return None
+
+
+def _si_conflict(att_si_text, body):
+    """
+    An email may carry an attached SI AND a second SI written in the body.
+    When they disagree on the 7 core fields that is a real operational
+    issue (one version was edited). Returns a conflict descriptor or None.
+    The attached SI stays authoritative — this only surfaces the diff.
+    """
+    body_fields = extract_inline_si_fields(body)
+    if not body_fields or not att_si_text or _is_placeholder_text(att_si_text):
+        return None
+    att_fields, _ = extract_fields_tiered(att_si_text)
+    defect_fields, _missing, comparisons = compare_fields(att_fields, body_fields)
+    if not defect_fields:
+        return None
+    return {
+        "fields": defect_fields,
+        "attachment_values": {f: att_fields.get(f) for f in defect_fields},
+        "body_values": {f: body_fields.get(f) for f in defect_fields},
+        "comparisons": {f: comparisons.get(f) for f in defect_fields},
+    }
+
+
 @app.get("/api/email/{email_id}")
 def get_email_content(email_id: str):
     try:
@@ -440,23 +537,62 @@ def get_email_content(email_id: str):
             verdict = VERDICTS_STORE.get(email_id)
             is_corrupted = bool(verdict and verdict.get("status") == "NEEDS_REVIEW" and verdict.get("review_reason") == "missing_attachment")
             missing_doc = None
+            si_conflict = None
+            si_source = None
 
-            if category != "BL_COMPARISON":
+            # A Shipping Instruction written directly into the email body is
+            # a real document — materialize it into a file so the SI pane
+            # shows actual content and it becomes editable/auditable.
+            generated_rel = None
+            generated_si_text = None
+            if extract_inline_si_fields(email_data.get("body", "")):
+                generated_rel = _materialize_inline_si(email_id, email_data)
+                if generated_rel:
+                    generated_si_text = extract_text(os.path.join(BUNDLE_DIR, generated_rel))
+                    email_info["si_fields"] = email_data.get("generated_si_fields") or {}
+                    email_info["si_provenance"] = email_data.get("generated_si_provenance") or {}
+                    email_info["generated_si"] = generated_rel
+
+            # Work out which document is missing from the one attachment
+            # that did arrive — filename convention first, then content.
+            present_text = None
+            present_side = None
+            present_bad = False
+            present_reason = None
+            if len(atts) == 1:
+                p1 = os.path.join(BUNDLE_DIR, atts[0])
+                present_bad, present_reason = diagnose_attachment(p1)
+                present_text = (f"[CORRUPTED FILE: {atts[0]} is unreadable - {present_reason}]"
+                                if present_bad else extract_text(p1))
+                present_side = "si" if is_si_attachment(p1, "" if present_bad else present_text) else "bl"
+
+            if generated_rel:
+                # The body carried the SI — the draft BL is the open item.
+                si_text = generated_si_text
+                si_source = "email_body"
+                issue_detail = None
+                corrupt_reason = None
+                if present_side == "si" and not present_bad:
+                    # An attached SI AND a body SI: the attachment is
+                    # authoritative, but surface disagreements.
+                    si_text = present_text
+                    si_source = "attachment"
+                    si_conflict = _si_conflict(present_text, email_data.get("body", ""))
+                if present_side == "bl" and not present_bad:
+                    bl_text = present_text
+                    missing_doc = None  # draft BL arrived; inline SI completes the pair
+                else:
+                    bl_text = "[AWAITING CARRIER DRAFT BL]\nShipping Instruction received (inline in the email body) — the carrier has not yet issued the draft Bill of Lading."
+                    missing_doc = "bl"
+                    if present_bad:
+                        issue_detail = f"{atts[0]}: {present_reason}"
+            elif category != "BL_COMPARISON":
                 si_text = f"[NON-COMPARISON CATEGORY: {category}]\nThis email is classified as {category} ({det['description']}). It does not carry or require a Shipping Instruction (SI) document."
                 bl_text = f"[NON-COMPARISON CATEGORY: {category}]\nThis email is classified as {category} ({det['description']}). It does not carry or require a draft Bill of Lading (BL)."
                 issue_detail = None
                 corrupt_reason = None
             else:
-                # Work out which document is missing from the one attachment
-                # that did arrive — filename convention first, then content.
-                present_text = None
-                present_side = None
                 if len(atts) == 1:
-                    p1 = os.path.join(BUNDLE_DIR, atts[0])
-                    bad1, why1 = diagnose_attachment(p1)
-                    present_text = (f"[CORRUPTED FILE: {atts[0]} is unreadable - {why1}]"
-                                    if bad1 else extract_text(p1))
-                    present_side = "si" if is_si_attachment(p1, "" if bad1 else present_text) else "bl"
                     missing_doc = "bl" if present_side == "si" else "si"
                 elif len(atts) == 0:
                     missing_doc = "both"
@@ -487,6 +623,10 @@ def get_email_content(email_id: str):
                 "threads": threads,
                 "si_text": si_text,
                 "bl_text": bl_text,
+                "si_source": si_source,
+                "si_conflict": si_conflict,
+                "si_inline": bool(generated_rel),
+                "generated_si": generated_rel,
                 "is_corrupted": is_corrupted,
                 "corrupt_reason": corrupt_reason,
                 "issue_details": issue_detail,
@@ -522,37 +662,34 @@ def get_email_content(email_id: str):
         issue_detail = f"{atts[1] if is_bad2 else atts[0]}: {corrupt_reason}" if is_corrupt else None
 
         if is_si_attachment(path1, text1):
-            return {
-                "email": email_info,
-                "threads": threads,
-                "si_text": text1,
-                "bl_text": text2,
-                "is_corrupted": is_corrupt,
-                "corrupt_reason": "unreadable" if is_corrupt else None,
-                "issue_details": issue_detail,
-                "missing_doc": None,
-                "verdict": VERDICTS_STORE.get(email_id),
-                "resolution": RESOLUTIONS_STORE.get(email_id),
-                "supabase_record": sb_rec,
-                "cloud_synced": bool(sb_rec is not None),
-                "backups": _list_backups(email_id)
-            }
+            si_doc_text, bl_doc_text = text1, text2
         else:
-            return {
-                "email": email_info,
-                "threads": threads,
-                "si_text": text2,
-                "bl_text": text1,
-                "is_corrupted": is_corrupt,
-                "corrupt_reason": "unreadable" if is_corrupt else None,
-                "issue_details": issue_detail,
-                "missing_doc": None,
-                "verdict": VERDICTS_STORE.get(email_id),
-                "resolution": RESOLUTIONS_STORE.get(email_id),
-                "supabase_record": sb_rec,
-                "cloud_synced": bool(sb_rec is not None),
-                "backups": _list_backups(email_id)
-            }
+            si_doc_text, bl_doc_text = text2, text1
+
+        # A second SI written in the email body may disagree with the
+        # attached one — surface the diff; the attachment stays authoritative.
+        body_inline = extract_inline_si_fields(email_data.get("body", ""))
+        si_conflict = _si_conflict(si_doc_text, email_data.get("body", "")) if body_inline else None
+
+        return {
+            "email": email_info,
+            "threads": threads,
+            "si_text": si_doc_text,
+            "bl_text": bl_doc_text,
+            "si_source": "attachment",
+            "si_conflict": si_conflict,
+            "si_inline": bool(body_inline),
+            "generated_si": None,
+            "is_corrupted": is_corrupt,
+            "corrupt_reason": "unreadable" if is_corrupt else None,
+            "issue_details": issue_detail,
+            "missing_doc": None,
+            "verdict": VERDICTS_STORE.get(email_id),
+            "resolution": RESOLUTIONS_STORE.get(email_id),
+            "supabase_record": sb_rec,
+            "cloud_synced": bool(sb_rec is not None),
+            "backups": _list_backups(email_id)
+        }
 
     except HTTPException:
         raise
@@ -694,37 +831,58 @@ def save_email_documents(email_id: str, req: SaveDocumentsRequest):
     email_path = os.path.join(INBOX_DIR, f"{email_id}.json")
     email_data = _get_email_data(email_id)
     atts = list(email_data.get("attachments", []))
-    if len(atts) < 2:
+    gen_si = email_data.get("generated_si")
+    if len(atts) < 2 and not gen_si:
         raise HTTPException(
             status_code=400,
             detail="This email does not carry two document attachments — nothing to overwrite.")
 
-    # Map SI/BL texts to the right attachments (same logic as get_email_content)
-    path1 = os.path.join(BUNDLE_DIR, atts[0])
-    path2 = os.path.join(BUNDLE_DIR, atts[1])
-    t1 = extract_text(path1)
-    si_att, bl_att = (atts[0], atts[1]) if is_si_attachment(path1, t1) else (atts[1], atts[0])
+    # Map SI/BL texts to the right files (same logic as get_email_content).
+    # A materialized body-SI file stands in for the SI attachment.
+    si_att = bl_att = None
+    if len(atts) >= 2:
+        path1 = os.path.join(BUNDLE_DIR, atts[0])
+        path2 = os.path.join(BUNDLE_DIR, atts[1])
+        t1 = extract_text(path1)
+        si_att, bl_att = (atts[0], atts[1]) if is_si_attachment(path1, t1) else (atts[1], atts[0])
+    elif len(atts) == 1:
+        p1 = os.path.join(BUNDLE_DIR, atts[0])
+        if is_si_attachment(p1, extract_text(p1)):
+            si_att = atts[0]  # attached SI stays authoritative over the body copy
+        else:
+            bl_att, si_att = atts[0], gen_si
+    else:
+        si_att = gen_si
 
     sides = [("si", si_att, req.si_text), ("bl", bl_att, req.bl_text)]
-    skipped = [f"{side}_text is a placeholder — nothing to save"
-               for side, _, txt in sides if _is_placeholder_text(txt)]
+    skipped = []
+    for side, att, txt in sides:
+        if _is_placeholder_text(txt):
+            skipped.append(f"{side}_text is a placeholder — nothing to save")
+        elif att is None:
+            skipped.append(f"no {side.upper()} document exists to write to")
     if len(skipped) == 2:
         raise HTTPException(status_code=400, detail="Both documents are placeholders — nothing to save.")
 
     # Snapshot before touching anything (original + timestamped history)
-    _backup_email_files(email_id)
+    _backup_email_files(email_id, extra_files=[os.path.join(BUNDLE_DIR, gen_si)] if gen_si else None)
 
     saved, remapped = {}, []
     for side, att, txt in sides:
-        if _is_placeholder_text(txt):
+        if att is None or _is_placeholder_text(txt):
             continue
         src_path = os.path.join(BUNDLE_DIR, att)
         written_path, was_remapped = _write_document_text(src_path, txt)
         saved[side] = os.path.basename(written_path)
         if was_remapped:
-            idx = atts.index(att)
-            atts[idx] = _attachment_entry_for(written_path)
-            remapped.append({"from": att, "to": atts[idx]})
+            new_entry = _attachment_entry_for(written_path)
+            if att in atts:
+                idx = atts.index(att)
+                atts[idx] = new_entry
+            elif att == gen_si:
+                email_data["generated_si"] = new_entry
+                gen_si = new_entry
+            remapped.append({"from": att, "to": new_entry})
 
     # Repoint attachment entries when a binary file was swapped for its .txt twin
     if remapped:
@@ -767,7 +925,8 @@ def restore_email_documents(email_id: str):
     if not os.path.exists(orig_json):
         raise HTTPException(status_code=400, detail="No backup exists for this email.")
 
-    _backup_email_files(email_id)  # snapshot the edited state before overwriting
+    gen_rel = _get_email_data(email_id).get("generated_si")
+    _backup_email_files(email_id, extra_files=[os.path.join(BUNDLE_DIR, gen_rel)] if gen_rel else None)
 
     shutil.copy2(orig_json, os.path.join(INBOX_DIR, f"{email_id}.json"))
     att_dir = os.path.join(orig_dir, "attachments")
@@ -776,6 +935,16 @@ def restore_email_documents(email_id: str):
         for fn in os.listdir(att_dir):
             shutil.copy2(os.path.join(att_dir, fn), os.path.join(BUNDLE_DIR, "attachments", fn))
             restored_files.append(fn)
+
+    # The pristine JSON carries no generated_si pointer — drop the stale
+    # materialized file; it is regenerated below if the body still holds an SI.
+    if gen_rel:
+        gp = os.path.join(BUNDLE_DIR, gen_rel)
+        if os.path.exists(gp):
+            try:
+                os.remove(gp)
+            except OSError:
+                pass
 
     INBOX_CACHE.pop(email_id, None)
     email_data = _get_email_data(email_id)
@@ -790,6 +959,10 @@ def restore_email_documents(email_id: str):
             si_text, bl_text = t1, t2
         else:
             si_text, bl_text = t2, t1
+    elif extract_inline_si_fields(email_data.get("body", "")):
+        regen = _materialize_inline_si(email_id, email_data)
+        if regen:
+            si_text = extract_text(os.path.join(BUNDLE_DIR, regen))
 
     record = {
         "timestamp": _utcnow(),
@@ -992,7 +1165,13 @@ def get_missing_bills(carrier: str = "", search: str = ""):
                 if carrier and carrier.upper() not in carrier_name.upper():
                     continue
 
-                missing_type = "Draft BL Missing (0 attachments)" if len(atts) == 0 else f"SI Received ({len(atts)} doc) - Draft BL Missing"
+                si_inline = len(atts) == 0 and bool(extract_inline_si_fields(body))
+                if si_inline:
+                    missing_type = "SI Received Inline (in body) - Draft BL Awaited"
+                elif len(atts) == 0:
+                    missing_type = "Draft BL Missing (0 attachments)"
+                else:
+                    missing_type = f"SI Received ({len(atts)} doc) - Draft BL Missing"
 
                 missing.append({
                     "email_id": eid,
@@ -1002,6 +1181,7 @@ def get_missing_bills(carrier: str = "", search: str = ""):
                     "carrier": carrier_name,
                     "ref_no": ref_no,
                     "missing_type": missing_type,
+                    "si_inline": si_inline,
                     "attachments": atts,
                     "status": CHASERS_STORE.get(eid, {}).get("status", "AWAITING_DRAFT_BL"),
                     "chaser_sent_at": CHASERS_STORE.get(eid, {}).get("chaser_sent_at", None),
@@ -2797,6 +2977,8 @@ def _email_corrupt_issue(email_data):
     - Any attachment failing diagnose_attachment -> that reason.
     - Exactly 1 attachment -> 'missing_attachment' (e.g. email_507/509 carry
       only the SI; their draft BL is missing regardless of subject wording).
+      Exception: the attachment is the BL and the SI is inline in the body.
+    - An SI written into the email body counts as received — never flagged.
     - 0 attachments -> 'missing_attachment' ONLY when the email is a
       BL-comparison request whose documents were dropped, i.e. the body
       explicitly references both an SI and a BL as standalone words
@@ -2809,9 +2991,20 @@ def _email_corrupt_issue(email_data):
         is_bad, reason = diagnose_attachment(os.path.join(BUNDLE_DIR, a))
         if is_bad:
             return reason
+    inline_si = extract_inline_si_fields(email_data.get("body", ""))
     if len(atts) == 1:
+        # The single attachment may be the draft BL while the SI arrived
+        # inline in the body — then nothing is actually missing.
+        if inline_si:
+            p1 = os.path.join(BUNDLE_DIR, atts[0])
+            if not is_si_attachment(p1, extract_text(p1)):
+                return None
         return "missing_attachment"
     if len(atts) == 0:
+        if inline_si:
+            # SI arrived written in the email body — it is not "missing";
+            # only the carrier's draft BL is still owed (missing_bl queue).
+            return None
         body = (email_data.get("body", "") or "").upper()
         if re.search(r'\bSI\b', body) and re.search(r'\bBL\b', body):
             return "missing_attachment"
@@ -2842,6 +3035,9 @@ def _queue_item(eid, d):
     corrupted = corrupt_issue is not None
     has_bl = _has_bl_attachment(atts)
     missing_bl = (not has_bl) and _is_bl_relevant_subject(subj)
+    # SI submitted inline in the email body — no SI attachment at all,
+    # draft BL still owed by the carrier.
+    si_inline = len(atts) == 0 and bool(extract_inline_si_fields(body))
     det = classify_email_detailed(subj, body, len(atts) > 0)
     category = CLASSIFICATIONS_STORE.get(eid) or det["category"]
     chaser_status = CHASERS_STORE.get(eid, {}).get("status")
@@ -2875,6 +3071,7 @@ def _queue_item(eid, d):
         "display_tag": det["display_tag"],
         "category_description": det["description"],
         "has_bl": has_bl,
+        "si_inline": si_inline,
         "corrupted": corrupted,
         "corrupt_issue": corrupt_issue,
         "verdict_status": verdict_status,
@@ -2904,6 +3101,8 @@ def _queue_match(item, flt):
         return item["verdict_status"] == "NEEDS_REVIEW" or item["corrupted"]
     if flt == "missing_bl":
         return item["_missing_bl"]
+    if flt == "si_inline":
+        return item["si_inline"]
     if flt == "corrupted":
         return item["corrupted"]
     if flt == "resolved":
@@ -2934,6 +3133,7 @@ def get_queue(filter: str = "all", search: str = "", page: int = 1, limit: int =
         "mismatch": sum(1 for i in items if _queue_match(i, "mismatch")),
         "needs_review": sum(1 for i in items if _queue_match(i, "needs_review")),
         "missing_bl": sum(1 for i in items if _queue_match(i, "missing_bl")),
+        "si_inline": sum(1 for i in items if _queue_match(i, "si_inline")),
         "corrupted": sum(1 for i in items if _queue_match(i, "corrupted")),
         "resolved": sum(1 for i in items if _queue_match(i, "resolved")),
         "chaser_sent": sum(1 for i in items if _queue_match(i, "chaser_sent")),

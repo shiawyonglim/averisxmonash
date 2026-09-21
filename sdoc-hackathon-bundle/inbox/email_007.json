@@ -3,5 +3,24 @@
   "from": "hari_mardianto@aprilasia.com",
   "subject": "REQUEST SI _ 5RFR-37631 _ GDANSK_POLAND _ AL GURG STATIONERY LLC _ SIJ1051834",
   "body": "Hi Willy\n\nPlease find Shipping instruction for 5RFR-37631.\n\nPOL: SINGAPORE\nPOD: GDANSK, POLAND\n\nShipper:\nAPRIL FINE PAPER TRADING\nON BEHALF OF VITAL SOLUTIONS PTE LTD\n77 ROBINSON ROAD, #21-01\nSINGAPORE 068896\n\nConsignee:\nAL GURG STATIONERY LLC\nP.O. BOX 5069\nDUBAI, UNITED ARAB EMIRATES\n\nNotify Party:\nPACIFIC OFFICE (M) SDN BHD\nLOT 6, JALAN P/7\nSECTION 13, 43650 BANDAR BARU BANGI\nSELANGOR, MALAYSIA\n\nDescription of Goods:\n15X20'GP\nPAPERBOARD\nH.S.CODE: 48109200\nGROSS WT: 354,765 KG\n\nShipping line: CFR TERM\nDocuments Required:\n1) 3 Original invoice\n2) 3 Packing list\n3) 3 Original BL + 3 N/N\nPlease revert with draft BL once available.\n\nBest Regards,\nOoi Sok Yong\nShipping Documentation\nDID : +971 04 4938224\nAPRIL Fine Paper Trading (Middle East) Fze\n#813, 4 EA, Dubai Airport Free Zone\nP.O. Box : 293775, Dubai, United Arab Emirates\nWebsite : www.aprilasia.com | www.paperone.com",
-  "attachments": []
+  "attachments": [],
+  "generated_si": "attachments/email_007_SI_from_body.txt",
+  "generated_si_fields": {
+    "shipper": "APRIL FINE PAPER TRADING",
+    "consignee": "AL GURG STATIONERY LLC",
+    "notify_party": "PACIFIC OFFICE (M) SDN BHD",
+    "port_of_loading": "SINGAPORE",
+    "port_of_discharge": "GDANSK, POLAND",
+    "container_count": "15",
+    "gross_weight_kg": "354,765 KG"
+  },
+  "generated_si_provenance": {
+    "shipper": "rule",
+    "consignee": "rule",
+    "notify_party": "rule",
+    "port_of_loading": "rule",
+    "port_of_discharge": "rule",
+    "gross_weight_kg": "rule",
+    "container_count": "model"
+  }
 }
