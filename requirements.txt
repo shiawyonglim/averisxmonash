@@ -9,3 +9,7 @@ tqdm
 pydantic
 pillow
 python-multipart
+# Optional: Laya System-1 decision model for the email-getter neural tier.
+# NOT for Render free tier — pulls torch+tensorflow (~3GB). Local/demo only:
+#   pip install laya==0.3.4
+# laya==0.3.4

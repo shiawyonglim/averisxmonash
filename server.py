@@ -1,6 +1,7 @@
 import asyncio
 import os
 import json
+import time
 import re
 import shutil
 import tempfile
@@ -8,6 +9,7 @@ import threading
 import smtplib
 import imaplib
 import email
+from concurrent.futures import ThreadPoolExecutor
 from email.header import decode_header
 import uuid
 from typing import Optional, Dict, List, Any
@@ -437,22 +439,48 @@ def get_email_content(email_id: str):
         if len(atts) < 2:
             verdict = VERDICTS_STORE.get(email_id)
             is_corrupted = bool(verdict and verdict.get("status") == "NEEDS_REVIEW" and verdict.get("review_reason") == "missing_attachment")
-            
+            missing_doc = None
+
             if category != "BL_COMPARISON":
                 si_text = f"[NON-COMPARISON CATEGORY: {category}]\nThis email is classified as {category} ({det['description']}). It does not carry or require a Shipping Instruction (SI) document."
                 bl_text = f"[NON-COMPARISON CATEGORY: {category}]\nThis email is classified as {category} ({det['description']}). It does not carry or require a draft Bill of Lading (BL)."
                 issue_detail = None
                 corrupt_reason = None
-            elif is_corrupted:
-                si_text = "[MISSING ATTACHMENT: Email requested comparison, but required shipping documents were not attached]"
-                bl_text = "[MISSING ATTACHMENT: Draft Bill of Lading is absent from this comparison request]"
-                issue_detail = f"Comparison requested but only {len(atts)} attachment(s) found. Escalated to NEEDS_REVIEW."
-                corrupt_reason = "missing_attachment"
             else:
-                si_text = "[INBOUND CHASER / STATUS REQUEST]\nNo Shipping Instruction attached. Inbound request regarding draft BL issuance."
-                bl_text = "[AWAITING CARRIER DRAFT BL]\nNo draft Bill of Lading attached. Carrier has not yet issued the draft document."
-                issue_detail = None
-                corrupt_reason = None
+                # Work out which document is missing from the one attachment
+                # that did arrive — filename convention first, then content.
+                present_text = None
+                present_side = None
+                if len(atts) == 1:
+                    p1 = os.path.join(BUNDLE_DIR, atts[0])
+                    bad1, why1 = diagnose_attachment(p1)
+                    present_text = (f"[CORRUPTED FILE: {atts[0]} is unreadable - {why1}]"
+                                    if bad1 else extract_text(p1))
+                    present_side = "si" if is_si_attachment(p1, "" if bad1 else present_text) else "bl"
+                    missing_doc = "bl" if present_side == "si" else "si"
+                elif len(atts) == 0:
+                    missing_doc = "both"
+
+                if is_corrupted:
+                    si_text = "[MISSING ATTACHMENT: Shipping Instruction is absent from this comparison request]"
+                    bl_text = "[MISSING ATTACHMENT: Draft Bill of Lading is absent from this comparison request]"
+                    if present_side == "si":
+                        si_text = present_text
+                    elif present_side == "bl":
+                        bl_text = present_text
+                    issue_detail = f"Comparison requested but only {len(atts)} attachment(s) found. Escalated to NEEDS_REVIEW."
+                    corrupt_reason = "missing_attachment"
+                else:
+                    si_text = "[INBOUND CHASER / STATUS REQUEST]\nNo Shipping Instruction attached. Inbound request regarding draft BL issuance."
+                    bl_text = "[AWAITING CARRIER DRAFT BL]\nNo draft Bill of Lading attached. Carrier has not yet issued the draft document."
+                    if present_side == "si":
+                        si_text = present_text
+                        bl_text = "[AWAITING CARRIER DRAFT BL]\nShipping Instruction received — the carrier has not yet issued the draft Bill of Lading."
+                    elif present_side == "bl":
+                        bl_text = present_text
+                        si_text = "[MISSING ATTACHMENT: Shipping Instruction is absent — request it from the shipper]"
+                    issue_detail = None
+                    corrupt_reason = None
 
             return {
                 "email": email_info,
@@ -462,6 +490,7 @@ def get_email_content(email_id: str):
                 "is_corrupted": is_corrupted,
                 "corrupt_reason": corrupt_reason,
                 "issue_details": issue_detail,
+                "missing_doc": missing_doc,
                 "verdict": verdict,
                 "resolution": RESOLUTIONS_STORE.get(email_id),
                 "supabase_record": sb_rec,
@@ -501,6 +530,7 @@ def get_email_content(email_id: str):
                 "is_corrupted": is_corrupt,
                 "corrupt_reason": "unreadable" if is_corrupt else None,
                 "issue_details": issue_detail,
+                "missing_doc": None,
                 "verdict": VERDICTS_STORE.get(email_id),
                 "resolution": RESOLUTIONS_STORE.get(email_id),
                 "supabase_record": sb_rec,
@@ -516,6 +546,7 @@ def get_email_content(email_id: str):
                 "is_corrupted": is_corrupt,
                 "corrupt_reason": "unreadable" if is_corrupt else None,
                 "issue_details": issue_detail,
+                "missing_doc": None,
                 "verdict": VERDICTS_STORE.get(email_id),
                 "resolution": RESOLUTIONS_STORE.get(email_id),
                 "supabase_record": sb_rec,
@@ -1429,6 +1460,789 @@ def poll_imap_inbox(req: ImapPollRequest):
 
 
 # ============================================================
+# AUTO EMAIL GETTER & LAYA DECISION CLASSIFIER ENGINE
+# (Connected to REAL Gmail via IMAP SSL & Google SMTP)
+# ============================================================
+try:
+    import laya
+    LAYA_AVAILABLE = True
+except ImportError:
+    laya = None
+    LAYA_AVAILABLE = False
+
+# Off by default: these endpoints read a real personal inbox and can send mail
+# via stored SMTP creds — they must never be live on the public deployment.
+# Set REAL_GMAIL_ENABLED=1 in .env for local demo use only.
+REAL_GMAIL_ENABLED = os.getenv("REAL_GMAIL_ENABLED", "0") == "1"
+
+class CustomIngestRequest(BaseModel):
+    from_addr: str = "liner.desk@evergreen-marine.com"
+    to_addr: str = "shipping.docs@aprilasia.com"
+    subject: str = "DRAFT BL READY _ 5AKR-61849 _ PORT KLANG _ SIN832764835"
+    body: str = "Dear Shiaw Yong Lim,\n\nPlease find attached draft Bill of Lading for verification before vessel cutoff.\n\nBest regards,\nEvergreen Marine Operations Desk"
+    attachments: list = []
+
+class FetchBatchRequest(BaseModel):
+    count: int = 10
+
+class PollGmailRequest(BaseModel):
+    limit: int = 20
+    only_unread: bool = False
+
+class RealTestEmailRequest(BaseModel):
+    subject: str = "URGENT DRAFT BL READY _ 5AKR-61849 _ PORT KLANG _ SIN832764835"
+    body: str = "Dear Shiaw Yong Lim,\n\nPlease find attached draft Bill of Lading for verification before vessel cutoff at Port Klang.\n\nBest regards,\nEvergreen Marine Operations Desk"
+
+GETTER_INGESTED_IDS = []
+CUSTOM_INGESTED_ITEMS = []
+REAL_GMAIL_ITEMS = []
+_DOSSIER_CACHE = {}
+
+LAYA_AGENT = None
+_LAYA_LOAD_LOCK = threading.Lock()
+_LAYA_STATS = {"calls": 0, "total_ms": 0.0}
+_NEURAL_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="laya")
+
+# Maritime label space for Laya's category question — real probabilities over
+# the hackathon's categories instead of the default generic departments.
+MARITIME_CATEGORIES = {
+    "BL_COMPARISON": "draft Bill of Lading to check or compare against a Shipping Instruction",
+    "SI_REQUEST": "prepare, submit or send a Shipping Instruction",
+    "INVOICE_QUERY": "charges, freight, billing, invoices, demurrage or detention",
+    "GENERAL": "operational updates, schedules, internal admin, automated reports",
+    "SPAM": "unsolicited marketing, phishing or scams",
+}
+
+def _get_laya_agent():
+    global LAYA_AGENT
+    if not LAYA_AVAILABLE:
+        return None
+    if LAYA_AGENT is None:
+        with _LAYA_LOAD_LOCK:  # pool workers race here on first enrich — load once
+            if LAYA_AGENT is None:
+                try:
+                    print("[LAYA] Loading neural agent (convaiinnovations/laya)...", flush=True)
+                    LAYA_AGENT = laya.load("convaiinnovations/laya")
+                    print(f"[LAYA] ModernBERT neural agent loaded: {LAYA_AGENT}", flush=True)
+                except Exception as e:
+                    print(f"[LAYA] Neural agent unavailable, rules-only mode: {e}", flush=True)
+    return LAYA_AGENT
+
+def _clean_mime_header(raw_header):
+    if not raw_header:
+        return ""
+    try:
+        parts = decode_header(raw_header)
+        res = []
+        for content, enc in parts:
+            if isinstance(content, bytes):
+                res.append(content.decode(enc or 'utf-8', errors='ignore'))
+            else:
+                res.append(str(content))
+        return "".join(res).strip()
+    except Exception:
+        return str(raw_header)
+
+def _extract_shipping_entities(subject: str, body: str, attachments: list = None):
+    text = f"{subject}\n{body}"
+    booking_match = re.search(r'\b(5[A-Z0-9]{3}-\d{5}|OC\s*5[A-Z0-9]{3}-\d{5})\b', text, re.IGNORECASE)
+    booking_ref = booking_match.group(1).replace("OC ", "").strip() if booking_match else None
+    
+    bl_match = re.search(r'\b(SIN\d{6,10}|MEDU[A-Z0-9]{6,12}|EGLV\d{8,12}|MAEU\d{8,12}|ONE[A-Z0-9]{8,12}|[A-Z]{4}\d{8,12})\b', text, re.IGNORECASE)
+    bl_ref = bl_match.group(1).strip() if bl_match else None
+    
+    inv_match = re.search(r'\b(5\d{9}|INV[- ]?\d{6,10})\b', text, re.IGNORECASE)
+    invoice_no = inv_match.group(1).strip() if inv_match else None
+    
+    ports_detected = []
+    for port in ["PORT KLANG", "CALLAO", "AQABA", "SINGAPORE", "JAKARTA", "BELAWAN", "DUBAI", "JEBEL ALI", "SHANGHAI", "ROTTERDAM", "NEW YORK"]:
+        if port in text.upper():
+            ports_detected.append(port)
+            
+    carrier = _detect_carrier(subject, body)
+    
+    return {
+        "booking_ref": booking_ref or "N/A",
+        "bl_ref": bl_ref or "N/A",
+        "invoice_no": invoice_no or "N/A",
+        "carrier": carrier,
+        "ports": ports_detected if ports_detected else ["UNDISCLOSED"],
+    }
+
+def _heuristic_laya_answers(cat, subcat, subj, body):
+    """Rule-derived placeholder answers in the Laya typed-decision schema.
+    Every answer is marked source='rules' — the neural forward pass in
+    _enrich_dossier_neural replaces them with real model outputs."""
+    urgency_val = 2.0 if any(k in f"{subj} {body}".upper() for k in ["URGENT", "ASAP", "CUTOFF", "PORT CUTOFF", "EMERGENCY"]) else (1.0 if cat in ["BL_COMPARISON", "SI_REQUEST"] else 0.2)
+    needs_reply_prob = 0.95 if cat in ["BL_COMPARISON", "INVOICE_QUERY", "SI_REQUEST"] else 0.15
+    is_spam_prob = 0.96 if cat == "SPAM" else 0.02
+    cat_probs = {c: 0.03 for c in MARITIME_CATEGORIES}
+    cat_probs[cat] = 0.88
+    return {
+        "category": {
+            "type": "choice", "choice": cat,
+            "confidence": 0.99 if "UNMATCHED" not in subcat else 0.92,
+            "probabilities": cat_probs, "source": "rules"
+        },
+        "urgency": {
+            "type": "score", "score": urgency_val,
+            "level": "CRITICAL CUTOFF" if urgency_val >= 1.4 else ("HIGH ATTENTION" if urgency_val >= 0.8 else "ROUTINE"),
+            "source": "rules"
+        },
+        "needs_reply": {"type": "noul", "probability": needs_reply_prob, "expected": needs_reply_prob > 0.5, "source": "rules"},
+        "is_spam": {"type": "noul", "probability": is_spam_prob, "flagged": is_spam_prob > 0.5, "source": "rules"},
+    }
+
+def _enrich_dossier_neural(dossier):
+    """Real Laya System-1 forward pass (~1s/email on CPU). Only call inline for
+    bounded batches — for lists use _enrich_dossier_async so pages stay fast."""
+    ld = dossier.get("laya_decision")
+    if not LAYA_AVAILABLE or not ld or ld.get("inference") == "real":
+        return
+    agent = _get_laya_agent()
+    if agent is None:
+        ld["inference"] = "unavailable"
+        return
+    try:
+        questions = laya.email_questions(categories=MARITIME_CATEGORIES)
+        t0 = time.time()
+        res = agent.system_one(ld["clean_state"], questions)
+        _LAYA_STATS["calls"] += 1
+        _LAYA_STATS["total_ms"] += (time.time() - t0) * 1000
+        ld["neural_raw"] = res
+        ld["inference"] = "real"
+        answers, n_ans = ld["answers"], res.get("answers", {})
+        cls = dossier["classification"]
+
+        if "category" in n_ans:
+            nc = n_ans["category"]
+            answers["category"].update({
+                "choice": nc.get("choice"), "confidence": nc.get("confidence"),
+                "probabilities": nc.get("probabilities"), "source": "laya-neural"
+            })
+            # Rules tier owns routing; Laya may claim emails the rules missed.
+            if cls["subcategory"] == "GENERAL_UNMATCHED" and nc.get("choice") in MARITIME_CATEGORIES and (nc.get("confidence") or 0) >= 0.6:
+                cls["category"] = nc["choice"]
+                cls["provenance"] = "Laya System-1 neural (rules unmatched)"
+        if "urgency" in n_ans and "score" in n_ans["urgency"]:
+            s = float(n_ans["urgency"]["score"])
+            answers["urgency"].update({
+                "score": round(s, 2),
+                "level": "CRITICAL CUTOFF" if s >= 1.4 else ("HIGH ATTENTION" if s >= 0.8 else "ROUTINE"),
+                "confidence": n_ans["urgency"].get("confidence"), "source": "laya-neural"
+            })
+        for key in ("needs_reply", "is_spam"):
+            if key in n_ans and "noul" in n_ans[key]:
+                p = float(n_ans[key]["noul"])
+                answers[key].update({
+                    "probability": round(p, 4), "confidence": n_ans[key].get("confidence"),
+                    "source": "laya-neural"
+                })
+                answers[key]["expected" if key == "needs_reply" else "flagged"] = p > 0.5
+
+        if cls["provenance"].startswith("Deterministic rules"):
+            cls["provenance"] = "Deterministic rules + Laya System-1 neural"
+    except Exception as ex:
+        print(f"[LAYA] Forward pass warning: {ex}")
+        ld["inference"] = "error"
+
+def _enrich_dossier_async(dossier):
+    """Schedule the neural pass on the worker pool — list pages return instantly
+    and dossiers fill in over the next seconds as the frontend polls."""
+    if not LAYA_AVAILABLE:
+        return
+    ld = dossier.get("laya_decision")
+    if not ld or ld.get("inference") != "pending" or dossier.get("_neural_started"):
+        return
+    dossier["_neural_started"] = True
+    _NEURAL_POOL.submit(_enrich_dossier_neural, dossier)
+
+def _build_email_dossier(email_id: str, email_data: dict, run_neural: bool = False):
+    subj = email_data.get("subject", "")
+    body = email_data.get("body", "")
+    from_addr = email_data.get("from", "operations@shippingline.com")
+    to_addr = email_data.get("to", "shipping.docs@aprilasia.com")
+    date_str = email_data.get("date", time.strftime("%Y-%m-%d %H:%M:%S"))
+    atts = email_data.get("attachments", [])
+    has_atts = len(atts) > 0
+
+    # LAYA state construction (cleans body, strips signatures & disclaimers)
+    if LAYA_AVAILABLE:
+        clean_body = laya.clean_email_body(body)
+        laya_state = laya.email_state(subject=subj, body=clean_body, sender=from_addr)
+    else:
+        clean_body, laya_state = body, None
+
+    det = classify_email_detailed(subj, body, has_atts)
+    entities = _extract_shipping_entities(subj, body, atts)
+
+    cat = det.get("category", "GENERAL")
+    subcat = det.get("subcategory", "")
+    display_tag = det.get("display_tag", cat)
+    desc = det.get("description", "")
+
+    laya_decision = {
+        "model": "laya-rl-agent (Convai Innovations ModernBERT)",
+        "type": "non-autoregressive typed decision",
+        "inference": "pending" if LAYA_AVAILABLE else "unavailable",
+        "clean_state": laya_state,
+        "neural_raw": None,
+        "answers": _heuristic_laya_answers(cat, subcat, subj, body)
+    }
+
+    signals = []
+    signals.append("Deterministic rules tier (Laya neural pass pending)" if LAYA_AVAILABLE else "Deterministic rules tier")
+    if entities["booking_ref"] != "N/A":
+        signals.append(f"Booking reference identified: {entities['booking_ref']}")
+    if entities["bl_ref"] != "N/A":
+        signals.append(f"Carrier B/L identifier identified: {entities['bl_ref']}")
+    if entities["invoice_no"] != "N/A":
+        signals.append(f"Financial invoice number parsed: {entities['invoice_no']}")
+    if entities["carrier"] != "UNKNOWN":
+        signals.append(f"Liner carrier recognized: {entities['carrier']}")
+    if len(atts) == 2:
+        signals.append("Paired documents detected: Shipping Instruction (SI) + Draft Bill of Lading (BL)")
+    elif len(atts) == 1:
+        signals.append("Single document attached")
+    else:
+        signals.append("0 attachments (Textual operational message / inquiry)")
+        
+    if cat == "INVOICE_QUERY":
+        signals.append("Intent markers detected: Charges, THC, Demurrage, or Billing breakdown inquiry")
+        target_queue = "Billing & THC Inquiries Desk"
+        recommended_action = "Auto-draft itemized local charges and THC fee breakdown"
+        priority = "MEDIUM"
+    elif cat == "SI_REQUEST":
+        signals.append("Intent markers detected: Shipping Instruction deadline or booking request")
+        target_queue = "Shipping Instruction Operations Desk"
+        recommended_action = "Transmit verified Shipping Instruction particulars to ocean carrier"
+        priority = "HIGH"
+    elif cat == "BL_COMPARISON":
+        if len(atts) >= 2:
+            signals.append("Ready for automated 7-field cross-validation against DCSA & IMO SOLAS")
+            target_queue = "7-Field Verification Studio"
+            recommended_action = "Execute automated 7-field document cross-audit"
+            priority = "URGENT"
+        else:
+            signals.append("Inbound request awaiting carrier draft issuance")
+            target_queue = "Carrier Draft BL Monitor"
+            recommended_action = "Monitor vessel cutoff & dispatch carrier chaser if pending"
+            priority = "HIGH"
+    elif cat == "SPAM":
+        signals.append("Spam/Phishing heuristics triggered")
+        target_queue = "Quarantine Filter"
+        recommended_action = "Discard unsolicited correspondence"
+        priority = "LOW"
+    else:
+        signals.append("Operational vessel notice or administrative schedule")
+        target_queue = "General Operations Log"
+        recommended_action = "File operational advisory to audit archive"
+        priority = "NORMAL"
+
+    dossier = {
+        "email_id": email_id,
+        "from": from_addr,
+        "to": to_addr,
+        "date": date_str,
+        "subject": subj,
+        "body_preview": (clean_body[:220] + "...") if len(clean_body) > 220 else clean_body,
+        "full_body": body,
+        "clean_body": clean_body,
+        "attachments_count": len(atts),
+        "attachments": atts,
+        "entities": entities,
+        "laya_decision": laya_decision,
+        "classification": {
+            "category": cat,
+            "subcategory": subcat,
+            "display_tag": display_tag,
+            "description": desc,
+            "confidence": 0.99 if "UNMATCHED" not in subcat else 0.92,
+            "provenance": ("Deterministic rules (Laya neural pending)" if LAYA_AVAILABLE else "Deterministic rules (Laya not installed)"),
+            "signals": signals,
+            "target_queue": target_queue,
+            "recommended_action": recommended_action,
+            "priority": priority
+        }
+    }
+    if run_neural:
+        _enrich_dossier_neural(dossier)
+    return dossier
+
+def _fetch_from_personal_gmail(limit: int = 20, only_unread: bool = False):
+    """
+    Connects to a real Gmail account via IMAP SSL (Port 993) and fetches
+    incoming emails, attachment names, and headers. Requires
+    REAL_GMAIL_ENABLED=1 plus SMTP_USER/SMTP_PASSWORD (or IMAP_*) env vars —
+    disabled by default so this never runs on the public deployment.
+    """
+    if not REAL_GMAIL_ENABLED:
+        return {"error": "Real Gmail ingestion is disabled on this deployment (REAL_GMAIL_ENABLED=0)", "emails": []}
+    user = os.getenv("SMTP_USER") or os.getenv("IMAP_USER")
+    password = (os.getenv("SMTP_PASSWORD") or os.getenv("IMAP_PASSWORD") or "").replace(" ", "")
+    host = os.getenv("IMAP_HOST") or "imap.gmail.com"
+    port = int(os.getenv("IMAP_PORT") or 993)
+    if not user or not password:
+        return {"error": "Missing Gmail credentials — set SMTP_USER/SMTP_PASSWORD (or IMAP_USER/IMAP_PASSWORD) in .env", "emails": []}
+
+    real_emails = []
+    try:
+        mail = imaplib.IMAP4_SSL(host, port, timeout=15)
+        mail.login(user, password)
+        status, data = mail.select("INBOX", readonly=True)
+        if status != "OK":
+            return {"error": "Failed to select INBOX", "emails": []}
+            
+        search_criteria = "UNSEEN" if only_unread else "ALL"
+        # UID search/fetch — UIDs are stable across sessions, unlike IMAP
+        # sequence numbers which shift when mail is deleted or expunged.
+        status, messages = mail.uid('search', None, search_criteria)
+        total_inbox_count = int(data[0].decode() if data and data[0] else 0)
+
+        if status != "OK" or not messages[0]:
+            mail.close()
+            mail.logout()
+            return {"error": None, "emails": [], "total_inbox": total_inbox_count, "mailbox": user}
+
+        msg_ids = messages[0].split()
+        target_ids = msg_ids[-limit:]
+        
+        for mid in reversed(target_ids):
+            try:
+                res, fetch_data = mail.uid('fetch', mid, "(RFC822)")
+                if res != "OK" or not fetch_data or not fetch_data[0]:
+                    continue
+                raw_email = fetch_data[0][1]
+                msg = email.message_from_bytes(raw_email)
+                
+                mid_str = mid.decode(errors='ignore')
+                eid = f"gmail_{mid_str}"
+                
+                subject_text = _clean_mime_header(msg.get("Subject", "No Subject"))
+                from_text = _clean_mime_header(msg.get("From", "Unknown Sender"))
+                to_text = _clean_mime_header(msg.get("To", user))
+                date_text = msg.get("Date", "")
+                
+                body_plain = ""
+                body_html = ""
+                attachments = []
+                
+                if msg.is_multipart():
+                    for part in msg.walk():
+                        content_type = part.get_content_type()
+                        content_disposition = str(part.get("Content-Disposition") or "")
+                        filename = part.get_filename()
+                        
+                        if filename:
+                            clean_fn = _clean_mime_header(filename)
+                            attachments.append(clean_fn)
+                        elif content_type == "text/plain" and "attachment" not in content_disposition:
+                            payload = part.get_payload(decode=True)
+                            if payload:
+                                body_plain += payload.decode("utf-8", errors="ignore")
+                        elif content_type == "text/html" and "attachment" not in content_disposition:
+                            payload = part.get_payload(decode=True)
+                            if payload:
+                                body_html += payload.decode("utf-8", errors="ignore")
+                else:
+                    payload = msg.get_payload(decode=True)
+                    if payload:
+                        body_plain = payload.decode("utf-8", errors="ignore")
+                        
+                final_body = body_plain.strip()
+                if not final_body and body_html:
+                    final_body = re.sub(r'<[^>]+>', ' ', body_html)
+                    final_body = re.sub(r'\s+', ' ', final_body).strip()
+                    
+                if not final_body:
+                    final_body = "(Empty email body / Rich HTML only)"
+                    
+                email_data = {
+                    "email_id": eid,
+                    "from": from_text,
+                    "to": to_text,
+                    "date": date_text,
+                    "subject": subject_text,
+                    "body": final_body,
+                    "attachments": attachments,
+                    "source": "REAL_GMAIL_INBOX",
+                    "mailbox": user
+                }
+                
+                dossier = _build_email_dossier(eid, email_data)
+                dossier["is_real_personal_email"] = True
+                dossier["gmail_msg_id"] = mid_str
+                real_emails.append(dossier)
+                _DOSSIER_CACHE[eid] = dossier
+                _enrich_dossier_async(dossier)
+            except Exception as fe:
+                print(f"Error parsing mid {mid}: {fe}")
+                continue
+                
+        mail.close()
+        mail.logout()
+        return {
+            "error": None,
+            "emails": real_emails,
+            "total_inbox": total_inbox_count,
+            "mailbox": user,
+            "host": f"{host}:{port}"
+        }
+    except Exception as e:
+        print(f"IMAP connection failed: {e}")
+        return {
+            "error": str(e),
+            "emails": [],
+            "total_inbox": 0,
+            "mailbox": user,
+            "host": f"{host}:{port}"
+        }
+
+_INITIALIZING_GMAIL = False
+_GMAIL_TOTAL_INBOX = 0
+
+def _init_real_gmail_if_empty():
+    """Kick off the initial real-inbox fetch in a background thread so status/
+    list endpoints never block on IMAP."""
+    global REAL_GMAIL_ITEMS, _INITIALIZING_GMAIL, _GMAIL_TOTAL_INBOX
+    if not REAL_GMAIL_ENABLED or REAL_GMAIL_ITEMS or _INITIALIZING_GMAIL:
+        return
+    _INITIALIZING_GMAIL = True
+    def _bg():
+        global REAL_GMAIL_ITEMS, _INITIALIZING_GMAIL, _GMAIL_TOTAL_INBOX
+        try:
+            res = _fetch_from_personal_gmail(limit=5)
+            if res.get("emails"):
+                REAL_GMAIL_ITEMS = res["emails"]
+                _GMAIL_TOTAL_INBOX = res.get("total_inbox") or 0
+                print(f"[GMAIL] Indexed {len(REAL_GMAIL_ITEMS)} real emails", flush=True)
+        finally:
+            _INITIALIZING_GMAIL = False
+    threading.Thread(target=_bg, daemon=True).start()
+
+def _get_all_available_email_ids():
+    if not os.path.exists(INBOX_DIR):
+        return []
+    return sorted([f.replace('.json', '') for f in os.listdir(INBOX_DIR) if f.endswith('.json')])
+
+def _init_getter_store_if_needed():
+    global GETTER_INGESTED_IDS
+    if not GETTER_INGESTED_IDS:
+        all_ids = _get_all_available_email_ids()
+        GETTER_INGESTED_IDS = list(all_ids)
+
+@app.get("/api/getter/status")
+def get_getter_status():
+    _init_real_gmail_if_empty()
+    user_email = os.getenv("SMTP_USER") or os.getenv("IMAP_USER") or "not configured"
+    
+    cat_counts = {"BL_COMPARISON": 0, "INVOICE_QUERY": 0, "SI_REQUEST": 0, "GENERAL": 0, "SPAM": 0}
+    queue_counts = {
+        "comparator_ready": 0,
+        "awaiting_draft_bl": 0,
+        "billing_desk": 0,
+        "si_operations": 0,
+        "general_ops": 0,
+        "quarantine": 0
+    }
+    
+    for item in REAL_GMAIL_ITEMS:
+        cat = item["classification"]["category"]
+        cat_counts[cat] = cat_counts.get(cat, 0) + 1
+        t_queue = item["classification"]["target_queue"]
+        if "Verification Studio" in t_queue:
+            queue_counts["comparator_ready"] += 1
+        elif "Carrier Draft" in t_queue:
+            queue_counts["awaiting_draft_bl"] += 1
+        elif "Billing" in t_queue:
+            queue_counts["billing_desk"] += 1
+        elif "Shipping Instruction" in t_queue:
+            queue_counts["si_operations"] += 1
+        elif "Quarantine" in t_queue:
+            queue_counts["quarantine"] += 1
+        else:
+            queue_counts["general_ops"] += 1
+
+    return {
+        "status": "ONLINE",
+        "connection_mode": "Real Gmail IMAP (SSL)" if REAL_GMAIL_ENABLED else "disabled (REAL_GMAIL_ENABLED=0)",
+        "mailbox": user_email if REAL_GMAIL_ENABLED else None,
+        "server_host": "imap.gmail.com:993" if REAL_GMAIL_ENABLED else None,
+        "total_available": _GMAIL_TOTAL_INBOX,
+        "ingested_count": len(REAL_GMAIL_ITEMS),
+        "is_fully_ingested": len(REAL_GMAIL_ITEMS) > 0,
+        "initializing": _INITIALIZING_GMAIL,
+        # Check LAYA_AGENT without triggering the ~15s model load in a GET
+        "classifier_engine": ("Rules + Laya System-1 (neural loaded)" if LAYA_AGENT is not None
+                              else ("Rules + Laya System-1 (loading/unavailable)" if LAYA_AVAILABLE
+                                    else "Deterministic rules (laya not installed)")),
+        "categories": cat_counts,
+        "queues": queue_counts,
+        "avg_latency_ms": round(_LAYA_STATS["total_ms"] / _LAYA_STATS["calls"], 1) if _LAYA_STATS["calls"] else None,
+        "neural_calls": _LAYA_STATS["calls"],
+        "last_updated": time.strftime("%Y-%m-%d %H:%M:%S")
+    }
+
+@app.post("/api/getter/poll-gmail")
+def poll_real_gmail(req: PollGmailRequest):
+    global REAL_GMAIL_ITEMS, _GMAIL_TOTAL_INBOX
+    if not REAL_GMAIL_ENABLED:
+        raise HTTPException(status_code=403, detail="Real Gmail ingestion is disabled on this deployment (REAL_GMAIL_ENABLED=0)")
+    result = _fetch_from_personal_gmail(limit=req.limit, only_unread=req.only_unread)
+    if result.get("error"):
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    new_emails = result.get("emails", [])
+    _GMAIL_TOTAL_INBOX = result.get("total_inbox") or _GMAIL_TOTAL_INBOX
+
+    existing_ids = {e["email_id"] for e in REAL_GMAIL_ITEMS}
+    added = 0
+    for em in new_emails:
+        if em["email_id"] not in existing_ids:
+            REAL_GMAIL_ITEMS.insert(0, em)
+            existing_ids.add(em["email_id"])
+            added += 1
+            
+    _log_to_supabase_audit(
+        "GMAIL_INBOX",
+        "REAL_GMAIL_POLL",
+        {
+            "mailbox": result.get("mailbox"),
+            "new_emails_fetched": added,
+            "total_inbox": result.get("total_inbox"),
+            "model": "laya-decision-engine"
+        }
+    )
+    
+    return {
+        "status": "GMAIL_POLL_SUCCESS",
+        "mailbox": result.get("mailbox"),
+        "total_inbox": result.get("total_inbox"),
+        "fetched_count": len(new_emails),
+        "newly_added": added,
+        "total_active_feed": len(REAL_GMAIL_ITEMS),
+        "emails": REAL_GMAIL_ITEMS[:req.limit]
+    }
+
+@app.post("/api/getter/send-real-test")
+def send_real_test_email_to_gmail(req: RealTestEmailRequest):
+    """
+    Sends a REAL email via Google SMTP to the configured Gmail inbox, waits for
+    delivery, and polls it back via IMAP. Local demo only — disabled unless
+    REAL_GMAIL_ENABLED=1.
+    """
+    if not REAL_GMAIL_ENABLED:
+        raise HTTPException(status_code=403, detail="Real Gmail ingestion is disabled on this deployment (REAL_GMAIL_ENABLED=0)")
+    load_dotenv(override=True)
+    user = os.getenv("SMTP_USER") or os.getenv("IMAP_USER")
+    password = (os.getenv("SMTP_PASSWORD") or os.getenv("IMAP_PASSWORD") or "").strip().replace(" ", "")
+    host = os.getenv("SMTP_HOST") or "smtp.gmail.com"
+    port = int(os.getenv("SMTP_PORT") or 587)
+    
+    if not user or not password:
+        raise HTTPException(status_code=500, detail="Missing SMTP credentials in .env")
+        
+    msg = MIMEMultipart()
+    msg["From"] = f"Ocean Carrier Operations <{user}>"
+    msg["To"] = user
+    msg["Subject"] = req.subject
+    msg.attach(MIMEText(req.body, "plain"))
+    
+    try:
+        server = smtplib.SMTP(host, port, timeout=15)
+        server.ehlo()
+        server.starttls()
+        server.ehlo()
+        server.login(user, password)
+        server.send_message(msg)
+        server.quit()
+    except Exception as se:
+        raise HTTPException(status_code=500, detail=f"Failed to send email via Google SMTP: {se}")
+        
+    time.sleep(3)
+    
+    poll_res = _fetch_from_personal_gmail(limit=5)
+    global REAL_GMAIL_ITEMS
+    if poll_res.get("emails"):
+        existing_ids = {e["email_id"] for e in REAL_GMAIL_ITEMS}
+        for em in poll_res["emails"]:
+            if em["email_id"] not in existing_ids:
+                REAL_GMAIL_ITEMS.insert(0, em)
+                existing_ids.add(em["email_id"])
+
+    return {
+        "status": "SENT_AND_RECEIVED",
+        "message": f"Test email delivered to {user} via SMTP and ingested back via IMAP (Laya neural enrichment runs in the background).",
+        "sent_to": user,
+        "subject": req.subject,
+        "latest_email": REAL_GMAIL_ITEMS[0] if REAL_GMAIL_ITEMS else None
+    }
+
+@app.get("/api/getter/emails")
+def get_getter_emails(
+    source: str = "real",
+    category: str = "all",
+    queue_filter: str = "all",
+    search: str = "",
+    page: int = 1,
+    limit: int = 25
+):
+    _init_real_gmail_if_empty()
+    _init_getter_store_if_needed()
+    
+    if source == "dataset":
+        combined_eids = list(_get_all_available_email_ids())
+        items = []
+        for eid in combined_eids:
+            if eid not in _DOSSIER_CACHE:
+                p = os.path.join(INBOX_DIR, f"{eid}.json")
+                if os.path.exists(p):
+                    try:
+                        with open(p, "r", encoding="utf-8") as f:
+                            d = json.load(f)
+                        _DOSSIER_CACHE[eid] = _build_email_dossier(eid, d)
+                    except Exception:
+                        pass
+            dos = _DOSSIER_CACHE.get(eid)
+            if dos:
+                items.append(dos)
+    else:
+        # Default: Real personal Gmail emails!
+        items = list(REAL_GMAIL_ITEMS)
+        # Also include any custom ingested test items
+        for c_item in reversed(CUSTOM_INGESTED_ITEMS):
+            items.insert(0, c_item)
+
+    filtered = []
+    search_lower = search.strip().lower()
+    
+    for it in items:
+        if category != "all" and it["classification"]["category"].upper() != category.upper():
+            continue
+            
+        if queue_filter != "all":
+            t_queue = it["classification"]["target_queue"].lower()
+            if queue_filter == "comparator" and "verification studio" not in t_queue:
+                continue
+            if queue_filter == "chaser" and "carrier draft" not in t_queue:
+                continue
+            if queue_filter == "billing" and "billing" not in t_queue:
+                continue
+            if queue_filter == "si" and "shipping instruction" not in t_queue:
+                continue
+            if queue_filter == "general" and "general" not in t_queue:
+                continue
+                
+        if search_lower:
+            text_corpus = f"{it['email_id']} {it['subject']} {it['from']} {it.get('entities', {}).get('booking_ref', '')} {it.get('entities', {}).get('bl_ref', '')} {it.get('entities', {}).get('carrier', '')}".lower()
+            if search_lower not in text_corpus:
+                continue
+                
+        filtered.append(it)
+        
+    total_count = len(filtered)
+    start_idx = (page - 1) * limit
+    end_idx = start_idx + limit
+    paginated = filtered[start_idx:end_idx]
+
+    # Neural enrichment (~1s/email on CPU) runs in the background for the
+    # returned page only — the dossier's laya_decision.inference flips to
+    # "real" on the next poll. Never block the list endpoint on it.
+    for it in paginated:
+        _enrich_dossier_async(it)
+
+    return {
+        "source": source,
+        "mailbox": (os.getenv("SMTP_USER") or os.getenv("IMAP_USER")) if REAL_GMAIL_ENABLED else None,
+        "total": total_count,
+        "page": page,
+        "limit": limit,
+        "total_pages": max(1, (total_count + limit - 1) // limit),
+        "emails": paginated
+    }
+
+@app.post("/api/getter/fetch")
+def fetch_more_getter_emails(req: FetchBatchRequest):
+    _init_getter_store_if_needed()
+    all_available = _get_all_available_email_ids()
+    cur_len = len(GETTER_INGESTED_IDS)
+    target_count = min(len(all_available), cur_len + req.count)
+    new_ids = all_available[cur_len:target_count]
+    GETTER_INGESTED_IDS.extend(new_ids)
+    
+    for eid in new_ids:
+        if eid not in _DOSSIER_CACHE:
+            p = os.path.join(INBOX_DIR, f"{eid}.json")
+            if os.path.exists(p):
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        d = json.load(f)
+                    _DOSSIER_CACHE[eid] = _build_email_dossier(eid, d)
+                except Exception:
+                    pass
+                    
+    return {
+        "status": "FETCH_SUCCESS",
+        "added_count": len(new_ids),
+        "total_ingested": len(GETTER_INGESTED_IDS) + len(CUSTOM_INGESTED_ITEMS),
+        "total_available": len(all_available),
+        "newly_fetched": new_ids
+    }
+
+@app.post("/api/getter/ingest-custom")
+def ingest_custom_email(req: CustomIngestRequest):
+    custom_id = f"custom_inbound_{int(time.time() * 1000) % 1000000}"
+    email_data = {
+        "email_id": custom_id,
+        "from": req.from_addr,
+        "to": req.to_addr,
+        "subject": req.subject,
+        "body": req.body,
+        "attachments": req.attachments
+    }
+    
+    dossier = _build_email_dossier(custom_id, email_data)
+    dossier["is_custom_simulation"] = True
+    CUSTOM_INGESTED_ITEMS.append(dossier)
+    _DOSSIER_CACHE[custom_id] = dossier
+    _enrich_dossier_async(dossier)
+    
+    _log_to_supabase_audit(
+        custom_id,
+        "AUTO_GETTER_INGEST",
+        {
+            "description": "Auto Email Getter ingested and classified custom inbound correspondence (rules tier; Laya neural enrichment queued)",
+            "category": dossier["classification"]["category"],
+            "target_queue": dossier["classification"]["target_queue"],
+            "entities": dossier["entities"]
+        }
+    )
+    
+    return {
+        "status": "INGESTED_SUCCESSFULLY",
+        "email_id": custom_id,
+        "dossier": dossier
+    }
+
+@app.post("/api/getter/reset")
+def reset_getter_stream(initial_count: int = 50):
+    global GETTER_INGESTED_IDS, CUSTOM_INGESTED_ITEMS, REAL_GMAIL_ITEMS
+    all_available = _get_all_available_email_ids()
+    cnt = max(0, min(len(all_available), initial_count))
+    GETTER_INGESTED_IDS = all_available[:cnt]
+    CUSTOM_INGESTED_ITEMS = []
+    # Refresh real gmail only when the feature is enabled on this deployment
+    if REAL_GMAIL_ENABLED:
+        res = _fetch_from_personal_gmail(limit=15)
+        if res.get("emails"):
+            REAL_GMAIL_ITEMS = res["emails"]
+    return {
+        "status": "RESET_COMPLETED",
+        "ingested_count": len(REAL_GMAIL_ITEMS),
+        "mailbox": (os.getenv("SMTP_USER") or os.getenv("IMAP_USER")) if REAL_GMAIL_ENABLED else None
+    }
+
+# ============================================================
 # Supabase Cloud Repository & Differentiate Emails API
 # ============================================================
 @app.get("/api/supabase/status")
@@ -1662,9 +2476,13 @@ def verify_documents(req: VerificationRequest):
     if not si_text or not bl_text:
         raise HTTPException(status_code=400, detail="Both SI and BL text must be provided.")
 
-    # Check for Corrupted or Missing Attachment markers
-    if "[CORRUPTED" in si_text or "[CORRUPTED" in bl_text or "[MISSING ATTACHMENT" in si_text or "[MISSING ATTACHMENT" in bl_text:
-        reason = "unreadable" if "[CORRUPTED" in (si_text + bl_text) else "missing_attachment"
+    # Check for any UI placeholder marker — a placeholder is never a real
+    # document, so it must halt automated comparison (missing attachment,
+    # corrupted file, non-comparison category, awaiting carrier draft, ...)
+    if _is_placeholder_text(si_text) or _is_placeholder_text(bl_text):
+        joined = si_text + bl_text
+        reason = ("unreadable" if "[CORRUPTED" in joined
+                  else "missing_attachment")
         resp = {
             "status": "NEEDS_REVIEW",
             "review_reason": reason,
