@@ -2707,6 +2707,26 @@ def verify_documents(req: VerificationRequest):
     # corrupted file, non-comparison category, awaiting carrier draft, ...)
     if _is_placeholder_text(si_text) or _is_placeholder_text(bl_text):
         joined = si_text + bl_text
+
+        # Non-comparison mail (invoice query, SI request, general, spam) has
+        # no SI/BL pair to audit — the batch pipeline scores these OK, so a
+        # manual re-verify must agree rather than escalating to NEEDS_REVIEW.
+        non_cmp = re.search(r'\[NON-COMPARISON CATEGORY:\s*([A-Z_]+)\]', joined)
+        if non_cmp:
+            cat = non_cmp.group(1)
+            resp = {
+                "status": "OK",
+                "review_reason": None,
+                "thoughts": f"Email classified as {cat} — it does not carry a Shipping Instruction / draft Bill of Lading pair, so there is nothing to compare.",
+                "summary_reason": f"Nothing to audit: email category is {cat} — not a BL comparison request.",
+                "si_fields": {},
+                "bl_fields": {},
+                "defect_fields": [],
+                "field_comparisons": {}
+            }
+            _store_verdict(req.email_id, resp)
+            return resp
+
         reason = ("unreadable" if "[CORRUPTED" in joined
                   else "missing_attachment")
         resp = {
