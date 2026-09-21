@@ -90,6 +90,20 @@ DEFECT_FIELDS = [
     "container_count", "gross_weight_kg",
 ]
 
+# Sender domains belonging to APRIL / Averis staff. Anything else is an
+# external party — customer, carrier desk, partner, or spam source.
+INTERNAL_SENDER_DOMAINS = {
+    "aprilasia.com", "april.com.my", "april.com",
+    "averis.com", "averis.com.my",
+}
+
+
+def _sender_audience(from_addr):
+    """'internal' when the sender is APRIL/Averis staff, else 'customer'."""
+    m = re.search(r'@([A-Za-z0-9.-]+)', from_addr or "")
+    domain = m.group(1).lower().rstrip('.') if m else ""
+    return "internal" if domain in INTERNAL_SENDER_DOMAINS else "customer"
+
 
 def _utcnow():
     return datetime.now(timezone.utc).isoformat()
@@ -1936,6 +1950,7 @@ def _build_email_dossier(email_id: str, email_data: dict, run_neural: bool = Fal
         "email_id": email_id,
         "from": from_addr,
         "to": to_addr,
+        "audience": _sender_audience(from_addr),
         "date": date_str,
         "subject": subj,
         "body_preview": (clean_body[:220] + "...") if len(clean_body) > 220 else clean_body,
@@ -2130,6 +2145,7 @@ def get_getter_status():
     user_email = os.getenv("SMTP_USER") or os.getenv("IMAP_USER") or "not configured"
     
     cat_counts = {"BL_COMPARISON": 0, "INVOICE_QUERY": 0, "SI_REQUEST": 0, "GENERAL": 0, "SPAM": 0}
+    aud_counts = {"internal": 0, "customer": 0}
     queue_counts = {
         "comparator_ready": 0,
         "awaiting_draft_bl": 0,
@@ -2142,6 +2158,8 @@ def get_getter_status():
     for item in REAL_GMAIL_ITEMS:
         cat = item["classification"]["category"]
         cat_counts[cat] = cat_counts.get(cat, 0) + 1
+        aud = item.get("audience") or _sender_audience(item.get("from", ""))
+        aud_counts[aud] = aud_counts.get(aud, 0) + 1
         t_queue = item["classification"]["target_queue"]
         if "Verification Studio" in t_queue:
             queue_counts["comparator_ready"] += 1
@@ -2171,6 +2189,7 @@ def get_getter_status():
                                     else "Deterministic rules (laya not installed)")),
         "categories": cat_counts,
         "queues": queue_counts,
+        "audience": aud_counts,
         "avg_latency_ms": round(_LAYA_STATS["total_ms"] / _LAYA_STATS["calls"], 1) if _LAYA_STATS["calls"] else None,
         "neural_calls": _LAYA_STATS["calls"],
         "last_updated": time.strftime("%Y-%m-%d %H:%M:%S")
@@ -2276,6 +2295,7 @@ def get_getter_emails(
     source: str = "real",
     category: str = "all",
     queue_filter: str = "all",
+    audience: str = "all",
     search: str = "",
     page: int = 1,
     limit: int = 25
@@ -2312,7 +2332,12 @@ def get_getter_emails(
     for it in items:
         if category != "all" and it["classification"]["category"].upper() != category.upper():
             continue
-            
+
+        if audience != "all":
+            it_aud = it.get("audience") or _sender_audience(it.get("from", ""))
+            if it_aud != audience:
+                continue
+
         if queue_filter != "all":
             t_queue = it["classification"]["target_queue"].lower()
             if queue_filter == "comparator" and "verification studio" not in t_queue:
