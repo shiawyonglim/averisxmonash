@@ -18,6 +18,7 @@ const QUEUE_FILTERS = [
   { key: 'mismatch', label: 'Mismatch' },
   { key: 'needs_review', label: 'Needs Review' },
   { key: 'missing_bl', label: 'Missing BL' },
+  { key: 'si_inline', label: 'SI Inline · Awaiting BL' },
   { key: 'corrupted', label: 'Corrupted' },
   { key: 'resolved', label: 'Resolved' },
   { key: 'chaser_sent', label: 'Chaser Sent' },
@@ -757,6 +758,9 @@ function App() {
   const [verdictSource, setVerdictSource] = useState(null) // 'stored' | 'fresh'
   const [error, setError] = useState(null)
   const [corruptWarning, setCorruptWarning] = useState(null)
+  const [siSource, setSiSource] = useState(null) // 'attachment' | 'email_body'
+  const [siConflict, setSiConflict] = useState(null) // { fields, attachment_values, body_values }
+  const [bodyExpanded, setBodyExpanded] = useState(false)
 
   // ---- Email picker (status-aware dropdown) ----
   const [emailStatusMap, setEmailStatusMap] = useState({})
@@ -1502,32 +1506,35 @@ function App() {
     let subject = ''
     let body = ''
 
-    if (category === 'INVOICE_QUERY') {
+    // A missing document overrides the category template — e.g. an email
+    // classified SI_REQUEST with the SI written inline in the body still
+    // needs the BL chaser routed to the carrier desk, not a sender reply.
+    const missing = missingOverride
+      || (curEmail === selectedEmail ? missingDoc : null)
+      || (DOC_PLACEHOLDER_RX.test(siText) && !DOC_PLACEHOLDER_RX.test(blText) ? 'si'
+          : DOC_PLACEHOLDER_RX.test(blText) && !DOC_PLACEHOLDER_RX.test(siText) ? 'bl'
+          : (curInfo?.attachments?.length === 0 && curInfo?.category === 'BL_COMPARISON' ? 'both' : null))
+
+    if (category === 'INVOICE_QUERY' && !missing) {
       to = curInfo?.from || 'billing-desk@client.com'
       const subj = curInfo?.subject || curEmail
       subject = subj.toUpperCase().startsWith('RE:') ? subj : `RE: ${subj} [Ref: ${curEmail}]`
       const senderName = curInfo?.from?.split('@')[0]?.replace(/[._]/g, ' ') || 'Customer / Operations Partner'
       body = `Dear ${senderName},\n\nThank you for reaching out regarding invoice charges for shipment ref [${curEmail}].\n\nIn response to your query regarding the Terminal Handling Charges (THC) and local port fee breakdown:\n- Terminal Handling Charges (THC): FOB origin/destination charges have been verified against the agreed tariff schedule.\n- Telex Release & Documentation Fees: Applied in accordance with the standard liner documentation schedule.\n- Local Charges Breakdown: All applicable origin/destination port charges have been reviewed by our billing team.\n\nPlease find the itemized charge breakdown attached for your reference. Please let us know if you require any additional supporting documentation or revised debit notes.\n\nShipment Reference: ${curEmail}\nOriginal Subject: ${curInfo?.subject || ''}\n\nKind regards,\nShipping Documentation & Accounts Billing Desk\nAPRIL Logistics / Averis Global Shared Services`
-    } else if (category === 'SI_REQUEST') {
+    } else if (category === 'SI_REQUEST' && !missing) {
       to = curInfo?.from || 'operations@shippingline.com'
       const subj = curInfo?.subject || curEmail
       subject = subj.toUpperCase().startsWith('RE:') ? subj : `RE: ${subj} [Ref: ${curEmail}]`
       const senderName = curInfo?.from?.split('@')[0]?.replace(/[._]/g, ' ') || 'Customer / Operations Partner'
       body = `Dear ${senderName},\n\nThank you for reaching out regarding Shipping Instructions for shipment ref [${curEmail}].\n\nPlease find the validated Shipping Instruction (SI) details attached for your review and booking confirmation.\n\nKindly confirm receipt and verify that all vessel booking particulars, container specifications, and consignee details align with your requirements.\n\nShipment Reference: ${curEmail}\nOriginal Subject: ${curInfo?.subject || ''}\n\nKind regards,\nShipping Documentation Operations Desk\nAPRIL Logistics / Averis Global Shared Services`
-    } else if (category === 'GENERAL') {
+    } else if (category === 'GENERAL' && !missing) {
       to = curInfo?.from || 'operations@shippingline.com'
       const subj = curInfo?.subject || curEmail
       subject = subj.toUpperCase().startsWith('RE:') ? subj : `RE: ${subj} [Ref: ${curEmail}]`
       const senderName = curInfo?.from?.split('@')[0]?.replace(/[._]/g, ' ') || 'Customer / Operations Partner'
       body = `Dear ${senderName},\n\nThank you for contacting our documentation desk regarding shipment ref [${curEmail}].\n\nOur operations team has reviewed your inquiry. Shipment documentation and cargo dispatch are proceeding on schedule according to standard operational timelines.\n\nPlease let us know if you require any specific vessel tracking updates or supplemental documentation.\n\nShipment Reference: ${curEmail}\nOriginal Subject: ${curInfo?.subject || ''}\n\nKind regards,\nShipping Documentation Operations Desk\nAPRIL Logistics / Averis Global Shared Services`
     } else {
-      // BL_COMPARISON category
-      const missing = missingOverride
-        || (curEmail === selectedEmail ? missingDoc : null)
-        || (DOC_PLACEHOLDER_RX.test(siText) && !DOC_PLACEHOLDER_RX.test(blText) ? 'si'
-            : DOC_PLACEHOLDER_RX.test(blText) && !DOC_PLACEHOLDER_RX.test(siText) ? 'bl'
-            : (curInfo?.attachments?.length === 0 && curInfo?.category === 'BL_COMPARISON' ? 'both' : null))
-
+      // BL_COMPARISON category — or any email with a missing document.
       to = missing === 'si'
         ? (curInfo?.from || '')
         : (curVerdict?.status === 'MISMATCH' || missing === 'bl' || missing === 'both'
@@ -1554,7 +1561,19 @@ function App() {
       } else if (missing === 'si') {
         body = `Dear ${curInfo?.from || 'Operations Team'},\n\nRegarding shipment ref [${curEmail}] — your recent correspondence requested a draft Bill of Lading comparison, but the required Shipping Instruction (SI) document was not attached to the email.\n\nPlease re-send the Shipping Instruction at your earliest convenience so our automated verification pipeline can complete the 7-field cross-audit before port cutoff.\n\nShipment Reference: ${curEmail}\nOriginal Subject: ${curInfo?.subject || ''}\n\nKind regards,\nShipping Documentation Operations Desk\nAveris Automated Logistics Pipeline`
       } else if (missing === 'bl' || missing === 'both') {
-        body = `Dear ${carrier} Documentation Desk,\n\nWe are following up on our Shipping Instruction submitted for shipment ref [${curEmail}].\n\nThe operational port cutoff (17:00 SGT) is approaching and our system has not yet received the draft Bill of Lading.\n\nPlease urgently furnish the draft BL so our clearance team can complete cross-validation against the shipper instructions.\n\nShipment Reference: ${curEmail}\nBooking Subject: ${curInfo?.subject || ''}\n\nKind regards,\nShipping Documentation Operations Desk\nAveris Automated Logistics Pipeline`
+        // Enrich the chaser with whatever the (possibly inline) SI carried —
+        // booking ref + routing help the carrier desk locate the filing.
+        const si = curInfo?.si_fields || {}
+        const refMatch = (curInfo?.subject || '').match(/([0-9A-Z]{3,}-[0-9A-Z]{4,}|[A-Z]{3,}[0-9]{6,})/)
+        const bookingRef = refMatch ? refMatch[1] : curEmail
+        const siDetail = [
+          `\nBooking / SI Reference: ${bookingRef}`,
+          si.port_of_loading && si.port_of_discharge
+            ? `\nRouting: ${si.port_of_loading} -> ${si.port_of_discharge}` : '',
+          si.consignee ? `\nConsignee: ${si.consignee}` : '',
+          si.container_count ? `\nContainers: ${si.container_count}` : '',
+        ].join('')
+        body = `Dear ${carrier} Documentation Desk,\n\nWe are following up on the Shipping Instruction submitted for shipment ref [${curEmail}].\n${siDetail}\n\nThe operational port cutoff (17:00 SGT) is approaching and our system has not yet received the draft Bill of Lading.\n\nPlease urgently furnish the draft BL so our clearance team can complete cross-validation against the shipper instructions.\n\nShipment Reference: ${curEmail}\nBooking Subject: ${curInfo?.subject || ''}\n\nKind regards,\nShipping Documentation Operations Desk\nAveris Automated Logistics Pipeline`
       } else {
         body = `Dear Shipper / Carrier Team,\n\nRegarding shipment ref [${curEmail}], all documentation cross-checks have completed. All 7 critical shipping attributes (shipper, consignee, notify party, ports, container count, and gross weight) have been verified.\n\nShipment Reference: ${curEmail}\nStatus: APPROVED / CLEARED FOR ISSUANCE\n\nKind regards,\nShipping Documentation Operations Desk\nAveris Automated Logistics Pipeline`
       }
@@ -1692,7 +1711,10 @@ function App() {
     setDocBackups(null)
     setMissingDoc(null)
     setMissingPrompt(null)
+    setSiSource(null)
+    setSiConflict(null)
     setThreadOpen(false)
+    setBodyExpanded(false)
     setSiText('Loading attachment...')
     setBlText('Loading attachment...')
 
@@ -1708,6 +1730,8 @@ function App() {
       if (data.cloud_synced) setCloudSyncInfo(data.supabase_record)
       if (data.backups) setDocBackups(data.backups)
       if (data.missing_doc) setMissingDoc(data.missing_doc)
+      setSiSource(data.si_source || null)
+      if (data.si_conflict) setSiConflict(data.si_conflict)
       if (data.is_corrupted) {
         setCorruptWarning({
           reason: data.corrupt_reason,
@@ -1741,8 +1765,9 @@ function App() {
       }
       // Auto-verify: two real documents and no stored verdict — run the
       // audit immediately so the operator never has to press Re-verify.
+      // An inline body SI (si_inline) counts as a real document side.
       const canAutoVerify = !data.verdict && !data.is_corrupted
-        && (data.email?.attachments?.length || 0) >= 2
+        && ((data.email?.attachments?.length || 0) >= 2 || data.si_inline)
         && data.si_text && data.bl_text
         && !DOC_PLACEHOLDER_RX.test(data.si_text)
         && !DOC_PLACEHOLDER_RX.test(data.bl_text)
@@ -2866,7 +2891,7 @@ function App() {
                   {queueData?.counts?.[f.key] != null ? ` · ${queueData.counts[f.key]}` : ''}
                 </button>
               ))}
-              {queueFilter === 'missing_bl' && (
+              {(queueFilter === 'missing_bl' || queueFilter === 'si_inline') && (
                 <button
                   className="btn-secondary btn-sm"
                   onClick={handleBatchChase}
@@ -2932,6 +2957,9 @@ function App() {
                             {item.has_bl === false && (
                               <span className="tag warn">No BL</span>
                             )}
+                            {item.si_inline && (
+                              <span className="tag info">SI inline</span>
+                            )}
                           </div>
                           <p style={{ fontSize: '0.9rem', marginTop: '4px', color: 'var(--text-color)' }}>
                             {item.subject}
@@ -2970,7 +2998,7 @@ function App() {
                           >
                             Open
                           </button>
-                          {(qs === 'missing_bl' || queueFilter === 'missing_bl') && (
+                          {(qs === 'missing_bl' || queueFilter === 'missing_bl' || queueFilter === 'si_inline') && (
                             <button
                               className="btn-secondary btn-sm"
                               onClick={(e) => {
@@ -4137,6 +4165,31 @@ function App() {
               </div>
             )}
 
+            {/* Banner: body-written SI disagrees with the attached SI */}
+            {siConflict && (
+              <div className="action-card corrupt">
+                <div>
+                  <h3 style={{ margin: '0 0 4px', color: 'var(--warn)', fontSize: '1rem' }}>
+                    Conflicting SI in email body
+                  </h3>
+                  <p className="meta" style={{ margin: '0 0 8px' }}>
+                    The SI written in the email body disagrees with the attached SI on{' '}
+                    {siConflict.fields?.length || 0} field(s). The attached SI is used as the
+                    authoritative version — review the differences below.
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {(siConflict.fields || []).map(f => (
+                      <div key={f} className="meta-mono" style={{ fontSize: '0.78rem' }}>
+                        <strong>{f.replace(/_/g, ' ')}</strong>
+                        {' — file: '}{siConflict.attachment_values?.[f] || 'N/A'}
+                        {' · body: '}{siConflict.body_values?.[f] || 'N/A'}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Contextual Action Card: Corrupted Document Remediation */}
             {(corruptWarning || emailInfo?.attachments?.some(a => a.is_corrupt)) && (
               <div className="action-card corrupt">
@@ -4214,9 +4267,17 @@ function App() {
                 </div>
 
                 {/* Email Body preview */}
-                <div style={{ background: 'var(--surface-sunken)', padding: '10px 14px', borderRadius: '6px', fontSize: '0.88rem', whiteSpace: 'pre-wrap', maxHeight: '110px', overflowY: 'auto', border: '1px solid var(--line)', marginBottom: '12px' }}>
+                <div style={{ background: 'var(--surface-sunken)', padding: '10px 14px', borderRadius: '6px', fontSize: '0.88rem', whiteSpace: 'pre-wrap', maxHeight: bodyExpanded ? 'none' : '280px', overflowY: 'auto', border: '1px solid var(--line)', marginBottom: (emailInfo.body || '').length > 500 ? '4px' : '12px' }}>
                   {emailInfo.body}
                 </div>
+                {(emailInfo.body || '').length > 500 && (
+                  <button
+                    onClick={() => setBodyExpanded(e => !e)}
+                    style={{ background: 'none', border: 'none', boxShadow: 'none', padding: 0, margin: '0 0 12px', color: 'var(--primary-color)', fontSize: '0.8rem', textDecoration: 'underline', cursor: 'pointer' }}
+                  >
+                    {bodyExpanded ? '▲ Show less' : '▼ Show full email'}
+                  </button>
+                )}
 
                 {/* Attachments Chips */}
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -4325,7 +4386,12 @@ function App() {
             <div className="main-container">
               {/* Column 1: SI Text */}
               <section className="doc-section glass-panel">
-                <h2>Shipping Instruction (SI)</h2>
+                <h2>
+                  Shipping Instruction (SI)
+                  {siSource === 'email_body' && (
+                    <span className="tag info" style={{ marginLeft: '8px' }}>from email body</span>
+                  )}
+                </h2>
                 <textarea
                   placeholder="Paste or load SI text here..."
                   value={siText}
@@ -4629,6 +4695,9 @@ function App() {
                         </span>
                       )}
                       <span className="tag">{item.attachments_count} docs</span>
+                      {item.si_inline && (
+                        <span className="tag info">SI inline</span>
+                      )}
                     </div>
                     <p style={{ fontSize: '0.9rem', marginTop: '4px', color: 'var(--text-color)' }}>
                       {item.subject}
