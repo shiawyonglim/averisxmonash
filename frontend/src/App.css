@@ -548,6 +548,15 @@
   align-items: center;
 }
 
+/* --- Generate picker (email selection table) --- */
+.sub-gen-picker summary::before {
+  content: '☑ ';
+}
+
+.sub-gen-picker-body {
+  padding: 14px;
+}
+
 .sub-option {
   display: flex;
   align-items: center;
@@ -2232,3 +2241,38 @@
   text-transform: uppercase;
   opacity: 0.55;
 }
+
+/* Provenance & Decision Transparency */
+.provenance-badge {
+  font-size: 0.78rem;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.provenance-regex {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #c8e6c9;
+}
+
+.provenance-llm {
+  background: #f3e5f5;
+  color: #7b1fa2;
+  border: 1px solid #e1bee7;
+}
+
+.provenance-vision {
+  background: #e0f2f1;
+  color: #00695c;
+  border: 1px solid #b2dfdb;
+}
+
+.norm-decision-trail summary::-webkit-details-marker {
+  display: none;
+}
+

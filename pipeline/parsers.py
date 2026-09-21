@@ -105,9 +105,9 @@ def extract_text(path):
 # short "/exporter"-style suffix — an arbitrary greedy suffix can swallow the
 # field value itself (e.g. "Shipper        APRIL FINE PAPER TRADING").
 _PAREN = r'(?:\s*\([^)]*\))*'
-# Field separator: colon/pipe, a run of 2+ spaces, or a single space when it
-# directly follows a parenthetical qualifier (e.g. "(POD) FREMANTLE").
-_FSEP = r'(?:[:|]|[ \t]{2,}|(?<=\))[ \t])'
+# Field separator: colon/pipe, a run of 2+ spaces, a single space following parenthetical qualifier,
+# or single space directly preceding an alphanumeric value/header.
+_FSEP = r'(?:[:|]|[ \t]{2,}|(?<=\))[ \t]|[ \t]+(?=[A-Z0-9]))'
 # Optional run of non-ASCII characters adjacent to a header label — bilingual
 # BLs interleave e.g. "Gross Weight毛重(KGS):". Field values always start
 # with ASCII (digits, "KG", commas, company names), so a non-ASCII run can
@@ -117,7 +117,7 @@ _I18N = r'(?:\s*[^\x00-\x7f]+)*'
 # "Notify Party/Intermediate Consignee". Deliberately a closed list — a greedy
 # [^\n:|]* here would swallow the value when the separator is spaces
 # ("Shipper/Exporter  ACME").
-_SLASHQ = (r'(?:\s*/\s*(?:exporter|intermediate\s*consignee|agent|principal'
+_SLASHQ = (r'(?:\s*/\s*(?:exporter|intermediate\s*cons(?:ignee)?|agent|principal'
            r'|seller|care\s*of|c/o|or\s*order))*')
 
 FIELD_PATTERNS = {
@@ -149,7 +149,7 @@ FIELD_PATTERNS = {
         r'(?:^|\|)[ \t]*containers?[ \t]*[:|][ \t]*([^\n|]+)',
     ],
     'gross_weight_kg': [
-        rf'(?:^|\|)[ \t]*(?:(?:total\s+)?gross\s*(?:weight|wt)|weight|g\.?\s*w\.?|gwt|all[\s-]*up\s*weight|total\s*weight){_I18N}{_PAREN}{_I18N}[ \t]*{_FSEP}[ \t]*([^\n|]*)',
+        rf'(?:^|\|)[ \t]*(?:(?:total\s+)?gross\s*(?:weight(?:nn)?|wt)|weight(?:nn)?|g\.?\s*w\.?|gwt|all[\s-]*up\s*weight|total\s*weight){_I18N}{_PAREN}{_I18N}[ \t]*{_FSEP}[ \t]*([^\n|]*)',
     ]
 }
 
@@ -183,7 +183,7 @@ def extract_shipping_fields_fast(text):
                 'port_of_loading': r'(?:port\s*of\s*loading|load\s*port|\bpol\b)',
                 'port_of_discharge': r'(?:port\s*of\s*discharge|discharge\s*port|\bpod\b)',
                 'container_count': r'(?:total\s*containers?|no\.?\s*of\s*containers?|container\s*count|containers?)',
-                'gross_weight_kg': r'(?:(?:total\s+)?gross\s*weight|(?:total\s+)?gross\s*wt|weight)'
+                'gross_weight_kg': r'(?:(?:total\s+)?gross\s*(?:weight(?:nn)?|wt)|weight(?:nn)?)'
             }
             if fld in header_keys:
                 hdr = header_keys[fld]
@@ -195,4 +195,14 @@ def extract_shipping_fields_fast(text):
                         val = candidate
 
         res[fld] = val
+
+    # In maritime practice (DCSA / standard ocean BL), if notify party captured header
+    # fragments (e.g. 'Party/Intermediate Cons...'), is empty, or is 'same as consignee',
+    # it legally defaults to the consignee.
+    np_raw = res.get('notify_party', '').lower().strip()
+    if (not np_raw or np_raw.startswith(('party/intermediate', 'party/', 'intermediate cons', 'cons'))
+            or 'same as consignee' in np_raw):
+        if res.get('consignee'):
+            res['notify_party'] = res['consignee']
+
     return res

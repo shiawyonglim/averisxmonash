@@ -280,6 +280,9 @@ button:disabled {
 .status-needs-review { background: #fff3cd; color: #856404; }
 .status-resolved { background: #cce5ff; color: #004085; }
 .status-reply-received { background: #d6e4ff; color: #004085; }
+.status-corrupted { background: #f3e5f5; color: #8e24aa; }
+.status-missing-bl { background: #fdeee7; color: #b3560e; }
+.status-unverified { background: #f1f1f1; color: #777; }
 
 .field-comparison {
   margin-bottom: 12px;
@@ -291,6 +294,11 @@ button:disabled {
 .field-comparison.mismatch {
   background: rgba(220, 53, 69, 0.06);
   border-left: 4px solid #dc3545;
+}
+
+.field-comparison.missing {
+  background: rgba(224, 122, 95, 0.08);
+  border-left: 4px solid #e07a5f;
 }
 
 .field-comparison h4 {
@@ -408,6 +416,12 @@ button:disabled {
   background: #ffebee;
   color: #c62828;
   border: 1px solid #ffcdd2;
+}
+
+.diff-chip-missing {
+  background: #fdeee7;
+  color: #b3560e;
+  border: 1px solid #f5cdb0;
 }
 
 /* Queue Navigator Widget */

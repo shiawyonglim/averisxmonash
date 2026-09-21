@@ -2,6 +2,7 @@ import asyncio
 import os
 import json
 import re
+import shutil
 import tempfile
 import threading
 import smtplib
@@ -323,24 +324,46 @@ def _init_verdicts_from_submission():
                     except Exception:
                         pass
                 
-                defects = r.get("defect_fields", [])
-                summary = (
-                    f"Defect detected in: {', '.join(defects)}" if defects else
-                    f"Escalated to human review ({r.get('review_reason')})" if r.get("status") == "NEEDS_REVIEW" else
-                    "All 7 critical shipping fields match accurately."
-                )
-
                 det = details_sidecar.get(eid, {})
+                eff_si = det.get("si_fields") or si_fields
+                eff_bl = det.get("bl_fields") or bl_fields
+                eff_comp = det.get("field_comparisons") or comparisons
+
+                defects = r.get("defect_fields", [])
+                if defects:
+                    summary = f"Defect detected in: {', '.join(defects)}"
+                    thoughts = "Verified deterministically against Shipping Instructions and draft Bill of Lading standards."
+                elif r.get("status") == "NEEDS_REVIEW":
+                    summary = f"Escalated to human review ({r.get('review_reason')})"
+                    thoughts = "Verified deterministically against Shipping Instructions and draft Bill of Lading standards."
+                elif not eff_comp:
+                    # OK verdict but no field audit ever ran — never claim a match.
+                    if r.get("category") == "BL_COMPARISON":
+                        summary = ("No field comparison performed — the email did not carry "
+                                   "the required SI and draft BL attachments.")
+                        thoughts = ("Automated audit did not run: fewer than 2 shipping "
+                                    "attachments were provided. Handled via the missing-BL / "
+                                    "carrier-chaser workflow, not field comparison.")
+                    else:
+                        summary = "No SI/BL comparison required for this email."
+                        thoughts = (f"Classified as {r.get('category', 'GENERAL')} — not an SI vs "
+                                    "draft BL comparison request, so no field audit was performed.")
+                else:
+                    summary = "All 7 critical shipping fields match accurately."
+                    thoughts = "Verified deterministically against Shipping Instructions and draft Bill of Lading standards."
+
                 VERDICTS_STORE[eid] = {
                     "status": r.get("status"),
                     "review_reason": r.get("review_reason"),
                     "defect_fields": defects,
-                    "si_fields": det.get("si_fields") or si_fields,
-                    "bl_fields": det.get("bl_fields") or bl_fields,
-                    "field_comparisons": det.get("field_comparisons") or comparisons,
+                    "si_fields": eff_si,
+                    "bl_fields": eff_bl,
+                    "field_comparisons": eff_comp,
                     "details": det,
                     "evidence": det.get("evidence", []),
-                    "thoughts": "Verified deterministically against Shipping Instructions and draft Bill of Lading standards.",
+                    "si_provenance": det.get("si_provenance") or {k: "regex" for k in (eff_si or {})},
+                    "bl_provenance": det.get("bl_provenance") or {k: "regex" for k in (eff_bl or {})},
+                    "thoughts": thoughts,
                     "summary_reason": summary,
                     "verified_at": _utcnow()
                 }
@@ -412,18 +435,38 @@ def get_email_content(email_id: str):
             }
 
         if len(atts) < 2:
+            verdict = VERDICTS_STORE.get(email_id)
+            is_corrupted = bool(verdict and verdict.get("status") == "NEEDS_REVIEW" and verdict.get("review_reason") == "missing_attachment")
+            
+            if category != "BL_COMPARISON":
+                si_text = f"[NON-COMPARISON CATEGORY: {category}]\nThis email is classified as {category} ({det['description']}). It does not carry or require a Shipping Instruction (SI) document."
+                bl_text = f"[NON-COMPARISON CATEGORY: {category}]\nThis email is classified as {category} ({det['description']}). It does not carry or require a draft Bill of Lading (BL)."
+                issue_detail = None
+                corrupt_reason = None
+            elif is_corrupted:
+                si_text = "[MISSING ATTACHMENT: Email requested comparison, but required shipping documents were not attached]"
+                bl_text = "[MISSING ATTACHMENT: Draft Bill of Lading is absent from this comparison request]"
+                issue_detail = f"Comparison requested but only {len(atts)} attachment(s) found. Escalated to NEEDS_REVIEW."
+                corrupt_reason = "missing_attachment"
+            else:
+                si_text = "[INBOUND CHASER / STATUS REQUEST]\nNo Shipping Instruction attached. Inbound request regarding draft BL issuance."
+                bl_text = "[AWAITING CARRIER DRAFT BL]\nNo draft Bill of Lading attached. Carrier has not yet issued the draft document."
+                issue_detail = None
+                corrupt_reason = None
+
             return {
                 "email": email_info,
                 "threads": threads,
-                "si_text": "[MISSING ATTACHMENT: Email does not carry the required 2 shipping attachments]",
-                "bl_text": "[MISSING ATTACHMENT: Bill of Lading draft is absent from this request]",
-                "is_corrupted": True,
-                "corrupt_reason": "missing_attachment",
-                "issue_details": f"Only {len(atts)} attachment(s) provided.",
-                "verdict": VERDICTS_STORE.get(email_id),
+                "si_text": si_text,
+                "bl_text": bl_text,
+                "is_corrupted": is_corrupted,
+                "corrupt_reason": corrupt_reason,
+                "issue_details": issue_detail,
+                "verdict": verdict,
                 "resolution": RESOLUTIONS_STORE.get(email_id),
                 "supabase_record": sb_rec,
-                "cloud_synced": bool(sb_rec is not None)
+                "cloud_synced": bool(sb_rec is not None),
+                "backups": _list_backups(email_id)
             }
 
         path1 = os.path.join(BUNDLE_DIR, atts[0])
@@ -461,7 +504,8 @@ def get_email_content(email_id: str):
                 "verdict": VERDICTS_STORE.get(email_id),
                 "resolution": RESOLUTIONS_STORE.get(email_id),
                 "supabase_record": sb_rec,
-                "cloud_synced": bool(sb_rec is not None)
+                "cloud_synced": bool(sb_rec is not None),
+                "backups": _list_backups(email_id)
             }
         else:
             return {
@@ -475,13 +519,268 @@ def get_email_content(email_id: str):
                 "verdict": VERDICTS_STORE.get(email_id),
                 "resolution": RESOLUTIONS_STORE.get(email_id),
                 "supabase_record": sb_rec,
-                "cloud_synced": bool(sb_rec is not None)
+                "cloud_synced": bool(sb_rec is not None),
+                "backups": _list_backups(email_id)
             }
 
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ---------------------------------------------------------------------------
+# Document editing + backup layer
+# SI/BL textarea edits are written back to the attachment files (and the email
+# JSON is repointed when a binary format can't be rewritten). Every write is
+# preceded by a snapshot under sdoc-hackathon-bundle/_backups/:
+#   _backups/original/<eid>/            pristine first version (demo rollback)
+#   _backups/<eid>/<utc-timestamp>/     full save history
+#   _backups/manifest.json              append-only log of saves/restores
+# ---------------------------------------------------------------------------
+BACKUP_ROOT = os.path.join(BUNDLE_DIR, "_backups")
+BACKUP_MANIFEST = os.path.join(BACKUP_ROOT, "manifest.json")
+DOC_EDITS_STORE = {}
+
+# UI-generated placeholder texts — never persisted into real attachments.
+_PLACEHOLDER_RX = re.compile(
+    r'^\s*\[(MISSING ATTACHMENT|CORRUPTED FILE|NON-COMPARISON|'
+    r'INBOUND CHASER|AWAITING CARRIER|IMAGE DOCUMENT)', re.IGNORECASE)
+
+
+def _is_placeholder_text(text):
+    return bool(_PLACEHOLDER_RX.match(text or ""))
+
+
+def _backup_timestamp():
+    return _utcnow().replace(":", "-").replace(".", "_")
+
+
+def _append_backup_manifest(entry):
+    try:
+        os.makedirs(BACKUP_ROOT, exist_ok=True)
+        manifest = []
+        if os.path.exists(BACKUP_MANIFEST):
+            with open(BACKUP_MANIFEST, "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+        manifest.append(entry)
+        with open(BACKUP_MANIFEST, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2)
+    except Exception as e:
+        print(f"Backup manifest error: {e}")
+
+
+def _backup_email_files(email_id, extra_files=None):
+    """
+    Snapshot the inbox JSON + every referenced attachment before modification.
+    The 'original' dir is written only once — it stays pristine for rollback.
+    Returns the list of files that were snapshotted this call.
+    """
+    email_path = os.path.join(INBOX_DIR, f"{email_id}.json")
+    d = _get_email_data(email_id)
+    att_paths = [os.path.join(BUNDLE_DIR, a) for a in d.get("attachments", [])]
+    att_paths += list(extra_files or [])
+
+    snapped = []
+
+    orig_dir = os.path.join(BACKUP_ROOT, "original", email_id)
+    if not os.path.exists(os.path.join(orig_dir, f"{email_id}.json")):
+        os.makedirs(os.path.join(orig_dir, "attachments"), exist_ok=True)
+        if os.path.exists(email_path):
+            shutil.copy2(email_path, os.path.join(orig_dir, f"{email_id}.json"))
+            snapped.append(email_path)
+        for p in att_paths:
+            if os.path.exists(p):
+                shutil.copy2(p, os.path.join(orig_dir, "attachments", os.path.basename(p)))
+
+    hist_dir = os.path.join(BACKUP_ROOT, email_id, _backup_timestamp())
+    os.makedirs(os.path.join(hist_dir, "attachments"), exist_ok=True)
+    if os.path.exists(email_path):
+        shutil.copy2(email_path, os.path.join(hist_dir, f"{email_id}.json"))
+    for p in att_paths:
+        if os.path.exists(p):
+            shutil.copy2(p, os.path.join(hist_dir, "attachments", os.path.basename(p)))
+
+    return snapped
+
+
+def _list_backups(email_id):
+    orig = os.path.exists(os.path.join(BACKUP_ROOT, "original", email_id, f"{email_id}.json"))
+    hist_dir = os.path.join(BACKUP_ROOT, email_id)
+    history = sorted(os.listdir(hist_dir)) if os.path.isdir(hist_dir) else []
+    return {"has_original": orig, "snapshots": history}
+
+
+def _write_document_text(path, text):
+    """
+    Persist edited document text back to disk, preserving format where
+    possible. Returns (written_path, remapped_from_or_None) — binary formats
+    (pdf/images) can't be safely rewritten, so a .txt twin is created and the
+    caller repoints the email's attachment entry.
+    """
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".docx":
+        import docx
+        doc = docx.Document()
+        for line in text.split("\n"):
+            doc.add_paragraph(line)
+        doc.save(path)
+        return path, None
+    if ext == ".xlsx":
+        import openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Document"
+        for i, line in enumerate(text.split("\n"), start=1):
+            ws.cell(row=i, column=1, value=line)
+        wb.save(path)
+        return path, None
+    if ext == ".pdf" or ext in IMAGE_EXTENSIONS:
+        txt_path = os.path.splitext(path)[0] + ".txt"
+        with open(txt_path, "w", encoding="utf-8") as f:
+            f.write(text)
+        return txt_path, path
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+    return path, None
+
+
+def _attachment_entry_for(path):
+    """Convert an absolute file path back to the 'attachments/xxx' entry style
+    used in the email JSON."""
+    return "attachments/" + os.path.basename(path)
+
+
+class SaveDocumentsRequest(BaseModel):
+    si_text: str = ""
+    bl_text: str = ""
+
+
+@app.post("/api/email/{email_id}/save-documents")
+def save_email_documents(email_id: str, req: SaveDocumentsRequest):
+    if not _email_exists(email_id):
+        raise HTTPException(status_code=404, detail=f"Email {email_id} not found")
+
+    email_path = os.path.join(INBOX_DIR, f"{email_id}.json")
+    email_data = _get_email_data(email_id)
+    atts = list(email_data.get("attachments", []))
+    if len(atts) < 2:
+        raise HTTPException(
+            status_code=400,
+            detail="This email does not carry two document attachments — nothing to overwrite.")
+
+    # Map SI/BL texts to the right attachments (same logic as get_email_content)
+    path1 = os.path.join(BUNDLE_DIR, atts[0])
+    path2 = os.path.join(BUNDLE_DIR, atts[1])
+    t1 = extract_text(path1)
+    si_att, bl_att = (atts[0], atts[1]) if is_si_attachment(path1, t1) else (atts[1], atts[0])
+
+    sides = [("si", si_att, req.si_text), ("bl", bl_att, req.bl_text)]
+    skipped = [f"{side}_text is a placeholder — nothing to save"
+               for side, _, txt in sides if _is_placeholder_text(txt)]
+    if len(skipped) == 2:
+        raise HTTPException(status_code=400, detail="Both documents are placeholders — nothing to save.")
+
+    # Snapshot before touching anything (original + timestamped history)
+    _backup_email_files(email_id)
+
+    saved, remapped = {}, []
+    for side, att, txt in sides:
+        if _is_placeholder_text(txt):
+            continue
+        src_path = os.path.join(BUNDLE_DIR, att)
+        written_path, was_remapped = _write_document_text(src_path, txt)
+        saved[side] = os.path.basename(written_path)
+        if was_remapped:
+            idx = atts.index(att)
+            atts[idx] = _attachment_entry_for(written_path)
+            remapped.append({"from": att, "to": atts[idx]})
+
+    # Repoint attachment entries when a binary file was swapped for its .txt twin
+    if remapped:
+        email_data["attachments"] = atts
+        with open(email_path, "w", encoding="utf-8") as f:
+            json.dump(email_data, f, indent=2, ensure_ascii=False)
+
+    record = {
+        "timestamp": _utcnow(),
+        "action": "DOCUMENT_EDITED",
+        "files": saved,
+        "remapped": remapped,
+        "skipped": skipped,
+        "notes": f"Operator edited document text: {', '.join(saved.values())}",
+    }
+    DOC_EDITS_STORE.setdefault(email_id, []).append(record)
+    _persist_audit_state()
+    _append_backup_manifest({"timestamp": record["timestamp"], "email_id": email_id,
+                             "action": "save", "files": saved, "remapped": remapped})
+    _log_to_supabase_audit(email_id, "DOCUMENT_EDITED", record)
+
+    return {
+        "status": "SUCCESS",
+        "saved": saved,
+        "skipped": skipped,
+        "remapped": remapped,
+        "backups": _list_backups(email_id),
+        "message": f"Saved edits for {email_id} ({', '.join(saved.values())}). "
+                   f"Originals backed up under _backups/.",
+    }
+
+
+@app.post("/api/email/{email_id}/restore-documents")
+def restore_email_documents(email_id: str):
+    """Restore the pristine email JSON + attachments captured before the first edit."""
+    if not _email_exists(email_id):
+        raise HTTPException(status_code=404, detail=f"Email {email_id} not found")
+    orig_dir = os.path.join(BACKUP_ROOT, "original", email_id)
+    orig_json = os.path.join(orig_dir, f"{email_id}.json")
+    if not os.path.exists(orig_json):
+        raise HTTPException(status_code=400, detail="No backup exists for this email.")
+
+    _backup_email_files(email_id)  # snapshot the edited state before overwriting
+
+    shutil.copy2(orig_json, os.path.join(INBOX_DIR, f"{email_id}.json"))
+    att_dir = os.path.join(orig_dir, "attachments")
+    restored_files = []
+    if os.path.isdir(att_dir):
+        for fn in os.listdir(att_dir):
+            shutil.copy2(os.path.join(att_dir, fn), os.path.join(BUNDLE_DIR, "attachments", fn))
+            restored_files.append(fn)
+
+    INBOX_CACHE.pop(email_id, None)
+    email_data = _get_email_data(email_id)
+
+    si_text = bl_text = ""
+    atts = email_data.get("attachments", [])
+    if len(atts) >= 2:
+        p1 = os.path.join(BUNDLE_DIR, atts[0])
+        p2 = os.path.join(BUNDLE_DIR, atts[1])
+        t1, t2 = extract_text(p1), extract_text(p2)
+        if is_si_attachment(p1, t1):
+            si_text, bl_text = t1, t2
+        else:
+            si_text, bl_text = t2, t1
+
+    record = {
+        "timestamp": _utcnow(),
+        "action": "DOCUMENT_RESTORED",
+        "files": restored_files,
+        "notes": "Restored pristine documents from _backups/original/.",
+    }
+    DOC_EDITS_STORE.setdefault(email_id, []).append(record)
+    _persist_audit_state()
+    _append_backup_manifest({"timestamp": record["timestamp"], "email_id": email_id,
+                             "action": "restore", "files": restored_files})
+    _log_to_supabase_audit(email_id, "DOCUMENT_RESTORED", record)
+
+    return {
+        "status": "SUCCESS",
+        "si_text": si_text,
+        "bl_text": bl_text,
+        "backups": _list_backups(email_id),
+        "message": f"Restored {email_id} from the pristine backup "
+                   f"({len(restored_files)} attachment(s) + email JSON).",
+    }
+
 
 class ResolveRequest(BaseModel):
     email_id: str
@@ -509,6 +808,7 @@ def resolve_mismatch(req: ResolveRequest):
         human_notes=req.notes,
         human_verdict=req.resolved_by
     )
+    _persist_audit_state()
     return {
         "status": "SUCCESS",
         "message": f"Discrepancies for {req.email_id} resolved successfully.",
@@ -571,9 +871,67 @@ def resolve_corrupted(payload: dict):
         "notes": notes,
         "updated_at": _utcnow()
     }
+    _persist_audit_state()
     return {"status": "SUCCESS", "message": f"{eid} marked as {action}"}
 
+CARRIER_DESK_EMAILS = {
+    "EVERGREEN": "doc.desk@evergreen-marine.com",
+    "MSC": "bl.documentation@msc.com",
+    "MAERSK": "import-export.docs@maersk.com",
+    "CMA": "liner.docs@cma-cgm.com",
+    "CMA CGM": "liner.docs@cma-cgm.com",
+    "HAPAG": "doc.service@hlag.com",
+    "HAPAG-LLOYD": "doc.service@hlag.com",
+    "ONE": "ocean.docs@one-line.com",
+    "OOCL": "liner.docs@oocl.com",
+    "PIL": "bl.desk@pilship.com",
+    "YANG MING": "doc.desk@yangming.com",
+    "MONTER": "documentation@monter-lines.com"
+}
+
+def get_carrier_desk_email(carrier):
+    if not carrier:
+        return "carrier-desk@shippingline.com"
+    c_upper = str(carrier).upper()
+    for k, v in CARRIER_DESK_EMAILS.items():
+        if k in c_upper:
+            return v
+    clean = re.sub(r'[^a-zA-Z0-9]', '', str(carrier)).lower()
+    return f"doc.desk@{clean or 'carrier'}.com"
+
+AUDIT_PERSIST_PATH = os.path.join(BASE_DIR, ".cache", "audit_state.json")
+
+def _persist_audit_state():
+    try:
+        os.makedirs(os.path.dirname(AUDIT_PERSIST_PATH), exist_ok=True)
+        payload = {
+            "resolutions": RESOLUTIONS_STORE,
+            "chasers": CHASERS_STORE,
+            "corrupted": CORRUPTED_STORE,
+            "dispatched": DISPATCHED_EMAILS_STORE,
+            "doc_edits": DOC_EDITS_STORE
+        }
+        with open(AUDIT_PERSIST_PATH, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+    except Exception as e:
+        print(f"Error saving audit state: {e}")
+
+def _load_audit_state():
+    if not os.path.exists(AUDIT_PERSIST_PATH):
+        return
+    try:
+        with open(AUDIT_PERSIST_PATH, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        RESOLUTIONS_STORE.update(d.get("resolutions", {}))
+        CHASERS_STORE.update(d.get("chasers", {}))
+        CORRUPTED_STORE.update(d.get("corrupted", {}))
+        DISPATCHED_EMAILS_STORE.update(d.get("dispatched", {}))
+        DOC_EDITS_STORE.update(d.get("doc_edits", {}))
+    except Exception as e:
+        print(f"Error loading audit state: {e}")
+
 CHASERS_STORE = {}
+_load_audit_state()
 
 @app.get("/api/missing-bills")
 def get_missing_bills(carrier: str = "", search: str = ""):
@@ -636,6 +994,7 @@ def chase_missing_bill(payload: dict):
         "chaser_sent_at": _utcnow(),
         "notes": payload.get("notes", "Urgent reminder sent to carrier requesting draft BL.")
     }
+    _persist_audit_state()
     return {
         "status": "SUCCESS",
         "message": f"Chaser dispatched to carrier for {eid}",
@@ -656,6 +1015,7 @@ def batch_chase_missing_bills(payload: dict):
                 "notes": notes
             }
             updated.append(eid)
+    _persist_audit_state()
     return {
         "status": "SUCCESS",
         "message": f"Dispatched chasers for {len(updated)} missing bills.",
@@ -753,6 +1113,7 @@ def send_email_smtp(req: SmtpSendRequest):
         }
         _add_thread_message(req.email_id, outbound_msg)
         DISPATCHED_EMAILS_STORE[req.email_id] = result
+        _persist_audit_state()
         _log_to_supabase_audit(req.email_id, "EMAIL_DISPATCHED", result)
 
     return result
@@ -1549,6 +1910,13 @@ async def verify_scanned_documents(
                           "Document integrity check failed — the uploaded photo could not be decoded.",
                           f"{label} upload is not a decodable image: {d['invalid']}")
         if d["kind"] == "image" and d["meta"].get("legibility") == "ILLEGIBLE":
+            err = d["meta"].get("error")
+            if err:
+                # The model call itself failed (auth, model retired, budget,
+                # network) — say so instead of blaming the photo.
+                return _early("NEEDS_REVIEW", "unreadable",
+                              f"Vision analysis could not run: {err}",
+                              f"{label} vision pass failed — check server AI configuration, then retry.")
             return _early("NEEDS_REVIEW", "unreadable",
                           "Vision analysis rated the photo ILLEGIBLE — most of the document could not be read.",
                           f"{label} photo is illegible — rescan in better lighting and retry.")
@@ -1692,6 +2060,11 @@ def _queue_item(eid, d):
         "corrupted": corrupted,
         "corrupt_issue": corrupt_issue,
         "verdict_status": verdict_status,
+        "review_reason": verdict.get("review_reason") if verdict else None,
+        "defect_fields": (verdict.get("defect_fields") if verdict else []) or [],
+        "missing_fields": [f for f, c in (verdict.get("field_comparisons") or {}).items()
+                          if c.get("blank")] if verdict else [],
+        "summary_reason": verdict.get("summary_reason") if verdict else None,
         "resolved": resolved,
         "chaser_status": chaser_status,
         "corrupt_action": corrupt_action,
@@ -2037,7 +2410,7 @@ def _agent_draft_chaser(email_id):
         f"Attachments received: {len(atts)}\n\n"
         f"Kind regards,\nShipping Documentation Operations Desk\nAveris Automated Logistics Pipeline"
     )
-    return {"to": sender or "carrier-desk@shippingline.com", "subject": subject,
+    return {"to": get_carrier_desk_email(carrier), "subject": subject,
             "body": body, "carrier": carrier, "summary": f"draft chaser prepared for {eid} ({carrier})"}
 
 
@@ -2186,7 +2559,7 @@ class AgentResetRequest(BaseModel):
 
 
 @app.post("/api/agent/chat")
-def agent_chat(req: AgentChatRequest):
+async def agent_chat(req: AgentChatRequest):
     if not req.message or not req.message.strip():
         raise HTTPException(status_code=400, detail="message must not be empty")
     sid = req.session_id or uuid.uuid4().hex
@@ -2197,7 +2570,8 @@ def agent_chat(req: AgentChatRequest):
         AGENT_SESSIONS[sid] = session
         while len(AGENT_SESSIONS) > AGENT_SESSION_CAP:
             AGENT_SESSIONS.pop(next(iter(AGENT_SESSIONS)))
-    out = run_agent(session, req.message.strip(), AGENT_EXECUTORS)
+    from starlette.concurrency import run_in_threadpool
+    out = await run_in_threadpool(run_agent, session, req.message.strip(), AGENT_EXECUTORS)
     return _agent_payload(sid, out)
 
 
@@ -2267,6 +2641,17 @@ def get_audit():
             "details": {"status": ch.get("status")}
         })
 
+    for eid, edits in DOC_EDITS_STORE.items():
+        for ed in edits:
+            events.append({
+                "email_id": eid,
+                "action": ed.get("action", "DOCUMENT_EDITED"),
+                "actor": "Shipping Operator",
+                "notes": ed.get("notes"),
+                "timestamp": ed.get("timestamp"),
+                "details": ed
+            })
+
     for eid, disp in DISPATCHED_EMAILS_STORE.items():
         events.append({
             "email_id": eid,
@@ -2288,7 +2673,7 @@ PIPELINE_STATE = {
     "running": False, "processed": 0, "total": 0, "current": None,
     "done": False, "error": None, "skipped": 0,
     "finished_at": None, "supabase": None, "cancel_requested": False,
-    "resume": True,
+    "resume": True, "partial": False,
 }
 SUBMISSION_STORE = {}
 _SUBMISSION_META = {}
@@ -2415,9 +2800,13 @@ def _process_email_file(f):
 
 def _pipeline_worker(files):
     from concurrent.futures import ThreadPoolExecutor
-    # A fresh non-resume run owns submission.json and may legitimately
-    # truncate it; a resume run must merge so unprocessed entries survive.
-    allow_shrink = not PIPELINE_STATE.get("resume", True)
+    # A fresh non-resume full run owns submission.json and may legitimately
+    # truncate it; resume runs and subset (email_ids) runs must merge so
+    # unticked/unprocessed entries survive.
+    allow_shrink = (
+        not PIPELINE_STATE.get("resume", True)
+        and not PIPELINE_STATE.get("partial", False)
+    )
     try:
         num_batches = (len(files) + PIPELINE_BATCH_SIZE - 1) // PIPELINE_BATCH_SIZE
         for i in range(0, len(files), PIPELINE_BATCH_SIZE):
@@ -2465,6 +2854,7 @@ def _pipeline_worker(files):
 class PipelineRunRequest(BaseModel):
     max_emails: int = 0
     resume: bool = True
+    email_ids: List[str] = []
 
 
 @app.post("/api/pipeline/run")
@@ -2473,6 +2863,13 @@ def run_pipeline(req: PipelineRunRequest):
         return {"started": False, "message": "already running"}
 
     files = sorted([f for f in os.listdir(INBOX_DIR) if f.endswith('.json')])
+    # Optional subset from the Submission Builder picker: only process the
+    # ticked email ids. Ids are matched against real inbox files, so unknown
+    # ones are simply ignored.
+    selected = {e.strip() for e in (req.email_ids or []) if e and e.strip()}
+    partial = bool(selected)
+    if partial:
+        files = [f for f in files if f.replace('.json', '') in selected]
     if req.max_emails and req.max_emails > 0:
         files = files[:req.max_emails]
 
@@ -2499,9 +2896,12 @@ def run_pipeline(req: PipelineRunRequest):
         "supabase": None,
         "cancel_requested": False,
         "resume": req.resume,
+        "partial": partial,
     })
     threading.Thread(target=_pipeline_worker, args=(files,), daemon=True).start()
     msg = f"started ({len(files)} to process"
+    if partial:
+        msg += f", {len(selected)} selected"
     if skipped:
         msg += f", resumed with {skipped} already done"
     return {"started": True, "total": len(files), "skipped": skipped, "message": msg + ")"}
@@ -2517,7 +2917,11 @@ def cancel_pipeline():
 
 @app.get("/api/pipeline/status")
 def pipeline_status():
-    return dict(PIPELINE_STATE, submission_size=len(SUBMISSION_STORE))
+    sub_size = len(SUBMISSION_STORE)
+    if sub_size == 0:
+        existing = _load_submission_file()
+        sub_size = len(existing) if existing else 0
+    return dict(PIPELINE_STATE, submission_size=sub_size)
 
 
 @app.get("/api/pipeline/submission")

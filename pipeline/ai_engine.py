@@ -20,6 +20,8 @@ AI_FALLBACK_ENABLED = os.getenv("AI_FALLBACK", "1").lower() not in ("0", "false"
 # engine behaves exactly as if AI_FALLBACK were disabled: extraction blanks
 # stay 'missing', classification returns GENERAL/'fallback', intent returns
 # OTHER/'fallback'.
+# 0 or a negative value means unlimited (intended for the deployed server;
+# the 30-call default protects local runs/tests from flooding the API).
 AI_MAX_CALLS = int(os.getenv("AI_MAX_CALLS", "30"))
 _LLM_CALL_COUNT = 0
 _LLM_BUDGET_LOGGED = False
@@ -32,6 +34,8 @@ def _budget_gate():
     trips.
     """
     global _LLM_CALL_COUNT, _LLM_BUDGET_LOGGED
+    if AI_MAX_CALLS <= 0:
+        return True
     if _LLM_CALL_COUNT >= AI_MAX_CALLS:
         if not _LLM_BUDGET_LOGGED:
             _LLM_BUDGET_LOGGED = True
@@ -632,7 +636,8 @@ def analyze_document_image(image_path):
             "shipper": "ERROR", "consignee": "ERROR", "notify_party": "ERROR",
             "port_of_loading": "ERROR", "port_of_discharge": "ERROR",
             "container_count": "ERROR", "gross_weight_kg": "ERROR"
-        }, {"document_type": "OTHER", "legibility": "ILLEGIBLE", "transcription": ""}
+        }, {"document_type": "OTHER", "legibility": "ILLEGIBLE", "transcription": "",
+            "error": "AI vision disabled (AI_FALLBACK=0 or AI_MAX_CALLS budget exhausted)"}
     client = get_nvidia_client()
     prompt = """
     You are an expert shipping document digitizer. The image shows a paper
@@ -712,7 +717,8 @@ def analyze_document_image(image_path):
             "shipper": "ERROR", "consignee": "ERROR", "notify_party": "ERROR",
             "port_of_loading": "ERROR", "port_of_discharge": "ERROR",
             "container_count": "ERROR", "gross_weight_kg": "ERROR"
-        }, {"document_type": "OTHER", "legibility": "ILLEGIBLE", "transcription": ""}
+        }, {"document_type": "OTHER", "legibility": "ILLEGIBLE", "transcription": "",
+            "error": str(e)[:300]}
 
 
 def _reasoning_fallback(defect_fields):

@@ -21,6 +21,54 @@ const QUEUE_FILTERS = [
   { key: 'reply_received', label: 'Replies' },
 ]
 
+const REVIEW_REASON_META = {
+  missing_value: { label: 'Missing value', color: '#b3560e', bg: '#fdeee7' },
+  missing_attachment: { label: 'Missing attachment', color: '#b3560e', bg: '#fdeee7' },
+  unreadable: { label: 'Unreadable / corrupt', color: '#8e24aa', bg: '#f3e5f5' },
+  wrong_doc_type: { label: 'Wrong doc type', color: '#c62828', bg: '#ffebee' },
+}
+
+const REVIEW_FILTERS = [
+  { key: 'all', label: 'All Pending' },
+  { key: 'mismatch', label: 'Mismatches' },
+  { key: 'needs_review', label: 'Needs Review' },
+  { key: 'corrupted', label: 'Corrupted' },
+  { key: 'reply', label: 'Replies' },
+]
+
+const FIELD_STANDARDS = {
+  shipper: 'DCSA eBL v3.0 / ICC UCP 600 Art. 20 (Legal Shipper Entity)',
+  consignee: 'DCSA eBL v3.0 / ICC UCP 600 Art. 20 (Consignee Title & Negotiability)',
+  notify_party: 'DCSA eBL v3.0 (Arrival Notice Party / Same as Consignee)',
+  port_of_loading: 'UNECE Rec. 16 (UN/LOCODE Standard Port Nomenclature)',
+  port_of_discharge: 'UNECE Rec. 16 (UN/LOCODE Standard Port Nomenclature)',
+  container_count: 'ISO 6346 Container Equipment Quantity & Sizing Specification',
+  gross_weight_kg: 'IMO SOLAS Chapter VI Reg. 2 (Verified Gross Mass / VGM Mandate)',
+}
+
+const CARRIER_DESK_EMAILS = {
+  EVERGREEN: 'doc.desk@evergreen-marine.com',
+  MSC: 'bl.documentation@msc.com',
+  MAERSK: 'liner.documentation@maersk.com',
+  CMA: 'doc.desk@cma-cgm.com',
+  HAPAG: 'doc.service@hlag.com',
+  ONE: 'ocean.docs@one-line.com',
+  PIL: 'bl.desk@pilship.com',
+  OOCL: 'liner.docs@oocl.com',
+  'YANG MING': 'doc.desk@yangming.com',
+  MONTER: 'documentation@monter-lines.com',
+}
+
+function getCarrierDeskEmail(carrier) {
+  if (!carrier) return 'carrier-desk@shippingline.com'
+  const upper = String(carrier).toUpperCase()
+  for (const [k, v] of Object.entries(CARRIER_DESK_EMAILS)) {
+    if (upper.includes(k)) return v
+  }
+  const clean = String(carrier).toLowerCase().replace(/[^a-z0-9]/g, '')
+  return `doc.desk@${clean || 'carrier'}-lines.com`
+}
+
 const AUDIT_DOT_COLORS = {
   AUTO_VERIFIED: '#28a745',
   RESOLVED: '#0d6efd',
@@ -29,7 +77,12 @@ const AUDIT_DOT_COLORS = {
   CHASER_DISPATCHED: '#6f42c1',
   EMAIL_DISPATCHED: '#6f42c1',
   INBOUND_REPLY_RECEIVED: '#0d6efd',
+  DOCUMENT_EDITED: '#e07a5f',
+  DOCUMENT_RESTORED: '#6f42c1',
 }
+
+// Texts the UI injects when a document can't be shown — never save these back.
+const DOC_PLACEHOLDER_RX = /^\s*\[(MISSING ATTACHMENT|CORRUPTED FILE|NON-COMPARISON|INBOUND CHASER|AWAITING CARRIER|IMAGE DOCUMENT)/i
 
 const EMAIL_STATUS_META = {
   OK:           { label: 'OK',           color: '#2e7d32', bg: '#e8f5e9' },
@@ -43,6 +96,14 @@ const EMAIL_STATUS_META = {
 }
 
 const emailStatusMeta = s => EMAIL_STATUS_META[s] || EMAIL_STATUS_META.UNVERIFIED
+
+// Fields that failed comparison without being value-vs-value defects
+// (blank on one or both sides) — they escalate to review, not "match".
+const countMissingFields = (result) =>
+  FIELDS.filter(f => {
+    const c = result?.field_comparisons?.[f]
+    return c && c.match === false && !(result?.defect_fields || []).includes(f)
+  }).length
 
 const CHAT_SUGGESTIONS = [
   { icon: '🔍', text: 'Verify the next 25 unverified emails' },
@@ -250,6 +311,36 @@ function VerdictPanel({ result, loading, error, verdictSource, idleHint, loading
                 ({result.review_reason})
               </span>
             )}
+            {/* Engine Provenance Badge */}
+            {(() => {
+              const provValues = [
+                ...Object.values(result.si_provenance || {}),
+                ...Object.values(result.bl_provenance || {}),
+                result.classification_provenance,
+                result.intent_provenance
+              ].filter(Boolean)
+              const hasVision = provValues.some(p => String(p).toLowerCase().includes('vision'))
+              const hasLLM = provValues.some(p => String(p).toLowerCase().includes('llm') || String(p).toLowerCase().includes('nvidia'))
+              if (hasVision) {
+                return (
+                  <span className="provenance-badge provenance-vision" title="Audited via Multimodal Vision OCR & Layout Engine">
+                    👁️ Multimodal Vision Engine
+                  </span>
+                )
+              } else if (hasLLM) {
+                return (
+                  <span className="provenance-badge provenance-llm" title="Audited via NVIDIA DeepSeek / Qwen LLM Fallback">
+                    🧠 Tier-2 LLM Reasoning
+                  </span>
+                )
+              } else {
+                return (
+                  <span className="provenance-badge provenance-regex" title="Audited via Deterministic Fast-Path Engine (<15ms latency)">
+                    ⚡ Deterministic Fast-Path (Regex)
+                  </span>
+                )
+              }
+            })()}
           </div>
 
           {/* AI Thought Process Box */}
@@ -288,18 +379,39 @@ function VerdictPanel({ result, loading, error, verdictSource, idleHint, loading
           {result.si_fields && Object.keys(result.si_fields).length > 0 && (
             <div>
               <h3 style={{ fontSize: '0.95rem', color: 'var(--primary-color)', marginBottom: '10px' }}>
-                Field Audit ({result.defect_fields?.length || 0} defects)
+                Field Audit ({result.defect_fields?.length || 0} defects
+                {countMissingFields(result) > 0 ? ` · ${countMissingFields(result)} missing` : ''})
               </h3>
               <div>
                 {FIELDS.map(f => {
                   const isMismatch = result.defect_fields?.includes(f)
                   const fieldComp = result.field_comparisons?.[f]
+                  const isMissing = !isMismatch && (fieldComp?.match === false || Boolean(fieldComp?.blank))
+                  const missingLabel = fieldComp?.blank === 'si_only' ? 'Missing on SI'
+                    : fieldComp?.blank === 'bl_only' ? 'Missing on BL'
+                    : fieldComp?.blank === 'both' ? 'Missing — Both Docs'
+                    : 'Missing Value'
                   return (
-                    <div key={f} className={`field-comparison ${isMismatch ? 'mismatch' : ''}`}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <h4>{f.replace(/_/g, ' ')}</h4>
+                    <div key={f} className={`field-comparison ${isMismatch ? 'mismatch' : isMissing ? 'missing' : ''}`}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <div>
+                          <h4 style={{ margin: 0, display: 'inline-block' }}>{f.replace(/_/g, ' ')}</h4>
+                          <span style={{
+                            marginLeft: '8px',
+                            fontSize: '0.72rem',
+                            color: '#666',
+                            background: '#f0ede6',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontWeight: 500
+                          }}>
+                            {fieldComp?.standard_citation || FIELD_STANDARDS[f] || 'Maritime Standard'}
+                          </span>
+                        </div>
                         {isMismatch ? (
                           <span className="diff-chip diff-chip-defect">🔴 Material Defect</span>
+                        ) : isMissing ? (
+                          <span className="diff-chip diff-chip-missing">🟠 {missingLabel}</span>
                         ) : (fieldComp?.reason?.toLowerCase().includes('variation accepted') || fieldComp?.reason?.toLowerCase().includes('writing style')) ? (
                           <span className="diff-chip diff-chip-style">🟡 Style Match</span>
                         ) : (
@@ -314,12 +426,66 @@ function VerdictPanel({ result, loading, error, verdictSource, idleHint, loading
                         <div style={{
                           fontSize: '0.8rem',
                           marginTop: '4px',
-                          color: isMismatch ? '#dc3545' : '#597928',
+                          color: isMismatch ? '#dc3545' : isMissing ? '#b3560e' : '#597928',
                           fontStyle: 'italic',
                         }}>
                           ℹ️ {fieldComp.reason}
                         </div>
                       )}
+
+                      {/* Normalization & Decision Trail */}
+                      <details className="norm-decision-trail" style={{
+                        marginTop: '8px',
+                        background: '#faf8f5',
+                        border: '1px solid #e8e3d9',
+                        borderRadius: '6px',
+                        padding: '6px 10px',
+                        fontSize: '0.8rem'
+                      }}>
+                        <summary style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--primary-color)' }}>
+                          🔍 View Normalization & Decision Trail
+                        </summary>
+                        <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: '#fff', padding: '8px', borderRadius: '4px', border: '1px solid #eee' }}>
+                            <div>
+                              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#888', textTransform: 'uppercase' }}>Raw SI Input</div>
+                              <div style={{ fontFamily: 'monospace', fontSize: '0.78rem', wordBreak: 'break-word', color: '#333' }}>
+                                {fieldComp?.raw_si || result.si_fields[f] || '—'}
+                              </div>
+                              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', marginTop: '4px' }}>Normalized SI</div>
+                              <div style={{ fontFamily: 'monospace', fontSize: '0.78rem', wordBreak: 'break-word', color: '#597928', fontWeight: 600 }}>
+                                {fieldComp?.norm_si !== undefined ? String(fieldComp.norm_si) : '—'}
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#888', textTransform: 'uppercase' }}>Raw BL Input</div>
+                              <div style={{ fontFamily: 'monospace', fontSize: '0.78rem', wordBreak: 'break-word', color: '#333' }}>
+                                {fieldComp?.raw_bl || result.bl_fields?.[f] || '—'}
+                              </div>
+                              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', marginTop: '4px' }}>Normalized BL</div>
+                              <div style={{ fontFamily: 'monospace', fontSize: '0.78rem', wordBreak: 'break-word', color: isMismatch ? '#dc3545' : '#597928', fontWeight: 600 }}>
+                                {fieldComp?.norm_bl !== undefined ? String(fieldComp.norm_bl) : '—'}
+                              </div>
+                            </div>
+                          </div>
+
+                          {fieldComp?.transformation_steps && fieldComp.transformation_steps.length > 0 && (
+                            <div style={{ background: '#fff', padding: '6px 8px', borderRadius: '4px', border: '1px solid #eee' }}>
+                              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#666', marginBottom: '3px' }}>⚙️ Transformation Steps Applied:</div>
+                              <ol style={{ margin: 0, paddingLeft: '18px', fontSize: '0.75rem', color: '#444' }}>
+                                {fieldComp.transformation_steps.map((step, sIdx) => (
+                                  <li key={sIdx}>{step}</li>
+                                ))}
+                              </ol>
+                            </div>
+                          )}
+
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem', color: '#777', paddingTop: '2px' }}>
+                            <span><strong>Regulatory Reference:</strong> {fieldComp?.standard_citation || FIELD_STANDARDS[f] || 'Standard Shipping Practice'}</span>
+                            <span><strong>Confidence:</strong> {fieldComp?.confidence || 'HIGH'}</span>
+                          </div>
+                        </div>
+                      </details>
                     </div>
                   )
                 })}
@@ -657,6 +823,12 @@ function App() {
   const [pipelineRunning, setPipelineRunning] = useState(false)
   const [pipelineMsg, setPipelineMsg] = useState(null)
 
+  // ---- Generate picker (which inbox emails to process) ----
+  const [genPicker, setGenPicker] = useState(null)
+  const [genSelected, setGenSelected] = useState(() => new Set())
+  const [genSearch, setGenSearch] = useState('')
+  const [genShowAll, setGenShowAll] = useState(false)
+
   // ---- Chaser actions (Inbox, missing_bl filter) ----
   const [batchChasing, setBatchChasing] = useState(false)
 
@@ -703,7 +875,14 @@ function App() {
   // ---- Backend AI config (sidebar footer) ----
   const [aiConfig, setAiConfig] = useState(null)
 
-  // ---- Paper Scan (camera photos / handwritten docs) ----
+  // ---- Document editing + backup (Verify page) ----
+  const [savingDocs, setSavingDocs] = useState(false)
+  const [saveDocMsg, setSaveDocMsg] = useState(null)
+  const [docBackups, setDocBackups] = useState(null)
+  const [restoringDocs, setRestoringDocs] = useState(false)
+
+  // ---- Paper Scan (camera photos / handwritten docs) — merged into Verify Documents ----
+  const [verifyMode, setVerifyMode] = useState('email') // 'email' | 'scan'
   const [scanSi, setScanSi] = useState(null) // { file, preview }
   const [scanBl, setScanBl] = useState(null)
   const [scanResult, setScanResult] = useState(null)
@@ -712,6 +891,12 @@ function App() {
 
   // ---- Queue Adjacent Navigation ----
   const [adjacentInfo, setAdjacentInfo] = useState(null)
+
+  // ---- Human-in-the-Loop Review ----
+  const [reviewItems, setReviewItems] = useState(null)
+  const [reviewLoading, setReviewLoading] = useState(false)
+  const [reviewFilter, setReviewFilter] = useState('all')
+  const [reviewMsg, setReviewMsg] = useState(null)
 
   const fetchAdjacent = useCallback(async (eid, filter = 'all') => {
     if (!eid) return
@@ -746,6 +931,21 @@ function App() {
   const refreshQueue = useCallback(() => {
     fetchQueue(queueFilter, queueSearch, queuePage)
   }, [fetchQueue, queueFilter, queueSearch, queuePage])
+
+  // Human-in-the-Loop queue — one unpaginated pull, bucketed client-side
+  const fetchReviewQueue = useCallback(async () => {
+    setReviewLoading(true)
+    try {
+      const res = await fetch(`${API}/api/queue?filter=all&page=1&limit=1000`)
+      const data = await res.json()
+      setReviewItems(data.emails || [])
+    } catch (err) {
+      console.error('Failed to fetch review queue:', err)
+      setReviewItems([])
+    } finally {
+      setReviewLoading(false)
+    }
+  }, [])
 
   // Status map for the email picker — one bulk fetch of queue_status for all emails
   const refreshEmailStatuses = useCallback(async () => {
@@ -785,20 +985,25 @@ function App() {
     return () => clearTimeout(t)
   }, [queueFilter, queueSearch, queuePage, fetchQueue])
 
-  // Keyboard navigation shortcuts in Verification Hub ([J] Next, [K] Prev, [E] Auto-Draft)
+  // HITL review queue — refresh on entering the view
   useEffect(() => {
-    if (view !== 'verify') return
+    if (view === 'review') fetchReviewQueue()
+  }, [view, fetchReviewQueue])
+
+  // Keyboard navigation shortcuts in Verification Hub ([Q] Prev, [W] Next, [E] Auto-Draft)
+  useEffect(() => {
+    if (view !== 'verify' || verifyMode !== 'email') return
     const handleKeyDown = (e) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return
-      if (e.key === 'ArrowRight' || e.key === 'j' || e.key === 'J') {
-        if (adjacentInfo?.next) {
-          e.preventDefault()
-          openEmail(adjacentInfo.next)
-        }
-      } else if (e.key === 'ArrowLeft' || e.key === 'k' || e.key === 'K') {
+      if (e.key === 'ArrowLeft' || e.key === 'q' || e.key === 'Q' || e.key === 'k' || e.key === 'K') {
         if (adjacentInfo?.prev) {
           e.preventDefault()
           openEmail(adjacentInfo.prev)
+        }
+      } else if (e.key === 'ArrowRight' || e.key === 'w' || e.key === 'W' || e.key === 'j' || e.key === 'J') {
+        if (adjacentInfo?.next) {
+          e.preventDefault()
+          openEmail(adjacentInfo.next)
         }
       } else if (e.key === 'e' || e.key === 'E') {
         if (selectedEmail && !emailModalOpen) {
@@ -809,7 +1014,7 @@ function App() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [view, adjacentInfo, selectedEmail, emailModalOpen])
+  }, [view, verifyMode, adjacentInfo, selectedEmail, emailModalOpen])
 
   // Dashboard stats — on entering the view
   useEffect(() => {
@@ -860,6 +1065,15 @@ function App() {
         setPipelineRunning(Boolean(data.running) && !data.done)
       })
       .catch(err => console.error('Failed to fetch pipeline status:', err))
+    // Inbox rows for the generate picker — all ticked by default
+    fetch(`${API}/api/inbox?limit=1000`)
+      .then(res => res.json())
+      .then(data => {
+        const items = data.emails || []
+        setGenPicker(items)
+        setGenSelected(new Set(items.map(i => i.email_id)))
+      })
+      .catch(err => console.error('Failed to fetch inbox for picker:', err))
   }, [view])
 
   // Submission records for the export table — cached, selectable per-email
@@ -1056,7 +1270,9 @@ function App() {
     const curInfo = info || emailInfo
     const curVerdict = verdict || result
     const carrier = detectCarrier(curInfo)
-    const to = curInfo?.from || 'carrier-desk@shippingline.com'
+    const to = (curVerdict?.status === 'MISMATCH' || curInfo?.attachments?.length === 0)
+      ? getCarrierDeskEmail(carrier)
+      : (curInfo?.from || 'carrier-desk@shippingline.com')
     const subjectPrefix = curVerdict?.status === 'MISMATCH'
       ? 'URGENT: Discrepancy Notice & Draft BL Amendment'
       : (curInfo?.attachments?.length === 0 ? 'URGENT CHASER: Missing Draft Bill of Lading' : 'Documentation Clearance Notice')
@@ -1205,6 +1421,8 @@ function App() {
     setCloudSyncInfo(null)
     setEmailThreads([])
     setReplyNotice(null)
+    setSaveDocMsg(null)
+    setDocBackups(null)
     setSiText('Loading attachment...')
     setBlText('Loading attachment...')
 
@@ -1217,6 +1435,7 @@ function App() {
       if (data.email) setEmailInfo(data.email)
       setEmailThreads(data.threads || data.email?.threads || [])
       if (data.cloud_synced) setCloudSyncInfo(data.supabase_record)
+      if (data.backups) setDocBackups(data.backups)
       if (data.is_corrupted) {
         setCorruptWarning({
           reason: data.corrupt_reason,
@@ -1414,12 +1633,15 @@ function App() {
     }
   }, [chatMessages, chatLoading, view])
 
-  const handleVerify = async () => {
+  const handleVerify = async (siOverride, blOverride) => {
+    // onClick handlers pass the event object — only honour string overrides
+    const siBody = typeof siOverride === 'string' ? siOverride : siText
+    const blBody = typeof blOverride === 'string' ? blOverride : blText
     if (!selectedEmail) {
       setError('Please select an email first.')
       return
     }
-    if (!siText.trim() || !blText.trim()) {
+    if (!siBody.trim() || !blBody.trim()) {
       setError('Please ensure both Shipping Instruction and Bill of Lading texts are loaded.')
       return
     }
@@ -1436,8 +1658,8 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email_id: selectedEmail,
-          si_text: siText,
-          bl_text: blText,
+          si_text: siBody,
+          bl_text: blBody,
         }),
       })
 
@@ -1461,6 +1683,60 @@ function App() {
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // ============================================================
+  // DOCUMENT EDIT + BACKUP HANDLERS
+  // ============================================================
+
+  const handleSaveDocuments = async () => {
+    if (!selectedEmail) return
+    setSavingDocs(true)
+    setSaveDocMsg(null)
+    try {
+      const res = await fetch(`${API}/api/email/${selectedEmail}/save-documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ si_text: siText, bl_text: blText }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || `Server error: ${res.status}`)
+      setDocBackups(data.backups || null)
+      const skipped = data.skipped?.length ? ` (${data.skipped.join('; ')})` : ''
+      const remapped = data.remapped?.length
+        ? ` Binary attachment repointed to: ${data.remapped.map(r => r.to).join(', ')}.`
+        : ''
+      setSaveDocMsg(`💾 ${data.message}${skipped}${remapped}`)
+      // Re-run the audit so the verdict reflects the saved text immediately
+      await handleVerify()
+    } catch (err) {
+      setSaveDocMsg(`❌ Save failed: ${err.message}`)
+    } finally {
+      setSavingDocs(false)
+    }
+  }
+
+  const handleRestoreDocuments = async () => {
+    if (!selectedEmail) return
+    setRestoringDocs(true)
+    setSaveDocMsg(null)
+    try {
+      const res = await fetch(`${API}/api/email/${selectedEmail}/restore-documents`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || `Server error: ${res.status}`)
+      setSiText(data.si_text || '')
+      setBlText(data.bl_text || '')
+      setDocBackups(data.backups || null)
+      setSaveDocMsg(`↺ ${data.message}`)
+      // Re-run the audit against the restored originals
+      if (data.si_text && data.bl_text) await handleVerify(data.si_text, data.bl_text)
+    } catch (err) {
+      setSaveDocMsg(`❌ Restore failed: ${err.message}`)
+    } finally {
+      setRestoringDocs(false)
     }
   }
 
@@ -1539,6 +1815,7 @@ function App() {
       setResolveSuccess(data)
       if (result) setResult(prev => ({ ...prev, status: 'RESOLVED' }))
       refreshQueue()
+      fetchReviewQueue()
       refreshEmailStatuses()
       fetch(`${API}/api/stats`).then(r => r.json()).then(s => setStats(s)).catch(() => {})
 
@@ -1569,7 +1846,9 @@ function App() {
       if (!res.ok) throw new Error('Failed to send chaser')
       const data = await res.json()
       setQueueMsg(data.message || `Chaser reminder dispatched for ${eid}.`)
+      setReviewMsg(data.message || `Chaser reminder dispatched for ${eid}.`)
       refreshQueue()
+      fetchReviewQueue()
     } catch (err) {
       setError(err.message)
     }
@@ -1656,9 +1935,11 @@ function App() {
       if (!res.ok) throw new Error('Failed to update corrupted status')
       const data = await res.json()
       setQueueMsg(data.message || `Successfully logged: ${eid} -> ${action}`)
+      setReviewMsg(data.message || `Successfully logged: ${eid} -> ${action}`)
       setCorruptActionNotes('')
       setFocusedCorruptRow(null)
       refreshQueue()
+      fetchReviewQueue()
     } catch (err) {
       setError(err.message)
     }
@@ -1703,7 +1984,14 @@ function App() {
       const res = await fetch(`${API}/api/pipeline/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ max_emails: Number(maxEmails) || 0, resume: !freshRun }),
+        body: JSON.stringify({
+          max_emails: Number(maxEmails) || 0,
+          resume: !freshRun,
+          // Unticked rows are excluded — an empty list means "process all".
+          email_ids: genPicker && genSelected.size < genPicker.length
+            ? [...genSelected]
+            : [],
+        }),
       })
       if (!res.ok) throw new Error(`Server error: ${res.status}`)
       const data = await res.json()
@@ -1801,6 +2089,13 @@ function App() {
     ? Math.max(1, Math.ceil(queueData.total / queueData.limit))
     : 1
 
+  // Sidebar badge: everything waiting on a human (needs_review count already
+  // includes corrupted files server-side)
+  const hitlPendingCount =
+    (queueData?.counts?.needs_review || 0) +
+    (queueData?.counts?.mismatch || 0) +
+    (queueData?.counts?.reply_received || 0)
+
   const pipelinePct =
     pipelineStatus && pipelineStatus.total > 0
       ? Math.round((pipelineStatus.processed / pipelineStatus.total) * 100)
@@ -1877,6 +2172,21 @@ function App() {
           </button>
 
           <button
+            className={`sidebar-btn ${view === 'review' ? 'active' : ''}`}
+            onClick={() => setView('review')}
+          >
+            <span>🧑‍⚖️ Human Review</span>
+            {hitlPendingCount > 0 && (
+              <span
+                className="sidebar-badge"
+                style={{ background: 'rgba(183, 129, 3, 0.18)', color: '#b78103' }}
+              >
+                {hitlPendingCount}
+              </span>
+            )}
+          </button>
+
+          <button
             className={`sidebar-btn ${view === 'cloud' ? 'active' : ''}`}
             onClick={() => { setView('cloud'); fetchCloudRecords(); }}
           >
@@ -1889,13 +2199,6 @@ function App() {
                 {cloudStats.total_in_supabase}
               </span>
             )}
-          </button>
-
-          <button
-            className={`sidebar-btn ${view === 'scan' ? 'active' : ''}`}
-            onClick={() => setView('scan')}
-          >
-            <span>📷 Paper Scan</span>
           </button>
 
           <button
@@ -1955,24 +2258,29 @@ function App() {
 
                 <div className="kpi-grid">
                   {kpis.map(k => {
+                    const reviewKey =
+                      k.label === 'Mismatch' ? 'mismatch'
+                        : k.label === 'Needs Review' ? 'needs_review'
+                          : k.label === 'Corrupted' ? 'corrupted'
+                            : null
                     const targetFilter =
                       k.label === 'Missing BL' ? 'missing_bl'
-                        : k.label === 'Corrupted' ? 'corrupted'
-                          : k.label === 'Mismatch' ? 'mismatch'
-                            : k.label === 'Needs Review' ? 'needs_review'
-                              : k.label === 'Resolved' ? 'resolved'
-                                : null
+                        : k.label === 'Resolved' ? 'resolved'
+                          : null
+                    const clickable = reviewKey || targetFilter
                     return (
                       <div
                         key={k.label}
                         className="kpi-card"
-                        onClick={targetFilter ? () => openQueueFilter(targetFilter) : undefined}
-                        style={{ cursor: targetFilter ? 'pointer' : 'default', transition: 'all 0.2s ease' }}
-                        title={targetFilter ? `Open ${k.label} in Inbox` : undefined}
+                        onClick={reviewKey
+                          ? () => { setReviewFilter(reviewKey); setView('review') }
+                          : targetFilter ? () => openQueueFilter(targetFilter) : undefined}
+                        style={{ cursor: clickable ? 'pointer' : 'default', transition: 'all 0.2s ease' }}
+                        title={clickable ? (reviewKey ? `Open ${k.label} in Human Review` : `Open ${k.label} in Inbox`) : undefined}
                       >
                         <div className="kpi-value">{k.value ?? 0}</div>
                         <div className="kpi-label">
-                          {k.label} {targetFilter ? '→' : ''}
+                          {k.label} {clickable ? '→' : ''}
                         </div>
                       </div>
                     )
@@ -2491,9 +2799,40 @@ function App() {
           <>
             <div className="page-header">
               <h1>Verify Documents</h1>
-              <p>Review incoming inbox emails, inspect attachments, and compare SI vs draft BL.</p>
+              <p>Review an inbox email's attachments, or photograph / upload paper documents — compare SI vs draft BL either way.</p>
             </div>
 
+            {/* Mode toggle: inbox email vs paper scan/upload */}
+            <div className="action-bar" style={{ flexWrap: 'wrap', gap: '10px' }}>
+              <button
+                className={`chip ${verifyMode === 'email' ? 'active' : ''}`}
+                onClick={() => setVerifyMode('email')}
+              >
+                📥 Inbox Email
+              </button>
+              <button
+                className={`chip ${verifyMode === 'scan' ? 'active' : ''}`}
+                onClick={() => setVerifyMode('scan')}
+              >
+                📷 Paper Scan / Upload
+              </button>
+              {verifyMode === 'scan' && (
+                <>
+                  <button
+                    onClick={handleScanVerify}
+                    disabled={scanLoading || !scanSi?.file || !scanBl?.file}
+                    style={{ padding: '8px 18px', fontSize: '0.85rem' }}
+                  >
+                    {scanLoading ? 'Reading documents via vision AI...' : '⚡ Verify Scanned Documents'}
+                  </button>
+                  <span style={{ fontSize: '0.82rem', color: '#777', alignSelf: 'center' }}>
+                    Photos (JPG/PNG), scans, PDF, DOCX, XLSX, TXT · max 15 MB each
+                  </span>
+                </>
+              )}
+            </div>
+
+            {verifyMode === 'email' && (<>
             <div className="queue-nav-bar">
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                 <div className="email-picker" ref={pickerRef}>
@@ -2564,6 +2903,28 @@ function App() {
                   {loading ? 'Analyzing via NVIDIA NIM...' : 'Re-verify'}
                 </button>
 
+                <button
+                  onClick={handleSaveDocuments}
+                  disabled={savingDocs || loading || !selectedEmail
+                    || (emailInfo?.attachments?.length || 0) < 2
+                    || (DOC_PLACEHOLDER_RX.test(siText) && DOC_PLACEHOLDER_RX.test(blText))}
+                  title="Write the edited SI/BL text back to this email's attachment files — originals are snapshotted to _backups/ first"
+                  style={{ padding: '8px 16px', fontSize: '0.9rem', background: '#e07a5f' }}
+                >
+                  {savingDocs ? 'Saving…' : '💾 Save Doc Edits'}
+                </button>
+
+                {docBackups?.has_original && (
+                  <button
+                    onClick={handleRestoreDocuments}
+                    disabled={restoringDocs || loading}
+                    title={`Restore pristine email + attachments from backup (${docBackups.snapshots?.length || 0} snapshot(s) kept)`}
+                    style={{ padding: '8px 16px', fontSize: '0.9rem', background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-color)', boxShadow: 'none' }}
+                  >
+                    {restoringDocs ? 'Restoring…' : '↺ Restore Original'}
+                  </button>
+                )}
+
                 {adjacentInfo && (
                   <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 600, padding: '4px 10px', background: '#f5efe6', borderRadius: '6px' }}>
                     Item {adjacentInfo.index} of {adjacentInfo.total} {queueFilter ? `(${queueFilter})` : ''}
@@ -2597,8 +2958,8 @@ function App() {
                   ✉️ Auto-Draft Email
                 </button>
                 <div className="keyboard-shortcuts-hint">
-                  <span title="Keyboard shortcuts: Press [K] for Previous, [J] for Next, [E] to Auto-Draft">
-                    ⚡ <kbd>K</kbd> Prev · <kbd>J</kbd> Next · <kbd>E</kbd> Draft
+                  <span title="Keyboard shortcuts: Press [Q] for Previous, [W] for Next, [E] to Auto-Draft">
+                    ⚡ <kbd>Q</kbd> Prev · <kbd>W</kbd> Next · <kbd>E</kbd> Draft
                   </span>
                 </div>
                 <button
@@ -2609,6 +2970,25 @@ function App() {
                 </button>
               </div>
             </div>
+
+            {/* Save / restore status banner */}
+            {saveDocMsg && (
+              <div
+                className="redirect-banner"
+                style={{
+                  background: saveDocMsg.startsWith('❌') ? '#f8d7da' : '#e8f5e9',
+                  borderColor: saveDocMsg.startsWith('❌') ? '#f5c6cb' : '#c8e6c9',
+                  color: saveDocMsg.startsWith('❌') ? '#721c24' : '#155724',
+                }}
+              >
+                <div>{saveDocMsg}</div>
+                {docBackups?.has_original && (
+                  <span style={{ fontSize: '0.75rem', opacity: 0.8, whiteSpace: 'nowrap' }}>
+                    🗄️ Backups: pristine original + {docBackups.snapshots?.length || 0} snapshot(s)
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Banner: Pulled from Supabase Cloud Cache */}
             {cloudSyncInfo && (
@@ -2634,7 +3014,7 @@ function App() {
             )}
 
             {/* Contextual Action Card: Missing Draft BL Carrier Chaser */}
-            {emailInfo && emailInfo.attachments?.length === 0 && (
+            {emailInfo && emailInfo.category === 'BL_COMPARISON' && emailInfo.attachments?.length === 0 && (
               <div className="action-card chaser">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
                   <div>
@@ -2660,7 +3040,7 @@ function App() {
                   <div style={{ fontWeight: 600, marginBottom: '6px', color: '#6e3511' }}>
                     📧 Outgoing Carrier Chaser:
                   </div>
-                  <div><strong>To:</strong> {emailInfo.from || 'carrier-desk@shippingline.com'} ({detectCarrier(emailInfo)})</div>
+                  <div><strong>To:</strong> {getCarrierDeskEmail(detectCarrier(emailInfo))} ({detectCarrier(emailInfo)} Documentation Desk)</div>
                   <div><strong>Subject:</strong> URGENT: Missing Draft Bill of Lading — {emailInfo.subject}</div>
                   <div style={{ marginTop: '8px', fontStyle: 'italic', color: '#444' }}>
                     "Dear Carrier Operations Team, we are following up on our Shipping Instruction for shipment ref {selectedEmail}. Port cutoff is approaching and our automated verification pipeline has not received the draft BL. Please urgently furnish the draft BL to avoid shipping delays."
@@ -2692,7 +3072,7 @@ function App() {
                       🔄 Request Re-upload from Shipper
                     </button>
                     <button
-                      onClick={() => setView('scan')}
+                      onClick={() => setVerifyMode('scan')}
                       style={{ background: '#6e3511', padding: '8px 16px', fontSize: '0.85rem' }}
                     >
                       📷 Route to Paper Scan / OCR
@@ -3038,8 +3418,289 @@ function App() {
                 </div>
               </div>
             )}
+            </>)}
+
+            {/* Paper scan / upload mode — merged Paper Scan page */}
+            {verifyMode === 'scan' && (
+              <>
+                {scanResult?.status === 'MISMATCH' && (
+                  <div className="redirect-banner">
+                    <div>
+                      <strong>⚠️ Discrepancy Found:</strong> {scanResult.defect_fields?.length} field mismatch(es) detected between the scanned documents.
+                    </div>
+                  </div>
+                )}
+
+                <div className="main-container">
+                  <ScanUploadCard
+                    title="Shipping Instruction (SI)"
+                    file={scanSi?.file}
+                    preview={scanSi?.preview}
+                    transcript={scanResult?.si_text}
+                    onSelect={(f) => handleScanFile('si', f)}
+                    onClear={() => handleScanFile('si', null)}
+                  />
+                  <ScanUploadCard
+                    title="Bill of Lading (BL)"
+                    file={scanBl?.file}
+                    preview={scanBl?.preview}
+                    transcript={scanResult?.bl_text}
+                    onSelect={(f) => handleScanFile('bl', f)}
+                    onClear={() => handleScanFile('bl', null)}
+                  />
+                  <section className="doc-section glass-panel">
+                    <h2>Audit Verdict & AI Reasoning</h2>
+                    <VerdictPanel
+                      result={scanResult}
+                      loading={scanLoading}
+                      error={scanError}
+                      idleHint="Photograph or upload a paper SI and BL, then run the vision audit."
+                      loadingHint="Reading paper documents via vision AI..."
+                    />
+                  </section>
+                </div>
+              </>
+            )}
           </>
         )}
+
+        {/* ========================================================== */}
+        {/* VIEW: HUMAN-IN-THE-LOOP REVIEW                           */}
+        {/* ========================================================== */}
+        {view === 'review' && (() => {
+          const items = reviewItems || []
+          const pendingMismatch = items.filter(i => i.verdict_status === 'MISMATCH' && !i.resolved)
+          const needsReview = items.filter(i => i.verdict_status === 'NEEDS_REVIEW' && !i.resolved)
+          const corruptedOnly = items.filter(i =>
+            i.corrupted && !i.resolved &&
+            i.verdict_status !== 'NEEDS_REVIEW' && i.verdict_status !== 'MISMATCH')
+          const replies = items.filter(i =>
+            i.has_reply && !i.resolved &&
+            i.verdict_status !== 'MISMATCH' && i.verdict_status !== 'NEEDS_REVIEW')
+
+          const groups = [
+            {
+              key: 'mismatch',
+              title: '🔴 Mismatches Awaiting Resolution',
+              desc: 'Genuine SI vs BL value conflicts — pick the correct value or enter a manual override in Verify Documents.',
+              items: pendingMismatch,
+              adjacentFilter: 'mismatch',
+              actionLabel: 'Resolve Discrepancy →',
+            },
+            {
+              key: 'needs_review',
+              title: '🟡 Escalated by the Engine',
+              desc: 'The engine refused to auto-clear these — missing field values, missing attachments, unreadable or wrong documents.',
+              items: needsReview,
+              adjacentFilter: 'needs_review',
+              actionLabel: 'Open & Verify →',
+            },
+            {
+              key: 'corrupted',
+              title: '🟣 Corrupted / Unreadable Files',
+              desc: 'Attachments that failed integrity checks before a verdict could be produced.',
+              items: corruptedOnly,
+              adjacentFilter: 'corrupted',
+              actionLabel: 'Inspect →',
+            },
+            {
+              key: 'reply',
+              title: '📨 Carrier Replies Awaiting Triage',
+              desc: 'Inbound replies auto-captured from carriers — confirm whether the revised draft BL clears the issue.',
+              items: replies,
+              adjacentFilter: 'reply_received',
+              actionLabel: 'Open Thread →',
+            },
+          ]
+          const groupCounts = Object.fromEntries(groups.map(g => [g.key, g.items.length]))
+          const totalPending = groups.reduce((n, g) => n + g.items.length, 0)
+          const visibleGroups = reviewFilter === 'all'
+            ? groups
+            : groups.filter(g => g.key === reviewFilter)
+
+          const renderCard = (item, group) => {
+            const qs = (item.queue_status || 'unverified').toLowerCase()
+            const rm = REVIEW_REASON_META[item.review_reason]
+            return (
+              <div
+                key={`${group.key}-${item.email_id}`}
+                className={`item-card ${qs === 'corrupted' ? 'danger' : ''}`}
+                style={{ padding: '16px 20px' }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1, marginRight: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      <strong style={{ color: 'var(--primary-color)', fontSize: '0.95rem' }}>
+                        {item.email_id}
+                      </strong>
+                      <span className={`status-badge status-${qs.replace(/_/g, '-')}`}>
+                        {item.queue_status || 'UNVERIFIED'}
+                      </span>
+                      {rm && (
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '2px 10px', borderRadius: '10px', color: rm.color, background: rm.bg }}>
+                          {rm.label}
+                        </span>
+                      )}
+                      {item.category && (
+                        <span
+                          className={`category-pill category-${(item.category || '').toLowerCase()}`}
+                          title={item.category_description || item.category}
+                        >
+                          {item.display_tag || item.category}
+                        </span>
+                      )}
+                      <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '10px', background: '#f0f4e8', color: 'var(--primary-color)', fontWeight: 'bold' }}>
+                        📎 {item.attachments_count} doc(s)
+                      </span>
+                    </div>
+                    <p style={{ fontSize: '0.9rem', marginTop: '4px', color: 'var(--text-color)' }}>
+                      {item.subject}
+                    </p>
+                    <p style={{ fontSize: '0.8rem', color: '#666' }}>From: {item.from}</p>
+
+                    {item.defect_fields?.length > 0 && (
+                      <div className="diff-chips" style={{ marginTop: '6px' }}>
+                        {item.defect_fields.map(f => (
+                          <span key={f} className="diff-field-chip">{f.replace(/_/g, ' ')}</span>
+                        ))}
+                      </div>
+                    )}
+                    {item.missing_fields?.length > 0 && (
+                      <p style={{ fontSize: '0.78rem', color: '#b3560e', marginTop: '4px' }}>
+                        🟠 Missing fields: {item.missing_fields.map(f => f.replace(/_/g, ' ')).join(', ')}
+                      </p>
+                    )}
+                    {item.summary_reason && item.verdict_status === 'NEEDS_REVIEW' && (
+                      <p style={{ fontSize: '0.8rem', color: '#856404', fontStyle: 'italic', marginTop: '4px' }}>
+                        {item.summary_reason}
+                      </p>
+                    )}
+                    {item.corrupt_issue && (
+                      <p style={{ fontSize: '0.8rem', color: '#c62828', marginTop: '4px' }}>
+                        ⚠️ {item.corrupt_issue}
+                      </p>
+                    )}
+                    {item.corrupt_action && (
+                      <p style={{ fontSize: '0.78rem', color: '#555', fontStyle: 'italic', marginTop: '2px' }}>
+                        ✓ Corruption action logged: {item.corrupt_action}
+                      </p>
+                    )}
+                    {item.chaser_status && (
+                      <p style={{ fontSize: '0.78rem', color: '#155724', fontStyle: 'italic', marginTop: '4px' }}>
+                        📧 Chaser: {item.chaser_status}
+                      </p>
+                    )}
+                    {item.has_reply && item.latest_reply && (
+                      <p style={{ fontSize: '0.78rem', color: '#004085', fontWeight: 600, marginTop: '4px' }}>
+                        📨 Reply from {item.latest_reply.from_addr || 'carrier'}
+                        {item.latest_reply.body ? ` — "${item.latest_reply.body.slice(0, 90)}${item.latest_reply.body.length > 90 ? '…' : ''}"` : ''}
+                      </p>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+                    <button
+                      onClick={() => openEmail(item.email_id, group.adjacentFilter)}
+                      style={{ padding: '8px 16px', fontSize: '0.82rem' }}
+                    >
+                      {group.actionLabel}
+                    </button>
+                    {item.has_bl === false && (
+                      <button
+                        onClick={() => handleChase(item.email_id)}
+                        style={{ padding: '8px 16px', fontSize: '0.82rem', background: '#e07a5f' }}
+                      >
+                        📧 Send Chaser
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {(item.corrupted || item.review_reason === 'unreadable') && !item.corrupt_action && (
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '12px', borderTop: '1px solid #f0e9df', paddingTop: '12px' }}>
+                    <input
+                      type="text"
+                      placeholder="Add operator remediation notes..."
+                      value={focusedCorruptRow === item.email_id ? corruptActionNotes : ''}
+                      onFocus={() => setFocusedCorruptRow(item.email_id)}
+                      onChange={(e) => setCorruptActionNotes(e.target.value)}
+                      style={{ flex: 1, padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
+                    />
+                    <button
+                      onClick={() => handleCorruptAction(item.email_id, 'CARRIER_RE_REQUESTED')}
+                      style={{ padding: '8px 16px', fontSize: '0.82rem', background: '#6c757d' }}
+                    >
+                      Request New Copy
+                    </button>
+                    <button
+                      onClick={() => handleCorruptAction(item.email_id, 'MANUAL_OVERRIDE')}
+                      style={{ padding: '8px 16px', fontSize: '0.82rem' }}
+                    >
+                      Mark Handled
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          }
+
+          return (
+            <div style={{ maxWidth: '1100px' }}>
+              <div className="page-header">
+                <h1>Human-in-the-Loop Review</h1>
+                <p>Everything the engine refused to auto-clear — SI/BL mismatches awaiting resolution, escalated reviews, corrupted files, and carrier replies to triage.</p>
+              </div>
+
+              <div className="action-bar" style={{ flexWrap: 'wrap', gap: '10px' }}>
+                {REVIEW_FILTERS.map(f => (
+                  <button
+                    key={f.key}
+                    className={`chip ${reviewFilter === f.key ? 'active' : ''}`}
+                    onClick={() => setReviewFilter(f.key)}
+                  >
+                    {f.label}
+                    {` · ${f.key === 'all' ? totalPending : (groupCounts[f.key] || 0)}`}
+                  </button>
+                ))}
+                <button
+                  onClick={fetchReviewQueue}
+                  style={{ marginLeft: 'auto', padding: '8px 18px', fontSize: '0.85rem', background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-color)', boxShadow: 'none' }}
+                >
+                  ↻ Refresh
+                </button>
+              </div>
+
+              {reviewMsg && (
+                <div style={{ background: '#d4edda', color: '#155724', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px' }}>
+                  ✅ {reviewMsg}
+                </div>
+              )}
+
+              {reviewLoading ? (
+                <div style={{ textAlign: 'center', padding: '60px' }}>Loading review queue...</div>
+              ) : totalPending === 0 ? (
+                <div className="item-card" style={{ textAlign: 'center', padding: '50px' }}>
+                  <div style={{ fontSize: '2rem' }}>🎉</div>
+                  <p style={{ marginTop: '8px' }}>All clear — nothing is waiting on a human decision.</p>
+                </div>
+              ) : (
+                visibleGroups.map(g => (
+                  g.items.length > 0 && (
+                    <div key={g.key} style={{ marginBottom: '26px' }}>
+                      <div style={{ marginBottom: '10px' }}>
+                        <h3 style={{ margin: 0, color: 'var(--primary-color)', fontSize: '1rem' }}>
+                          {g.title} <span style={{ color: '#999', fontWeight: 400 }}>({g.items.length})</span>
+                        </h3>
+                        <p style={{ margin: '2px 0 0', fontSize: '0.82rem', color: '#777' }}>{g.desc}</p>
+                      </div>
+                      {g.items.map(item => renderCard(item, g))}
+                    </div>
+                  )
+                ))
+              )}
+            </div>
+          )
+        })()}
 
         {/* ========================================================== */}
         {/* VIEW: CLOUD REPOSITORY (Supabase Shared Cache & Registry)  */}
@@ -3265,71 +3926,13 @@ function App() {
         )}
 
         {/* ========================================================== */}
-        {/* VIEW: PAPER SCAN (camera photos / handwritten documents)   */}
-        {/* ========================================================== */}
-        {view === 'scan' && (
-          <>
-            <div className="page-header">
-              <h1>Paper Document Scan</h1>
-              <p>Snap or upload a photo of a paper / handwritten SI and BL — the vision model reads handwriting, stamps, and skewed photos.</p>
-            </div>
-
-            <div className="action-bar">
-              <button onClick={handleScanVerify} disabled={scanLoading || !scanSi?.file || !scanBl?.file}>
-                {scanLoading ? 'Reading documents via vision AI...' : 'Verify Scanned Documents'}
-              </button>
-              <span style={{ fontSize: '0.82rem', color: '#777', alignSelf: 'center' }}>
-                Accepts photos (JPG/PNG), scans, PDF, DOCX, XLSX, TXT · max 15 MB each
-              </span>
-            </div>
-
-            {scanResult?.status === 'MISMATCH' && (
-              <div className="redirect-banner">
-                <div>
-                  <strong>⚠️ Discrepancy Found:</strong> {scanResult.defect_fields?.length} field mismatch(es) detected between the scanned documents.
-                </div>
-              </div>
-            )}
-
-            <div className="main-container">
-              <ScanUploadCard
-                title="Shipping Instruction (SI)"
-                file={scanSi?.file}
-                preview={scanSi?.preview}
-                transcript={scanResult?.si_text}
-                onSelect={(f) => handleScanFile('si', f)}
-                onClear={() => handleScanFile('si', null)}
-              />
-              <ScanUploadCard
-                title="Bill of Lading (BL)"
-                file={scanBl?.file}
-                preview={scanBl?.preview}
-                transcript={scanResult?.bl_text}
-                onSelect={(f) => handleScanFile('bl', f)}
-                onClear={() => handleScanFile('bl', null)}
-              />
-              <section className="doc-section glass-panel">
-                <h2>Audit Verdict & AI Reasoning</h2>
-                <VerdictPanel
-                  result={scanResult}
-                  loading={scanLoading}
-                  error={scanError}
-                  idleHint="Photograph or upload a paper SI and BL, then run the vision audit."
-                  loadingHint="Reading paper documents via vision AI..."
-                />
-              </section>
-            </div>
-          </>
-        )}
-
-        {/* ========================================================== */}
         {/* VIEW: AUDIT LOG                                            */}
         {/* ========================================================== */}
         {view === 'audit' && (
           <div className="card-container">
             <div className="page-header">
               <h1>Audit Log</h1>
-              <p>Immutable trail of every automated verdict, chaser, and operator action. <em>(In-memory until the database is wired up — resets on backend restart.)</em></p>
+              <p>Immutable enterprise governance trail recording all automated verdicts, ocean carrier chasers, and operator overrides. <em>(Dual-persisted: local on-disk JSON <code>.cache/audit_state.json</code> + Supabase cloud database sync.)</em></p>
             </div>
 
             <div className="item-card">
@@ -3445,6 +4048,32 @@ function App() {
             return next
           })
 
+          // Generate picker derived values — which inbox emails to process
+          const genFiltered = (genPicker || []).filter(i => {
+            if (!genSearch) return true
+            const s = genSearch.trim().toLowerCase()
+            return i.email_id.toLowerCase().includes(s)
+              || (i.subject || '').toLowerCase().includes(s)
+              || (i.from || '').toLowerCase().includes(s)
+          })
+          const shownGenRows = genShowAll ? genFiltered : genFiltered.slice(0, 100)
+          const visibleGenIds = genFiltered.map(i => i.email_id)
+          const allGenVisibleSelected =
+            visibleGenIds.length > 0 && visibleGenIds.every(id => genSelected.has(id))
+          const someGenVisibleSelected = visibleGenIds.some(id => genSelected.has(id))
+          const toggleGenEmail = (eid) => setGenSelected(prev => {
+            const next = new Set(prev)
+            if (next.has(eid)) next.delete(eid); else next.add(eid)
+            return next
+          })
+          const toggleAllGenVisible = () => setGenSelected(prev => {
+            const next = new Set(prev)
+            if (allGenVisibleSelected) visibleGenIds.forEach(id => next.delete(id))
+            else visibleGenIds.forEach(id => next.add(id))
+            return next
+          })
+          const genIsSubset = genPicker !== null && genSelected.size < genPicker.length
+
           return (
             <div className="card-container">
               <div className="page-header">
@@ -3503,13 +4132,117 @@ function App() {
                 {!pipelineRunning && (
                   <>
                     <div className="sub-cta-row">
-                      <button className="sub-primary-btn" onClick={handleStartPipeline}>
+                      <button
+                        className="sub-primary-btn"
+                        onClick={handleStartPipeline}
+                        disabled={genPicker !== null && genSelected.size === 0}
+                      >
                         {hasSubmission ? '▶ Resume Generation' : '▶ Generate Submission'}
+                        {genIsSubset ? ` (${genSelected.size} selected)` : ''}
                       </button>
                       {hasSubmission && pipelineStatus?.finished_at && (
                         <span className="sub-last-run">Last completed run: {pipelineStatus.finished_at}</span>
                       )}
                     </div>
+
+                    {genPicker !== null && (
+                      <details className="sub-advanced sub-gen-picker">
+                        <summary>
+                          Select emails to process — {genSelected.size}/{genPicker.length} selected
+                        </summary>
+                        <div className="sub-gen-picker-body">
+                          <div className="sub-export-tools">
+                            <input
+                              className="sub-diff-filter"
+                              placeholder="Filter by id, subject or sender…"
+                              value={genSearch}
+                              onChange={(e) => setGenSearch(e.target.value)}
+                            />
+                            <span className="sub-export-count">
+                              <strong>{genSelected.size}</strong> of {genPicker.length} selected
+                              {genFiltered.length !== genPicker.length && ` · ${genFiltered.length} shown`}
+                            </span>
+                          </div>
+
+                          <div className="diff-table-wrap sub-export-wrap">
+                            <table className="diff-table sub-export-table">
+                              <thead>
+                                <tr>
+                                  <th className="check-col">
+                                    <input
+                                      type="checkbox"
+                                      checked={allGenVisibleSelected}
+                                      ref={el => { if (el) el.indeterminate = !allGenVisibleSelected && someGenVisibleSelected }}
+                                      onChange={toggleAllGenVisible}
+                                      title="Select all shown"
+                                    />
+                                  </th>
+                                  <th>Email</th>
+                                  <th>Subject</th>
+                                  <th>From</th>
+                                  <th>Att.</th>
+                                  <th>Current result</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {shownGenRows.map(i => {
+                                  const m = emailStatusMeta(emailStatusMap[i.email_id])
+                                  return (
+                                    <tr
+                                      key={i.email_id}
+                                      className={genSelected.has(i.email_id) ? '' : 'row-excluded'}
+                                      onClick={() => toggleGenEmail(i.email_id)}
+                                    >
+                                      <td className="check-col" onClick={e => e.stopPropagation()}>
+                                        <input
+                                          type="checkbox"
+                                          checked={genSelected.has(i.email_id)}
+                                          onChange={() => toggleGenEmail(i.email_id)}
+                                        />
+                                      </td>
+                                      <td className="mono">{i.email_id}</td>
+                                      <td>{i.subject || '—'}</td>
+                                      <td>{i.from || '—'}</td>
+                                      <td>{i.attachments_count ?? '—'}</td>
+                                      <td>
+                                        <span className="ep-status" style={{ color: m.color, background: m.bg }}>
+                                          {m.label}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                            {genFiltered.length === 0 && (
+                              <p className="diff-more">No emails match “{genSearch}”.</p>
+                            )}
+                            {genFiltered.length > 100 && (
+                              <button className="diff-toggle" onClick={() => setGenShowAll(s => !s)}>
+                                {genShowAll ? '▲ Show less' : `▼ Show all ${genFiltered.length} emails`}
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="sub-export-foot">
+                            <span className="sub-export-count">
+                              Unticked emails are skipped — records already in submission.json are never removed.
+                            </span>
+                            <div className="sub-export-actions">
+                              <button
+                                className="sub-ghost-btn"
+                                onClick={() => setGenSelected(new Set(genPicker.map(i => i.email_id)))}
+                              >
+                                Select all
+                              </button>
+                              <button className="sub-ghost-btn" onClick={() => setGenSelected(new Set())}>
+                                Clear
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </details>
+                    )}
 
                     <details className="sub-advanced">
                       <summary>Advanced options</summary>

@@ -18,9 +18,16 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Optional CLI override: python tests/eval_synthetic_benchmark.py [dataset_dir] [gt_filename]
 # Defaults to the 400-case synthetic benchmark; pass the stress dataset dir to
 # evaluate the 2,000-case edge/stress suite instead.
-DATASET_DIR = sys.argv[1] if len(sys.argv) > 1 else os.path.join(BASE_DIR, "synthetic_dataset")
-if not os.path.isabs(DATASET_DIR):
-    DATASET_DIR = os.path.join(BASE_DIR, DATASET_DIR)
+if len(sys.argv) > 1:
+    arg_dir = sys.argv[1]
+    if os.path.isabs(arg_dir):
+        DATASET_DIR = arg_dir
+    elif os.path.exists(os.path.abspath(arg_dir)):
+        DATASET_DIR = os.path.abspath(arg_dir)
+    else:
+        DATASET_DIR = os.path.join(BASE_DIR, arg_dir)
+else:
+    DATASET_DIR = os.path.join(BASE_DIR, "synthetic_dataset")
 INBOX_DIR = os.path.join(DATASET_DIR, "inbox")
 GT_PATH = os.path.join(DATASET_DIR,
                        sys.argv[2] if len(sys.argv) > 2 else "synthetic_ground_truth.json")

@@ -70,3 +70,7 @@ sdoc-hackathon-docker/data_v2/render.py
 sdoc-hackathon-docker/data_v2/emails.py
 sdoc-hackathon-docker/data_v2/shipment.py
 sdoc-hackathon-docker/data_v2/README.md
+
+
+# Runtime document-edit backups (server.py writes snapshots here)
+sdoc-hackathon-bundle/_backups/
