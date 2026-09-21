@@ -1351,6 +1351,14 @@ def send_email_smtp(req: SmtpSendRequest):
         }
         _add_thread_message(req.email_id, outbound_msg)
         DISPATCHED_EMAILS_STORE[req.email_id] = result
+        # A dispatched chaser also updates the missing-BL chase ledger so the
+        # queue reflects that the carrier was actually contacted.
+        if "CHASER" in (req.subject or "").upper():
+            CHASERS_STORE[req.email_id] = {
+                "status": "CHASER_DISPATCHED",
+                "chaser_sent_at": now,
+                "notes": f"Chaser email dispatched to {req.to_email} ({result.get('mode', 'SMTP')})."
+            }
         _persist_audit_state()
         _log_to_supabase_audit(req.email_id, "EMAIL_DISPATCHED", result)
 
