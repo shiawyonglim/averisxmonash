@@ -1,0 +1,12 @@
+DRAFT BILL OF LADING
+(Carrier reply attachment: Revised_Draft_BL_EMAIL_514.pdf)
+
+Shipper: MISSING_VALUE
+Consignee: MISSING_VALUE
+Notify Party: MISSING_VALUE
+Port of Loading: MISSING_VALUE
+Port of Discharge: MISSING_VALUE
+Container Count: MISSING_VALUE
+Gross Weight (KG): MISSING_VALUE
+
+--- Issued by carrier documentation desk in reply to email_514 ---
