@@ -3,5 +3,25 @@
   "from": "sokyong_ooi@aprilasia.com",
   "subject": "CUST SI _ MEA _ 5RSG-08254 __ PO_25_8245",
   "body": "Hi Teo\n\nPlease find Shipping instruction for 5RSG-08254.\n\nPOL: NANTONG, CHINA\nPOD: PYEONGTAEK, SOUTH KOREA\n\nShipper:\nAPRIL FAR EAST (M) SDN BHD\nTOWER 2, AVENUE 5, LEVEL 6\nBANGSAR SOUTH CITY, NO. 8 JALAN KERINCHI\n59200 KUALA LUMPUR, MALAYSIA\n\nConsignee:\nHABRAS INTERNATIONAL LIMITED\nOFFICE 1204, THE BURLINGTON TOWER\nBUSINESS BAY, DUBAI, UAE\n\nNotify Party:\nHABRAS INTERNATIONAL LIMITED\nOFFICE 1204, THE BURLINGTON TOWER\nBUSINESS BAY, DUBAI, UAE\n\nDescription of Goods:\n12X20'FCL\nPAPERBOARD\nH.S.CODE: 48109200\nGROSS WT: 272,208 KG\n\nShipping line: DP TERM\nDocuments Required:\n1) 3 Original invoice\n2) 3 Packing list\n3) 3 Original BL + 3 N/N\nPlease revert with draft BL once available.\n\nBest Regards,\nHari Mardianto\nShipping Documentation\nDID : +971 04 4938247\nAPRIL Fine Paper Trading (Middle East) Fze\n#813, 4 EA, Dubai Airport Free Zone\nP.O. Box : 293775, Dubai, United Arab Emirates\nWebsite : www.aprilasia.com | www.paperone.com\n\n______________________________\nFrom: Lee Guan Cheng <guancheng_lee@april.com.my>\nSent: Monday, December 24, 2026 1:25 AM\nSubject: RE: 5RSG-08254\n\nPlease follow the previous instruction. Thank you.",
-  "attachments": []
+  "attachments": [],
+  "generated_si": "attachments/email_157_SI_from_body.txt",
+  "generated_si_fields": {
+    "shipper": "APRIL FAR EAST (M) SDN BHD",
+    "consignee": "HABRAS INTERNATIONAL LIMITED",
+    "notify_party": "HABRAS INTERNATIONAL LIMITED",
+    "port_of_loading": "NANTONG, CHINA",
+    "port_of_discharge": "PYEONGTAEK, SOUTH KOREA",
+    "container_count": "",
+    "gross_weight_kg": "272,208 KG"
+  },
+  "generated_si_provenance": {
+    "shipper": "rule",
+    "consignee": "rule",
+    "notify_party": "rule",
+    "port_of_loading": "rule",
+    "port_of_discharge": "rule",
+    "container_count": "missing",
+    "gross_weight_kg": "rule"
+  },
+  "generated_si_mtime": 1789990374.3948424
 }

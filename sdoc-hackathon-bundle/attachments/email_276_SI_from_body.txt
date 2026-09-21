@@ -1,0 +1,55 @@
+SHIPPING INSTRUCTION
+(Auto-extracted from email body - email_276)
+
+Shipper: ASIA PACIFIC PAPERBOARD TRADING PTE LTD
+Consignee: UAB NOVAKOPA
+Notify Party: UAB NOVAKOPA
+Port of Loading: RUGAO/NANTONG/SHANGHAI, CHINA
+Port of Discharge: BALTIMORE, US
+Container Count: MISSING_VALUE
+Gross Weight (KG): 351,930 KG
+
+--- Source: email body of email_276 ---
+Hi Ooi
+
+Please find Shipping instruction for 5RFR-29160.
+
+POL: RUGAO/NANTONG/SHANGHAI, CHINA
+POD: BALTIMORE, US
+
+Shipper:
+ASIA PACIFIC PAPERBOARD TRADING PTE LTD
+80 RAFFLES PLACE, #50-01 UOB PLAZA 1
+SINGAPORE 048624
+
+Consignee:
+UAB NOVAKOPA
+SAVANORIU PR. 187
+LT-02300 VILNIUS, LITHUANIA
+
+Notify Party:
+UAB NOVAKOPA
+SAVANORIU PR. 187
+LT-02300 VILNIUS, LITHUANIA
+
+Description of Goods:
+15X40'HC
+PAPERBOARD
+H.S.CODE: 48109200
+GROSS WT: 351,930 KG
+
+Shipping line: OA TERM
+Documents Required:
+1) 3 Original invoice
+2) 3 Packing list
+3) 3 Original BL + 3 N/N
+Please revert with draft BL once available.
+
+Best Regards,
+Deswita Elvyani
+Shipping Documentation
+DID : +971 04 4938296
+APRIL Fine Paper Trading (Middle East) Fze
+#813, 4 EA, Dubai Airport Free Zone
+P.O. Box : 293775, Dubai, United Arab Emirates
+Website : www.aprilasia.com | www.paperone.com

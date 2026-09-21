@@ -3,5 +3,25 @@
   "from": "guancheng_lee@april.com.my",
   "subject": "RE_ SI - YMJAI724295431 - DIRECT(YM) - 5RMY-89317 - MERSIN_TURKEY - SURR BL - AFEMY - 23-Jan-26",
   "body": "Hi Lee\n\nPlease find Shipping instruction for 5RMY-89317.\n\nPOL: NHAVA SHEVA, INDIA\nPOD: MERSIN, TURKEY\n\nShipper:\nAPRIL FINE PAPER TRADING (MIDDLE EAST) FZE\n#813, 4 EA, DUBAI AIRPORT FREE ZONE\nP.O. BOX: 293775, DUBAI, UNITED ARAB EMIRATES\n\nConsignee:\nTOAN LUC PAPER JOINT STOCK COMPANY\nLOT B, TAN DONG HIEP B IZ\nDI AN, BINH DUONG, VIETNAM\n\nNotify Party:\nKPP-ANTALIS (SINGAPORE) PTE. LTD.\n8 TEMASEK BOULEVARD\n#42-01 SUNTEC TOWER 3\nSINGAPORE 038988\n\nDescription of Goods:\n4X20'GP\nASIA SYMBOL FOOD SERVICE BOARD (CUPSTOCK/HI-BULK) - ALLINONE\nH.S.CODE: 48109200\nGROSS WT: 89,548 KG\n\nShipping line: OA_CFR TERM\nDocuments Required:\n1) 3 Original invoice\n2) 3 Packing list\n3) 3 Original BL + 3 N/N\nPlease revert with draft BL once available.\n\nBest Regards,\nNajiha Nur Hanna\nShipping Documentation\nDID : +971 04 4938272\nAPRIL Fine Paper Trading (Middle East) Fze\n#813, 4 EA, Dubai Airport Free Zone\nP.O. Box : 293775, Dubai, United Arab Emirates\nWebsite : www.aprilasia.com | www.paperone.com",
-  "attachments": []
+  "attachments": [],
+  "generated_si": "attachments/email_233_SI_from_body.txt",
+  "generated_si_fields": {
+    "shipper": "APRIL FINE PAPER TRADING (MIDDLE EAST) FZE",
+    "consignee": "TOAN LUC PAPER JOINT STOCK COMPANY",
+    "notify_party": "KPP-ANTALIS (SINGAPORE) PTE. LTD.",
+    "port_of_loading": "NHAVA SHEVA, INDIA",
+    "port_of_discharge": "MERSIN, TURKEY",
+    "container_count": "",
+    "gross_weight_kg": "89,548 KG"
+  },
+  "generated_si_provenance": {
+    "shipper": "rule",
+    "consignee": "rule",
+    "notify_party": "rule",
+    "port_of_loading": "rule",
+    "port_of_discharge": "rule",
+    "container_count": "missing",
+    "gross_weight_kg": "rule"
+  },
+  "generated_si_mtime": 1789990376.912952
 }

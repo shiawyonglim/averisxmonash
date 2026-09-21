@@ -3,5 +3,25 @@
   "from": "elisa_tukiman@april.com.my",
   "subject": "REQUEST SI _ 5APH-97374 _ GDANSK_POLAND _ TOPKOPY MIDDLE EAST FZE _ YMJAI752437729",
   "body": "Hi Arlene\n\nPlease find Shipping instruction for 5APH-97374.\n\nPOL: NANTONG, CHINA\nPOD: GDANSK, POLAND\n\nShipper:\nAPRIL FINE PAPER TRADING (MIDDLE EAST) FZE\n#813, 4 EA, DUBAI AIRPORT FREE ZONE\nP.O. BOX: 293775, DUBAI, UNITED ARAB EMIRATES\n\nConsignee:\nTOPKOPY MIDDLE EAST FZE\nP.O. BOX 17436\nJEBEL ALI FREE ZONE, DUBAI, UAE\n\nNotify Party:\nHABRAS INTERNATIONAL LIMITED\nOFFICE 1204, THE BURLINGTON TOWER\nBUSINESS BAY, DUBAI, UAE\n\nDescription of Goods:\n3X20'GP\nPAPERBOARD\nH.S.CODE: 48109200\nGROSS WT: 66,150 KG\n\nShipping line: CFR TERM\nDocuments Required:\n1) 3 Original invoice\n2) 3 Packing list\n3) 3 Original BL + 3 N/N\nPlease revert with draft BL once available.\n\nBest Regards,\nArlene Yamomo\nShipping Documentation\nDID : +971 04 4938270\nAPRIL Fine Paper Trading (Middle East) Fze\n#813, 4 EA, Dubai Airport Free Zone\nP.O. Box : 293775, Dubai, United Arab Emirates\nWebsite : www.aprilasia.com | www.paperone.com",
-  "attachments": []
+  "attachments": [],
+  "generated_si": "attachments/email_293_SI_from_body.txt",
+  "generated_si_fields": {
+    "shipper": "APRIL FINE PAPER TRADING (MIDDLE EAST) FZE",
+    "consignee": "TOPKOPY MIDDLE EAST FZE",
+    "notify_party": "HABRAS INTERNATIONAL LIMITED",
+    "port_of_loading": "NANTONG, CHINA",
+    "port_of_discharge": "GDANSK, POLAND",
+    "container_count": "",
+    "gross_weight_kg": "66,150 KG"
+  },
+  "generated_si_provenance": {
+    "shipper": "rule",
+    "consignee": "rule",
+    "notify_party": "rule",
+    "port_of_loading": "rule",
+    "port_of_discharge": "rule",
+    "container_count": "missing",
+    "gross_weight_kg": "rule"
+  },
+  "generated_si_mtime": 1789990378.83865
 }

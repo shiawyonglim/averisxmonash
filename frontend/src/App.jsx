@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import NavIcon from './NavIcon'
+import { startJudgeTour } from './judgeTour'
 import './App.css'
 
 const API = import.meta.env?.VITE_API_URL || (typeof window !== 'undefined' && window.location.port === '5173' ? 'http://localhost:8000' : (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000'))
@@ -19,6 +20,7 @@ const QUEUE_FILTERS = [
   { key: 'needs_review', label: 'Needs Review' },
   { key: 'missing_bl', label: 'Missing BL' },
   { key: 'si_inline', label: 'SI Inline · Awaiting BL' },
+  { key: 'overdue', label: 'Overdue chasers' },
   { key: 'corrupted', label: 'Corrupted' },
   { key: 'resolved', label: 'Resolved' },
   { key: 'chaser_sent', label: 'Chaser Sent' },
@@ -38,6 +40,7 @@ const REVIEW_FILTERS = [
   { key: 'needs_review', label: 'Needs Review' },
   { key: 'corrupted', label: 'Corrupted' },
   { key: 'reply', label: 'Replies' },
+  { key: 'resolved', label: 'Resolved' },
 ]
 
 const FIELD_STANDARDS = {
@@ -103,6 +106,96 @@ const EMAIL_STATUS_META = {
 }
 
 const emailStatusMeta = s => EMAIL_STATUS_META[s] || EMAIL_STATUS_META.UNVERIFIED
+
+// ---- Submission export formats (Submission Builder → Review & Download) ----
+const EXPORT_FORMATS = [
+  { id: 'json', label: 'JSON (.json)' },
+  { id: 'csv', label: 'CSV (.csv)' },
+  { id: 'ndjson', label: 'NDJSON (.ndjson)' },
+  { id: 'xml', label: 'XML (.xml)' },
+  { id: 'txt', label: 'Text report (.txt)' },
+]
+
+// The five keys the scorer grades. Pipeline results can also carry a bulky
+// 'details' payload that lives in verification_details.json — it must never
+// leak into an exported submission, so every format is built from these only.
+const SUBMISSION_KEYS = ['category', 'status', 'review_reason', 'has_defect', 'defect_fields']
+
+const submissionRow = (r) => {
+  const row = {}
+  SUBMISSION_KEYS.forEach(k => {
+    row[k] = r?.[k] ?? (k === 'has_defect' ? false : null)
+  })
+  if (!Array.isArray(row.defect_fields)) row.defect_fields = []
+  return row
+}
+
+const submissionRowsFlat = (sub) =>
+  Object.entries(sub || {}).map(([email_id, r]) => {
+    const row = submissionRow(r)
+    return {
+      email_id,
+      category: row.category ?? '',
+      status: row.status ?? '',
+      review_reason: row.review_reason ?? '',
+      has_defect: row.has_defect ? 'true' : 'false',
+      defect_fields: row.defect_fields.join('; '),
+    }
+  })
+
+const csvCell = (v) => {
+  const s = String(v ?? '')
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+
+const xmlEscape = (v) =>
+  String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+function serializeSubmission(sub, format) {
+  const clean = {}
+  Object.entries(sub || {}).forEach(([eid, r]) => { clean[eid] = submissionRow(r) })
+
+  if (format === 'csv') {
+    const head = 'email_id,category,status,review_reason,has_defect,defect_fields'
+    const body = submissionRowsFlat(clean).map(r =>
+      [r.email_id, r.category, r.status, r.review_reason, r.has_defect, r.defect_fields]
+        .map(csvCell).join(','))
+    return { ext: 'csv', mime: 'text/csv;charset=utf-8', content: `${[head, ...body].join('\r\n')}\r\n` }
+  }
+  if (format === 'ndjson') {
+    const content = Object.entries(clean)
+      .map(([eid, r]) => JSON.stringify({ email_id: eid, ...r }))
+      .join('\n')
+    return { ext: 'ndjson', mime: 'application/x-ndjson', content: `${content}\n` }
+  }
+  if (format === 'xml') {
+    const recs = Object.entries(clean).map(([eid, r]) =>
+      `  <record email_id="${xmlEscape(eid)}">\n` +
+      `    <category>${xmlEscape(r.category)}</category>\n` +
+      `    <status>${xmlEscape(r.status)}</status>\n` +
+      `    <review_reason>${xmlEscape(r.review_reason)}</review_reason>\n` +
+      `    <has_defect>${r.has_defect}</has_defect>\n` +
+      `    <defect_fields>${xmlEscape(r.defect_fields.join(', '))}</defect_fields>\n` +
+      `  </record>`)
+    const content = `<?xml version="1.0" encoding="UTF-8"?>\n<submission>\n${recs.join('\n')}\n</submission>\n`
+    return { ext: 'xml', mime: 'application/xml', content }
+  }
+  if (format === 'txt') {
+    const lines = [
+      `Submission export — ${Object.keys(clean).length} records`,
+      `Exported: ${new Date().toISOString()}`,
+      '',
+      ...Object.entries(clean).map(([eid, r]) => {
+        const extras = []
+        if (r.defect_fields.length) extras.push(`defects: ${r.defect_fields.join(', ')}`)
+        if (r.review_reason) extras.push(`reason: ${r.review_reason}`)
+        return `${eid} | ${r.status ?? '—'} | ${r.category ?? '—'}${extras.length ? ` | ${extras.join(' | ')}` : ''}`
+      }),
+    ]
+    return { ext: 'txt', mime: 'text/plain;charset=utf-8', content: `${lines.join('\n')}\n` }
+  }
+  return { ext: 'json', mime: 'application/json', content: JSON.stringify(clean, null, 2) }
+}
 
 // Fields that failed comparison without being value-vs-value defects
 // (blank on one or both sides) — they escalate to review, not "match".
@@ -324,28 +417,40 @@ function VerdictPanel({ result, loading, error, verdictSource, idleHint, loading
                 ...Object.values(result.bl_provenance || {}),
                 result.classification_provenance,
                 result.intent_provenance
-              ].filter(Boolean)
-              const hasVision = provValues.some(p => String(p).toLowerCase().includes('vision'))
-              const hasLLM = provValues.some(p => String(p).toLowerCase().includes('llm') || String(p).toLowerCase().includes('nvidia'))
+              ].filter(Boolean).map(p => String(p).toLowerCase())
+              const hasVision = provValues.some(p => p.includes('vision'))
+              const hasLaya = provValues.some(p => p.includes('laya'))
+              const hasLLM = provValues.some(p => p.includes('llm') || p.includes('nvidia') || p.includes('model'))
+              const badges = []
               if (hasVision) {
-                return (
-                  <span className="provenance-badge provenance-vision" title="Audited via Multimodal Vision OCR & Layout Engine">
+                badges.push(
+                  <span key="vision" className="provenance-badge provenance-vision" title="Audited via Multimodal Vision OCR & Layout Engine">
                     Vision OCR
                   </span>
                 )
-              } else if (hasLLM) {
-                return (
-                  <span className="provenance-badge provenance-llm" title="Audited via NVIDIA DeepSeek / Qwen LLM Fallback">
+              }
+              if (hasLaya) {
+                badges.push(
+                  <span key="laya" className="provenance-badge provenance-laya" title="Classified by Laya System-1 neural decision model (calibrated confidence)">
+                    Laya neural
+                  </span>
+                )
+              }
+              if (hasLLM) {
+                badges.push(
+                  <span key="llm" className="provenance-badge provenance-llm" title="Audited via NVIDIA LLM Fallback">
                     LLM reasoning
                   </span>
                 )
-              } else {
-                return (
-                  <span className="provenance-badge provenance-regex" title="Audited via Deterministic Fast-Path Engine (<15ms latency)">
+              }
+              if (badges.length === 0) {
+                badges.push(
+                  <span key="regex" className="provenance-badge provenance-regex" title="Audited via Deterministic Fast-Path Engine (<15ms latency)">
                     Fast-path
                   </span>
                 )
               }
+              return badges
             })()}
           </div>
 
@@ -731,6 +836,7 @@ function App() {
   const [corruptWarning, setCorruptWarning] = useState(null)
   const [siSource, setSiSource] = useState(null) // 'attachment' | 'email_body'
   const [siConflict, setSiConflict] = useState(null) // { fields, attachment_values, body_values }
+  const [siMissingFields, setSiMissingFields] = useState([]) // inline-SI fields the extractor could not fill
   const [bodyExpanded, setBodyExpanded] = useState(false)
 
   // ---- Email picker (status-aware dropdown) ----
@@ -782,6 +888,7 @@ function App() {
   // ---- Inbox ----
   const [queueData, setQueueData] = useState(null)
   const [queueFilter, setQueueFilter] = useState('all')
+  const [queueAudience, setQueueAudience] = useState('all')
   const [queueSearch, setQueueSearch] = useState('')
   const [queuePage, setQueuePage] = useState(1)
   const [loadingQueue, setLoadingQueue] = useState(false)
@@ -812,6 +919,7 @@ function App() {
 
   // ---- Inbound Reply Ingestion / Email Conversation Threads ----
   const [emailThreads, setEmailThreads] = useState([])
+  const [emailConv, setEmailConv] = useState([]) // per-correspondent timeline shown in Correspondence
   const [simulatingReply, setSimulatingReply] = useState(false)
   const [pollingInbox, setPollingInbox] = useState(false)
   const [replyNotice, setReplyNotice] = useState(null)
@@ -833,6 +941,10 @@ function App() {
   const [stressCaseLoading, setStressCaseLoading] = useState(false)
   const [stressShowAllFailures, setStressShowAllFailures] = useState(false)
   const [stressFailFilter, setStressFailFilter] = useState('')
+  const [uploadFiles, setUploadFiles] = useState([])
+  const [uploadBusy, setUploadBusy] = useState(false)
+  const [uploadResult, setUploadResult] = useState(null)
+  const [uploadError, setUploadError] = useState(null)
 
   // ---- Score vs Ground Truth (Pipeline Run page) ----
   const [compareData, setCompareData] = useState(null)
@@ -868,6 +980,14 @@ function App() {
   const [getterMsg, setGetterMsg] = useState(null)
   const streamIntervalRef = useRef(null)
 
+  // ---- Conversations (person-centric timeline) ----
+  const [convPeople, setConvPeople] = useState([])
+  const [convLoading, setConvLoading] = useState(false)
+  const [convSearch, setConvSearch] = useState('')
+  const [convSelected, setConvSelected] = useState(null)
+  const [convDetail, setConvDetail] = useState(null)
+  const [convDetailLoading, setConvDetailLoading] = useState(false)
+
   // ---- Review & Download (submission export picker) ----
   const [submissionData, setSubmissionData] = useState(null)
   const [selectedEmails, setSelectedEmails] = useState(() => new Set())
@@ -876,6 +996,7 @@ function App() {
   const [subFilter, setSubFilter] = useState('all') // 'all' | 'issues' | 'ok'
   const [showAllSub, setShowAllSub] = useState(false)
   const [exportedOnce, setExportedOnce] = useState(false)
+  const [exportFormat, setExportFormat] = useState('json')
 
   // ---- Backend AI config (sidebar footer) ----
   const [aiConfig, setAiConfig] = useState(null)
@@ -909,6 +1030,21 @@ function App() {
   const [reviewFilter, setReviewFilter] = useState('all')
   const [reviewMsg, setReviewMsg] = useState(null)
 
+  // ---- Verified Emails ----
+  const [verifiedItems, setVerifiedItems] = useState([])
+  const [verifiedLoading, setVerifiedLoading] = useState(false)
+  const [verifiedSearch, setVerifiedSearch] = useState('')
+
+  // ---- Reset Demo Data ----
+  const [resetConfirm, setResetConfirm] = useState('')
+  const [resetLocal, setResetLocal] = useState(true)
+  const [resetSupabase, setResetSupabase] = useState(true)
+  const [resetThreads, setResetThreads] = useState(true)
+  const [resetBusy, setResetBusy] = useState(false)
+  const [resetReport, setResetReport] = useState(null)
+  const [resetPreview, setResetPreview] = useState(null)
+  const [resetError, setResetError] = useState(null)
+
   const fetchAdjacent = useCallback(async (eid, filter = 'all') => {
     if (!eid) return
     try {
@@ -922,12 +1058,12 @@ function App() {
     }
   }, [])
 
-  const fetchQueue = useCallback(async (filter, search, page) => {
+  const fetchQueue = useCallback(async (filter, search, page, aud = 'all') => {
     const reqId = ++queueReqId.current
     setLoadingQueue(true)
     try {
       const res = await fetch(
-        `${API}/api/queue?filter=${filter}&search=${encodeURIComponent(search)}&page=${page}&limit=${QUEUE_LIMIT}`
+        `${API}/api/queue?filter=${filter}&audience=${aud}&search=${encodeURIComponent(search)}&page=${page}&limit=${QUEUE_LIMIT}`
       )
       const data = await res.json()
       if (reqId !== queueReqId.current) return // stale request, discard
@@ -940,8 +1076,8 @@ function App() {
   }, [])
 
   const refreshQueue = useCallback(() => {
-    fetchQueue(queueFilter, queueSearch, queuePage)
-  }, [fetchQueue, queueFilter, queueSearch, queuePage])
+    fetchQueue(queueFilter, queueSearch, queuePage, queueAudience)
+  }, [fetchQueue, queueFilter, queueSearch, queuePage, queueAudience])
 
   // Human-in-the-Loop queue — one unpaginated pull, bucketed client-side
   const fetchReviewQueue = useCallback(async () => {
@@ -958,6 +1094,24 @@ function App() {
     }
   }, [])
 
+  // Verified emails — cleared items (auto-verified OK or operator-resolved)
+  const fetchVerified = useCallback(async () => {
+    setVerifiedLoading(true)
+    try {
+      const res = await fetch(`${API}/api/queue?filter=verified&page=1&limit=1000`)
+      const data = await res.json()
+      // Filter client-side too — an unknown filter falls through to "match
+      // all" server-side, so guard here as well.
+      setVerifiedItems((data.emails || []).filter(i =>
+        i.category === 'BL_COMPARISON' && (i.verdict_status === 'OK' || i.resolved)))
+    } catch (err) {
+      console.error('Failed to fetch verified emails:', err)
+      setVerifiedItems([])
+    } finally {
+      setVerifiedLoading(false)
+    }
+  }, [])
+
   // Status map for the email picker — one bulk fetch of queue_status for all emails
   const refreshEmailStatuses = useCallback(async () => {
     try {
@@ -970,6 +1124,50 @@ function App() {
       console.error('Failed to fetch email statuses:', err)
     }
   }, [])
+
+  // Reset demo — preview (dry run) and real wipe via /api/admin/reset
+  const postReset = async (dryRun) => {
+    setResetBusy(true)
+    setResetError(null)
+    try {
+      const res = await fetch(`${API}/api/admin/reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          confirm: resetConfirm,
+          wipe_local: resetLocal,
+          wipe_supabase: resetSupabase,
+          wipe_threads: resetThreads,
+          dry_run: dryRun,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.detail || `Server error: ${res.status}`)
+      if (dryRun) {
+        setResetPreview(data)
+      } else {
+        setResetReport(data)
+        setResetPreview(null)
+        setResetConfirm('')
+        // Drop cached client state so no stale rows linger, then refetch stats
+        setQueueData(null)
+        setAuditEvents([])
+        setSubmissionData(null)
+        setEmailThreads([])
+        setConvPeople([])
+        setConvDetail(null)
+        setConvSelected(null)
+        setChatMessages([])
+        setChatSessionId('')
+        setStats(null)
+        fetch(`${API}/api/stats`).then(r => r.json()).then(setStats).catch(() => {})
+      }
+    } catch (err) {
+      setResetError(err.message)
+    } finally {
+      setResetBusy(false)
+    }
+  }
 
   // Email list (verification dropdown) — once on mount
   useEffect(() => {
@@ -991,15 +1189,16 @@ function App() {
   // Debounced (300ms) queue fetch — covers mount + filter/search/page changes
   useEffect(() => {
     const t = setTimeout(() => {
-      fetchQueue(queueFilter, queueSearch, queuePage)
+      fetchQueue(queueFilter, queueSearch, queuePage, queueAudience)
     }, 300)
     return () => clearTimeout(t)
-  }, [queueFilter, queueSearch, queuePage, fetchQueue])
+  }, [queueFilter, queueSearch, queuePage, queueAudience, fetchQueue])
 
   // HITL review queue — refresh on entering the view
   useEffect(() => {
     if (view === 'review') fetchReviewQueue()
-  }, [view, fetchReviewQueue])
+    if (view === 'verified') fetchVerified()
+  }, [view, fetchReviewQueue, fetchVerified])
 
   // Keyboard navigation shortcuts in Verification Hub ([Q] Prev, [W] Next, [E] Auto-Draft)
   useEffect(() => {
@@ -1119,7 +1318,7 @@ function App() {
               handleDownloadSubmission()
               loadSubmissionRecords()
               setPipelineMsg(
-                `Run complete — submission.json saved to your downloads.` +
+                `Run complete — submission.${exportFormat} saved to your downloads.` +
                 (data.supabase ? ` Supabase: ${data.supabase}.` : '')
               )
             }
@@ -1128,7 +1327,7 @@ function App() {
         .catch(err => console.error('Pipeline status poll failed:', err))
     }, 2000)
     return () => clearInterval(iv)
-  }, [pipelineRunning, loadSubmissionRecords])
+  }, [pipelineRunning, loadSubmissionRecords, exportFormat])
 
   // ---- Stress Lab ----
   const fetchStressResults = useCallback(async () => {
@@ -1248,6 +1447,36 @@ function App() {
     }
   }, [])
 
+  // Dataset upload — judge drops a secret test set; server archives it to
+  // Supabase and ingests it into the live inbox + stress dataset.
+  const handleUploadDataset = useCallback(async () => {
+    if (!uploadFiles.length) return
+    setUploadBusy(true)
+    setUploadError(null)
+    setUploadResult(null)
+    try {
+      const fd = new FormData()
+      uploadFiles.forEach(f => fd.append('files', f))
+      const res = await fetch(`${API}/api/stress/upload`, { method: 'POST', body: fd })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.detail || `Server error: ${res.status}`)
+      setUploadResult(data)
+      setUploadFiles([])
+      // Refresh everything the new emails touch
+      fetch(`${API}/api/stress/dataset`)
+        .then(r => r.json()).then(setStressDataset)
+        .catch(err => console.error('Failed to refresh stress dataset:', err))
+      fetch(`${API}/api/emails`)
+        .then(r => r.json()).then(d => { if (d.emails) setEmails(d.emails) })
+        .catch(err => console.error('Failed to refresh emails:', err))
+      refreshEmailStatuses()
+    } catch (err) {
+      setUploadError(err.message)
+    } finally {
+      setUploadBusy(false)
+    }
+  }, [uploadFiles, refreshEmailStatuses])
+
   // ============================================================
   // AUTO EMAIL GETTER & CLASSIFIER HANDLERS
   // ============================================================
@@ -1297,6 +1526,116 @@ function App() {
       setGetterLoading(false)
     }
   }, [getterCategory, getterQueueFilter, getterAudience, getterSearch, getterLimit, getterSource])
+
+  const fetchConversations = useCallback(async () => {
+    setConvLoading(true)
+    try {
+      const res = await fetch(`${API}/api/conversations`)
+      if (res.ok) {
+        const data = await res.json()
+        setConvPeople(data.people || [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch conversations:', err)
+    } finally {
+      setConvLoading(false)
+    }
+  }, [])
+
+  const fetchConversation = useCallback(async (address) => {
+    setConvSelected(address)
+    setConvDetailLoading(true)
+    try {
+      const res = await fetch(`${API}/api/conversations/${encodeURIComponent(address)}`)
+      if (res.ok) {
+        setConvDetail(await res.json())
+      } else {
+        setConvDetail(null)
+      }
+    } catch (err) {
+      console.error('Failed to fetch conversation:', err)
+      setConvDetail(null)
+    } finally {
+      setConvDetailLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (view === 'conversations' && convPeople.length === 0) {
+      fetchConversations()
+    }
+  }, [view, convPeople.length, fetchConversations])
+
+  // focusSide: which bubble side the focus correspondent renders on.
+  // 'outbound' in the Conversations view; 'inbound' in the Correspondence
+  // panel (the correspondent's messages arrive to us).
+  const renderConversationStream = (messages, focusSide = 'outbound') => {
+    const rows = []
+    let lastDay = null
+    let undatedShown = false
+    messages.forEach((m, i) => {
+      if (m.timestamp) {
+        const day = new Date(m.timestamp).toDateString()
+        if (day !== lastDay) {
+          lastDay = day
+          rows.push(
+            <div key={`sep-${day}`} className="conv-date-sep">
+              <span>{new Date(m.timestamp).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
+            </div>
+          )
+        }
+      } else if (!undatedShown) {
+        undatedShown = true
+        rows.push(
+          <div key="sep-undated" className="conv-date-sep"><span>Undated</span></div>
+        )
+      }
+      const focus = m.is_focus
+      const side = focus ? focusSide : (focusSide === 'outbound' ? 'inbound' : 'outbound')
+      rows.push(
+        <div key={`${m.email_id}-${m.kind}-${i}`} className={`thread-row ${side}`}>
+          <div className={`thread-bubble ${side}`}>
+            <div className="thread-meta">
+              <strong>{m.from_name || m.from_addr}</strong>
+              <span className="conv-addr">{m.from_addr}</span>
+              {m.timestamp ? (
+                <span
+                  className="thread-ts"
+                  title={m.timestamp_source === 'inferred' ? 'Time inferred from the quoted message it replies to' : undefined}
+                >
+                  {m.timestamp_source === 'inferred' ? '~' : ''}{new Date(m.timestamp).toLocaleString()}
+                </span>
+              ) : (
+                <span className="thread-ts">no timestamp</span>
+              )}
+            </div>
+            {m.subject && <div className="thread-subject">{m.subject}</div>}
+            {m.body && <div className="thread-body">{m.body}</div>}
+            {m.attachments?.length > 0 && (
+              <div className="thread-attach-row">
+                {m.attachments.map((a, i) => (
+                  <span key={i} className={`thread-attach ${side === 'inbound' ? 'inbound' : ''}`}>
+                    {typeof a === 'string' ? a.split('/').pop() : (a.filename || a.path || 'attachment')}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="thread-foot">
+              <button className="link-btn conv-eid-btn" onClick={() => openEmail(m.email_id)}>{m.email_id}</button>
+              {m.also_in?.length > 0 && (
+                <span className="conv-also-in">
+                  also in {m.also_in.map(id => (
+                    <button key={id} className="link-btn conv-eid-btn" onClick={() => openEmail(id)}>{id}</button>
+                  ))}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )
+    })
+    return rows
+  }
 
   const handlePollRealGmail = async () => {
     setPollingRealGmail(true)
@@ -1489,6 +1828,16 @@ function App() {
           : DOC_PLACEHOLDER_RX.test(blText) && !DOC_PLACEHOLDER_RX.test(siText) ? 'bl'
           : (curInfo?.attachments?.length === 0 && curInfo?.category === 'BL_COMPARISON' ? 'both' : null))
 
+    // Completeness gate: an inline SI with unfilled fields means the BL
+    // request would be premature — the sender should complete the SI first.
+    const siMissing = (curEmail === selectedEmail ? siMissingFields : curInfo?.si_missing_fields) || []
+    const siIncomplete = (missing === 'bl' || missing === 'both') && siMissing.length > 0
+    // A previously dispatched chaser turns the draft into a follow-up.
+    const alreadyChased = !!(curInfo?.chaser_status
+      || (curEmail === selectedEmail
+          && emailThreads.some(m => m.direction === 'OUTBOUND' && /CHASER|DRAFT BILL/i.test(m.subject || ''))))
+    const reChase = (missing === 'bl' || missing === 'both') && !siIncomplete && alreadyChased
+
     if (category === 'INVOICE_QUERY' && !missing) {
       to = curInfo?.from || 'billing-desk@client.com'
       const subj = curInfo?.subject || curEmail
@@ -1509,7 +1858,7 @@ function App() {
       body = `Dear ${senderName},\n\nThank you for contacting our documentation desk regarding shipment ref [${curEmail}].\n\nOur operations team has reviewed your inquiry. Shipment documentation and cargo dispatch are proceeding on schedule according to standard operational timelines.\n\nPlease let us know if you require any specific vessel tracking updates or supplemental documentation.\n\nShipment Reference: ${curEmail}\nOriginal Subject: ${curInfo?.subject || ''}\n\nKind regards,\nShipping Documentation Operations Desk\nAPRIL Logistics / Averis Global Shared Services`
     } else {
       // BL_COMPARISON category — or any email with a missing document.
-      to = missing === 'si'
+      to = missing === 'si' || siIncomplete
         ? (curInfo?.from || '')
         : (curVerdict?.status === 'MISMATCH' || missing === 'bl' || missing === 'both'
             ? getCarrierDeskEmail(carrier)
@@ -1517,11 +1866,13 @@ function App() {
 
       const subjectPrefix = curVerdict?.status === 'MISMATCH'
         ? 'URGENT: Discrepancy Notice & Draft BL Amendment'
-        : missing === 'si'
-          ? 'MISSING DOCUMENT: Shipping Instruction Required'
-          : (missing === 'bl' || missing === 'both'
-              ? 'URGENT CHASER: Missing Draft Bill of Lading'
-              : 'Documentation Clearance Notice')
+        : siIncomplete
+          ? 'MISSING SI DETAILS: Shipping Instruction Incomplete'
+          : missing === 'si'
+            ? 'MISSING DOCUMENT: Shipping Instruction Required'
+            : (missing === 'bl' || missing === 'both'
+                ? (reChase ? 'SECOND REQUEST: Draft Bill of Lading Still Awaited' : 'URGENT CHASER: Missing Draft Bill of Lading')
+                : 'Documentation Clearance Notice')
       subject = `${subjectPrefix} — ${curInfo?.subject || curEmail} [Ref: ${curEmail}]`
 
       if (curVerdict?.status === 'MISMATCH' && curVerdict?.defect_fields?.length > 0) {
@@ -1534,6 +1885,10 @@ function App() {
         body = `Dear ${carrier} Operations Desk,\n\nDuring automated documentation cross-validation for shipment ref [${curEmail}], our verification engine detected discrepancies between our Shipping Instructions (SI) and your draft Bill of Lading (BL):\n\n${defectsList}\n\nPlease issue an amended draft Bill of Lading reflecting the validated Shipping Instruction values before the port cutoff (17:00 SGT) to avoid terminal loading delays.\n\nShipment Reference: ${curEmail}\nOriginal Subject: ${curInfo?.subject || ''}\n\nKind regards,\nShipping Documentation Operations Desk\nAveris Automated Logistics Pipeline`
       } else if (missing === 'si') {
         body = `Dear ${curInfo?.from || 'Operations Team'},\n\nRegarding shipment ref [${curEmail}] — your recent correspondence requested a draft Bill of Lading comparison, but the required Shipping Instruction (SI) document was not attached to the email.\n\nPlease re-send the Shipping Instruction at your earliest convenience so our automated verification pipeline can complete the 7-field cross-audit before port cutoff.\n\nShipment Reference: ${curEmail}\nOriginal Subject: ${curInfo?.subject || ''}\n\nKind regards,\nShipping Documentation Operations Desk\nAveris Automated Logistics Pipeline`
+      } else if (siIncomplete) {
+        const missingList = siMissing.map(f => `  - ${f.replace(/_/g, ' ')}`).join('\n')
+        const senderName = curInfo?.from?.split('@')[0]?.replace(/[._]/g, ' ') || 'Operations Team'
+        body = `Dear ${senderName},\n\nThank you for the Shipping Instruction submitted in your email for shipment ref [${curEmail}].\n\nOur verification pipeline could not extract the following required field(s) from the instruction:\n${missingList}\n\nPlease send an updated Shipping Instruction with these details completed so we can request the draft Bill of Lading from the carrier without delay.\n\nShipment Reference: ${curEmail}\nOriginal Subject: ${curInfo?.subject || ''}\n\nKind regards,\nShipping Documentation Operations Desk\nAveris Automated Logistics Pipeline`
       } else if (missing === 'bl' || missing === 'both') {
         // Enrich the chaser with whatever the (possibly inline) SI carried —
         // booking ref + routing help the carrier desk locate the filing.
@@ -1547,7 +1902,10 @@ function App() {
           si.consignee ? `\nConsignee: ${si.consignee}` : '',
           si.container_count ? `\nContainers: ${si.container_count}` : '',
         ].join('')
-        body = `Dear ${carrier} Documentation Desk,\n\nWe are following up on the Shipping Instruction submitted for shipment ref [${curEmail}].\n${siDetail}\n\nThe operational port cutoff (17:00 SGT) is approaching and our system has not yet received the draft Bill of Lading.\n\nPlease urgently furnish the draft BL so our clearance team can complete cross-validation against the shipper instructions.\n\nShipment Reference: ${curEmail}\nBooking Subject: ${curInfo?.subject || ''}\n\nKind regards,\nShipping Documentation Operations Desk\nAveris Automated Logistics Pipeline`
+        const chaseLead = reChase
+          ? `This is a follow-up to our earlier chaser${curInfo?.chaser_sent_at ? ` sent ${String(curInfo.chaser_sent_at).slice(0, 10)}` : ''} regarding the Shipping Instruction for shipment ref [${curEmail}] — we have not yet received a response.`
+          : `We are following up on the Shipping Instruction submitted for shipment ref [${curEmail}].`
+        body = `Dear ${carrier} Documentation Desk,\n\n${chaseLead}\n${siDetail}\n\nThe operational port cutoff (17:00 SGT) is approaching and our system has not yet received the draft Bill of Lading.\n\nPlease urgently furnish the draft BL so our clearance team can complete cross-validation against the shipper instructions.\n\nShipment Reference: ${curEmail}\nBooking Subject: ${curInfo?.subject || ''}\n\nKind regards,\nShipping Documentation Operations Desk\nAveris Automated Logistics Pipeline`
       } else {
         body = `Dear Shipper / Carrier Team,\n\nRegarding shipment ref [${curEmail}], all documentation cross-checks have completed. All 7 critical shipping attributes (shipper, consignee, notify party, ports, container count, and gross weight) have been verified.\n\nShipment Reference: ${curEmail}\nStatus: APPROVED / CLEARED FOR ISSUANCE\n\nKind regards,\nShipping Documentation Operations Desk\nAveris Automated Logistics Pipeline`
       }
@@ -1680,6 +2038,7 @@ function App() {
     setEmailInfo(null)
     setCloudSyncInfo(null)
     setEmailThreads([])
+    setEmailConv([])
     setReplyNotice(null)
     setSaveDocMsg(null)
     setDocBackups(null)
@@ -1687,6 +2046,7 @@ function App() {
     setMissingPrompt(null)
     setSiSource(null)
     setSiConflict(null)
+    setSiMissingFields([])
     setThreadOpen(false)
     setBodyExpanded(false)
     setSiText('Loading attachment...')
@@ -1701,11 +2061,31 @@ function App() {
       if (data.email) setEmailInfo(data.email)
       setEmailThreads(data.threads || data.email?.threads || [])
       setThreadOpen((data.threads || data.email?.threads || []).length > 0)
+      // Pull the full conversation with this correspondent (inbox emails +
+      // quoted history) into the Correspondence panel alongside sent/captured mail.
+      const addrMatch = /<([^>]+)>/.exec(data.email?.from || '')
+      const convAddr = (addrMatch ? addrMatch[1] : data.email?.from || '').trim().toLowerCase()
+      if (convAddr) {
+        fetch(`${API}/api/conversations/${encodeURIComponent(convAddr)}`)
+          .then(r => (r.ok ? r.json() : null))
+          .then(d => {
+            // Skip the current email's own top-level entry — the context card
+            // above already renders its subject/body/attachments.
+            const msgs = (d?.messages || []).filter(
+              m => !(m.kind === 'email' && m.email_id === eid))
+            if (msgs.length) {
+              setEmailConv(msgs)
+              setThreadOpen(true)
+            }
+          })
+          .catch(() => {})
+      }
       if (data.cloud_synced) setCloudSyncInfo(data.supabase_record)
       if (data.backups) setDocBackups(data.backups)
       if (data.missing_doc) setMissingDoc(data.missing_doc)
       setSiSource(data.si_source || null)
       if (data.si_conflict) setSiConflict(data.si_conflict)
+      setSiMissingFields(data.si_missing_fields || [])
       if (data.is_corrupted) {
         setCorruptWarning({
           reason: data.corrupt_reason,
@@ -2312,8 +2692,8 @@ function App() {
     }
   }
 
-  const downloadJson = (obj, filename) => {
-    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' })
+  const downloadFile = (content, filename, mime) => {
+    const blob = new Blob([content], { type: mime })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -2324,13 +2704,18 @@ function App() {
     URL.revokeObjectURL(url)
   }
 
+  const downloadSubmission = (sub, baseName) => {
+    const { content, mime, ext } = serializeSubmission(sub, exportFormat)
+    downloadFile(content, `${baseName}.${ext}`, mime)
+    setExportedOnce(true)
+  }
+
   async function handleDownloadSubmission() {
     try {
       const res = await fetch(`${API}/api/pipeline/submission`)
       if (!res.ok) throw new Error(`Server error: ${res.status}`)
       const data = await res.json()
-      downloadJson(data.submission ?? data, 'submission.json')
-      setExportedOnce(true)
+      downloadSubmission(data.submission ?? data, 'submission')
     } catch (err) {
       setPipelineMsg(`Download failed: ${err.message}`)
     }
@@ -2342,8 +2727,7 @@ function App() {
     selectedEmails.forEach(e => {
       if (submissionData[e] !== undefined) picked[e] = submissionData[e]
     })
-    downloadJson(picked, `submission_${selectedEmails.size}_emails.json`)
-    setExportedOnce(true)
+    downloadSubmission(picked, `submission_${selectedEmails.size}_emails`)
   }
 
   // ============================================================
@@ -2421,12 +2805,14 @@ function App() {
             <button
               className={`sidebar-btn ${view === 'dashboard' ? 'active' : ''}`}
               onClick={() => setView('dashboard')}
+              data-tour="nav-dashboard"
             >
               <NavIcon name="dashboard" /><span className="nav-label">Dashboard</span>
             </button>
             <button
               className={`sidebar-btn ${view === 'chat' ? 'active' : ''}`}
               onClick={() => setView('chat')}
+              data-tour="nav-assistant"
             >
               <NavIcon name="assistant" /><span className="nav-label">Assistant</span>
             </button>
@@ -2437,11 +2823,21 @@ function App() {
             <button
               className={`sidebar-btn ${view === 'queue' ? 'active' : ''}`}
               onClick={() => setView('queue')}
+              data-tour="nav-queue"
             >
               <NavIcon name="inbox" /><span className="nav-label">Inbox</span>
               {queueData?.counts?.all > 0 && (
                 <span className="sidebar-badge">{fmtCount(queueData.counts.all)}</span>
               )}
+            </button>
+            <button
+              className={`sidebar-btn ${view === 'conversations' ? 'active' : ''}`}
+              onClick={() => {
+                setView('conversations')
+                fetchConversations()
+              }}
+            >
+              <NavIcon name="conversations" /><span className="nav-label">Conversations</span>
             </button>
             <button
               className={`sidebar-btn ${view === 'getter' ? 'active' : ''}`}
@@ -2479,6 +2875,15 @@ function App() {
                 <span className="sidebar-badge attention">{fmtCount(hitlPendingCount)}</span>
               )}
             </button>
+            <button
+              className={`sidebar-btn ${view === 'verified' ? 'active' : ''}`}
+              onClick={() => setView('verified')}
+            >
+              <NavIcon name="check-circle" /><span className="nav-label">Verified</span>
+              {verifiedItems.length > 0 && (
+                <span className="sidebar-badge">{fmtCount(verifiedItems.length)}</span>
+              )}
+            </button>
           </div>
 
           <div className="sidebar-section">
@@ -2505,17 +2910,32 @@ function App() {
             <button
               className={`sidebar-btn ${view === 'pipeline' ? 'active' : ''}`}
               onClick={() => setView('pipeline')}
+              data-tour="nav-pipeline"
             >
               <NavIcon name="package" /><span className="nav-label">Submissions</span>
             </button>
             <button
               className={`sidebar-btn ${view === 'stress' ? 'active' : ''}`}
               onClick={() => setView('stress')}
+              data-tour="nav-stress"
             >
               <NavIcon name="flask" /><span className="nav-label">Stress Lab</span>
               {stressDataset?.email_count > 0 && (
                 <span className="sidebar-badge">{fmtCount(stressDataset.email_count)}</span>
               )}
+            </button>
+            <button
+              className={`sidebar-btn ${view === 'reset' ? 'active' : ''}`}
+              onClick={() => setView('reset')}
+              data-tour="nav-reset"
+            >
+              <NavIcon name="trash" /><span className="nav-label">Reset Demo</span>
+            </button>
+            <button
+              className="sidebar-btn"
+              onClick={() => startJudgeTour(setView)}
+            >
+              <NavIcon name="guide" /><span className="nav-label">Judge Guide</span>
             </button>
           </div>
         </nav>
@@ -2545,7 +2965,7 @@ function App() {
               <>
                 <CutoffProgressBar stats={stats} onFilter={openQueueFilter} />
 
-                <div className="kpi-grid">
+                <div className="kpi-grid" data-tour="dashboard-kpis">
                   {kpis.map(k => {
                     const reviewKey =
                       k.label === 'Mismatch' ? 'mismatch'
@@ -2875,6 +3295,28 @@ function App() {
               )}
             </div>
 
+            {/* Audience chips — combines with the issue filter above */}
+            <div className="action-bar" style={{ flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
+              <span className="filter-label">Audience:</span>
+              {[
+                { key: 'all', label: 'All senders' },
+                { key: 'internal', label: 'Internal staff' },
+                { key: 'customer', label: 'Customers & partners' },
+              ].map(a => (
+                <button
+                  key={a.key}
+                  className={`chip ${queueAudience === a.key ? 'active' : ''}`}
+                  onClick={() => {
+                    setQueueAudience(a.key)
+                    setQueuePage(1)
+                  }}
+                >
+                  {a.label}
+                  {a.key !== 'all' && queueData?.counts?.[a.key] != null ? ` · ${queueData.counts[a.key]}` : ''}
+                </button>
+              ))}
+            </div>
+
             {/* Debounced search */}
             <div className="action-bar">
               <input
@@ -2925,12 +3367,18 @@ function App() {
                                 {item.display_tag || item.category}
                               </span>
                             )}
+                            <span className={`tag ${item.audience === 'internal' ? 'info' : ''}`}>
+                              {item.audience === 'internal' ? 'Internal' : 'Customer'}
+                            </span>
                             <span className="tag">{item.attachments_count} docs</span>
                             {item.has_bl === false && (
                               <span className="tag warn">No BL</span>
                             )}
                             {item.si_inline && (
                               <span className="tag info">SI inline</span>
+                            )}
+                            {item.overdue && (
+                              <span className="tag danger">Overdue{item.chaser_age_days != null ? ` · ${item.chaser_age_days}d` : ''}</span>
                             )}
                           </div>
                           <p style={{ fontSize: '0.9rem', marginTop: '4px', color: 'var(--text-color)' }}>
@@ -2943,8 +3391,9 @@ function App() {
                             </p>
                           )}
                           {item.chaser_status && (
-                            <p className="meta ok" style={{ marginTop: '4px' }}>
+                            <p className={`meta ${item.overdue ? 'danger' : 'ok'}`} style={{ marginTop: '4px' }}>
                               Chaser: {item.chaser_status}
+                              {item.chaser_sent_at ? ` (${item.chaser_age_days != null ? `${item.chaser_age_days}d ago` : String(item.chaser_sent_at).slice(0, 10)})` : ''}
                             </p>
                           )}
                           {item.has_reply && item.latest_reply && (
@@ -2970,15 +3419,15 @@ function App() {
                           >
                             Open
                           </button>
-                          {(qs === 'missing_bl' || queueFilter === 'missing_bl' || queueFilter === 'si_inline') && (
+                          {(qs === 'missing_bl' || qs === 'overdue' || queueFilter === 'missing_bl' || queueFilter === 'si_inline' || queueFilter === 'overdue') && (
                             <button
                               className="btn-secondary btn-sm"
                               onClick={(e) => {
                                 e.stopPropagation()
-                                handleChase(item.email_id)
+                                openDraftEmail(item.email_id, item, null, 'bl')
                               }}
                             >
-                              Send chaser
+                              {item.chaser_status && item.chaser_status !== 'BL_RECEIVED' ? 'Re-chase' : 'Send chaser'}
                             </button>
                           )}
                         </div>
@@ -4168,6 +4617,29 @@ function App() {
               </div>
             )}
 
+            {/* Banner: inline SI is missing fields — chase sender, not carrier */}
+            {siMissingFields.length > 0 && (
+              <div className="action-card corrupt">
+                <div>
+                  <h3 style={{ margin: '0 0 4px', color: 'var(--warn)', fontSize: '1rem' }}>
+                    Inline SI incomplete
+                  </h3>
+                  <p className="meta" style={{ margin: '0 0 8px' }}>
+                    The SI extracted from the email body is missing:{' '}
+                    <strong>{siMissingFields.map(f => f.replace(/_/g, ' ')).join(', ')}</strong>.
+                    Requesting a draft BL on an incomplete instruction is premature —
+                    ask the sender to complete the SI first.
+                  </p>
+                  <button
+                    className="btn-sm"
+                    onClick={() => openDraftEmail(selectedEmail, null, null, 'bl')}
+                  >
+                    Request missing SI details
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Banner: body-written SI disagrees with the attached SI */}
             {siConflict && (
               <div className="action-card corrupt">
@@ -4317,8 +4789,8 @@ function App() {
                     <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontSize: '0.8rem' }}>{threadOpen ? '▾' : '▸'}</span>
                       Correspondence
-                      {emailThreads.length > 0 && (
-                        <span className="tag">{emailThreads.length}</span>
+                      {(emailThreads.length + emailConv.length) > 0 && (
+                        <span className="tag">{emailThreads.length + emailConv.length}</span>
                       )}
                     </h3>
                   </div>
@@ -4347,11 +4819,12 @@ function App() {
 
                 {threadOpen && (
                 <div className="thread-list">
-                  {emailThreads.length === 0 && (
+                  {emailThreads.length === 0 && emailConv.length === 0 && (
                     <p className="thread-empty">
                       No correspondence yet — outbound emails and auto-captured carrier replies appear here.
                     </p>
                   )}
+                  {emailConv.length > 0 && renderConversationStream(emailConv, 'inbound')}
                   {emailThreads.map(m => {
                     const inbound = m.direction === 'INBOUND'
                     const ts = m.received_at || m.sent_at
@@ -4402,14 +4875,56 @@ function App() {
                 />
               </section>
 
-              {/* Column 2: BL Text */}
+              {/* Column 2: BL Text — resolved items show the operator-approved field values */}
               <section className="doc-section glass-panel">
-                <h2>Bill of Lading (BL)</h2>
-                <textarea
-                  placeholder="Paste or load BL text here..."
-                  value={blText}
-                  onChange={(e) => setBlText(e.target.value)}
-                />
+                <h2>
+                  Bill of Lading (BL)
+                  {resolutionRecord?.resolutions && (
+                    <span className="tag ok" style={{ marginLeft: '8px' }}>resolved values</span>
+                  )}
+                </h2>
+                {resolutionRecord?.resolutions ? (() => {
+                  const approved = { ...(result?.bl_fields || {}) }
+                  const corrected = {}
+                  for (const [f, r] of Object.entries(resolutionRecord.resolutions)) {
+                    approved[f] = r?.value ?? (r?.type === 'SI' ? result?.si_fields?.[f] : result?.bl_fields?.[f])
+                    corrected[f] = r?.type || 'CUSTOM'
+                  }
+                  const ordered = [
+                    ...Object.keys(FIELD_STANDARDS).filter(k => k in approved),
+                    ...Object.keys(approved).filter(k => !(k in FIELD_STANDARDS)),
+                  ]
+                  return (
+                    <>
+                      <div className="resolved-bl">
+                        {ordered.length === 0 && (
+                          <p className="meta">No BL field values stored for this resolution.</p>
+                        )}
+                        {ordered.map(f => (
+                          <div key={f} className="resolved-bl-row">
+                            <span className="resolved-bl-field">{f.replace(/_/g, ' ')}</span>
+                            <span className="resolved-bl-value">{approved[f] || '(blank)'}</span>
+                            {corrected[f] && (
+                              <span className="tag info">
+                                {corrected[f] === 'CUSTOM' ? 'manual override' : `from ${corrected[f].toLowerCase()}`}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      <details className="resolved-bl-raw">
+                        <summary>Show original draft text</summary>
+                        <textarea readOnly value={blText} />
+                      </details>
+                    </>
+                  )
+                })() : (
+                  <textarea
+                    placeholder="Paste or load BL text here..."
+                    value={blText}
+                    onChange={(e) => setBlText(e.target.value)}
+                  />
+                )}
               </section>
 
               {/* Column 3: AI Output */}
@@ -4622,6 +5137,7 @@ function App() {
           const replies = items.filter(i =>
             i.has_reply && !i.resolved &&
             i.verdict_status !== 'MISMATCH' && i.verdict_status !== 'NEEDS_REVIEW')
+          const resolvedItems = items.filter(i => i.resolved)
 
           const groups = [
             {
@@ -4661,11 +5177,25 @@ function App() {
               actionLabel: 'Open thread',
             },
           ]
-          const groupCounts = Object.fromEntries(groups.map(g => [g.key, g.items.length]))
+          const resolvedGroup = {
+            key: 'resolved',
+            title: 'Resolved',
+            tagVariant: 'ok',
+            desc: 'Items already cleared by an operator — kept here for the audit trail.',
+            items: resolvedItems,
+            adjacentFilter: 'resolved',
+            actionLabel: 'Open',
+          }
+          const groupCounts = {
+            ...Object.fromEntries(groups.map(g => [g.key, g.items.length])),
+            resolved: resolvedItems.length,
+          }
           const totalPending = groups.reduce((n, g) => n + g.items.length, 0)
           const visibleGroups = reviewFilter === 'all'
             ? groups
-            : groups.filter(g => g.key === reviewFilter)
+            : reviewFilter === 'resolved'
+              ? [resolvedGroup]
+              : groups.filter(g => g.key === reviewFilter)
 
           const renderCard = (item, group) => {
             const qs = (item.queue_status || 'unverified').toLowerCase()
@@ -4754,18 +5284,18 @@ function App() {
                     >
                       {group.actionLabel}
                     </button>
-                    {item.has_bl === false && (
+                    {item.has_bl === false && !item.resolved && (
                       <button
                         className="btn-secondary btn-sm"
-                        onClick={() => handleChase(item.email_id)}
+                        onClick={() => openDraftEmail(item.email_id, { ...item, from: item.sender || item.from }, null, 'bl')}
                       >
-                        Send chaser
+                        {item.chaser_status && item.chaser_status !== 'BL_RECEIVED' ? 'Re-chase' : 'Send chaser'}
                       </button>
                     )}
                   </div>
                 </div>
 
-                {(item.corrupted || item.review_reason === 'unreadable') && !item.corrupt_action && (
+                {(item.corrupted || item.review_reason === 'unreadable') && !item.corrupt_action && !item.resolved && (
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '12px', borderTop: '1px solid var(--line)', paddingTop: '12px' }}>
                     <input
                       type="text"
@@ -4826,8 +5356,12 @@ function App() {
 
               {reviewLoading ? (
                 <div className="empty-state">Loading…</div>
-              ) : totalPending === 0 ? (
-                <div className="empty-state">All clear — nothing is waiting on a human decision.</div>
+              ) : visibleGroups.every(g => g.items.length === 0) ? (
+                <div className="empty-state">
+                  {reviewFilter === 'all'
+                    ? 'All clear — nothing is waiting on a human decision.'
+                    : 'Nothing under this filter.'}
+                </div>
               ) : (
                 visibleGroups.map(g => (
                   g.items.length > 0 && (
@@ -4845,6 +5379,110 @@ function App() {
                     </div>
                   )
                 ))
+              )}
+            </div>
+          )
+        })()}
+
+        {/* ========================================================== */}
+        {/* VIEW: VERIFIED EMAILS                                      */}
+        {/* ========================================================== */}
+        {view === 'verified' && (() => {
+          const q = verifiedSearch.trim().toLowerCase()
+          const list = q
+            ? verifiedItems.filter(i =>
+                i.email_id.toLowerCase().includes(q)
+                || (i.subject || '').toLowerCase().includes(q)
+                || (i.from || '').toLowerCase().includes(q))
+            : verifiedItems
+          return (
+            <div style={{ maxWidth: '1100px' }}>
+              <div className="page-header">
+                <h1>Verified</h1>
+                <p>Emails cleared by the audit — auto-verified OK by the engine or resolved by an operator.</p>
+              </div>
+
+              <div className="action-bar">
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="Search by email ID, subject, or sender"
+                  value={verifiedSearch}
+                  onChange={(e) => setVerifiedSearch(e.target.value)}
+                />
+                <button
+                  className="btn-secondary btn-sm"
+                  onClick={fetchVerified}
+                  style={{ marginLeft: 'auto' }}
+                >
+                  Refresh
+                </button>
+              </div>
+
+              {verifiedLoading ? (
+                <div className="empty-state">Loading…</div>
+              ) : list.length === 0 ? (
+                <div className="empty-state">
+                  {verifiedItems.length === 0
+                    ? 'No verified emails yet — run the pipeline or clear an item in Verify Documents.'
+                    : 'No items match this search.'}
+                </div>
+              ) : (
+                list.map(item => {
+                  const qs = (item.queue_status || 'unverified').toLowerCase()
+                  return (
+                    <div key={item.email_id} className="item-card">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1, marginRight: '16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                            <strong style={{ color: 'var(--primary-color)', fontSize: '0.95rem' }}>
+                              {item.email_id}
+                            </strong>
+                            <span className={`status-badge status-${qs.replace(/_/g, '-')}`}>
+                              {item.queue_status || 'UNVERIFIED'}
+                            </span>
+                            {item.resolved && (
+                              <span className="tag ok">Resolved</span>
+                            )}
+                            {item.category && (
+                              <span
+                                className={`category-pill category-${(item.category || '').toLowerCase()}`}
+                                title={item.category_description || item.category}
+                              >
+                                {item.display_tag || item.category}
+                              </span>
+                            )}
+                            <span className={`tag ${item.audience === 'internal' ? 'info' : ''}`}>
+                              {item.audience === 'internal' ? 'Internal' : 'Customer'}
+                            </span>
+                            <span className="tag">{item.attachments_count} docs</span>
+                            {item.si_inline && (
+                              <span className="tag info">SI inline</span>
+                            )}
+                          </div>
+                          <p style={{ fontSize: '0.9rem', marginTop: '4px', color: 'var(--text-color)' }}>
+                            {item.subject}
+                          </p>
+                          <p className="meta">From: {item.from}</p>
+                          {item.summary_reason && (
+                            <p className="meta ok" style={{ marginTop: '4px' }}>
+                              {item.summary_reason}
+                            </p>
+                          )}
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+                          <button
+                            className="btn-sm"
+                            onClick={() => openEmail(item.email_id, 'verified')}
+                          >
+                            Open
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
               )}
             </div>
           )
@@ -5069,6 +5707,95 @@ function App() {
         {/* ========================================================== */}
         {/* VIEW: AUDIT LOG                                            */}
         {/* ========================================================== */}
+        {/* ========================================================== */}
+        {/* VIEW: CONVERSATIONS                                        */}
+        {/* ========================================================== */}
+        {view === 'conversations' && (() => {
+          const q = convSearch.trim().toLowerCase()
+          const filtered = q
+            ? convPeople.filter(p =>
+                p.address.includes(q) || (p.display_name || '').toLowerCase().includes(q))
+            : convPeople
+          return (
+          <div className="card-container">
+            <div className="page-header">
+              <h1>Conversations</h1>
+              <p>Every message involving a correspondent, in one chronological stream.</p>
+            </div>
+
+            <div className="getter-split-view">
+              {/* Left: correspondent list */}
+              <div className="getter-table-card">
+                <div className="getter-table-header">
+                  <h3>Correspondents</h3>
+                  <span className="meta">{filtered.length} people</span>
+                </div>
+                <div className="conv-search-row">
+                  <input
+                    className="getter-search-input"
+                    placeholder="Search name or address…"
+                    value={convSearch}
+                    onChange={(e) => setConvSearch(e.target.value)}
+                  />
+                </div>
+                <div className="conv-person-list">
+                  {convLoading ? (
+                    <div className="empty-state">Loading…</div>
+                  ) : filtered.length === 0 ? (
+                    <div className="empty-state">No correspondents found.</div>
+                  ) : (
+                    filtered.map(p => (
+                      <button
+                        key={p.address}
+                        className={`conv-person ${convSelected === p.address ? 'active' : ''}`}
+                        onClick={() => fetchConversation(p.address)}
+                      >
+                        <div className="conv-person-top">
+                          <strong>{p.display_name}</strong>
+                          <span className={`tag ${p.audience === 'internal' ? 'info' : ''}`}>
+                            {p.audience === 'internal' ? 'Internal' : 'Customer'}
+                          </span>
+                          <span className="conv-person-count">{p.total}</span>
+                        </div>
+                        <div className="conv-person-addr">{p.address}</div>
+                        {p.latest_subject && (
+                          <div className="conv-person-subject">{p.latest_subject}</div>
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Right: chat stream */}
+              <div className="getter-table-card">
+                <div className="getter-table-header">
+                  <h3>{convDetail ? convDetail.display_name : 'Timeline'}</h3>
+                  {convDetail && (
+                    <span className="meta">
+                      {convDetail.stats.message_count} messages · {convDetail.stats.total} from {convDetail.display_name} · {convDetail.stats.dated} dated · {convDetail.stats.undated} undated
+                    </span>
+                  )}
+                </div>
+                <div className="conv-stream">
+                  {convDetailLoading ? (
+                    <div className="empty-state">Loading…</div>
+                  ) : !convDetail ? (
+                    <div className="empty-state">Select a correspondent to read the thread.</div>
+                  ) : convDetail.messages.length === 0 ? (
+                    <div className="empty-state">No messages for this correspondent.</div>
+                  ) : (
+                    <div className="thread-list">
+                      {renderConversationStream(convDetail.messages)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+          )
+        })()}
+
         {view === 'audit' && (
           <div className="card-container">
             <div className="page-header">
@@ -5273,6 +6000,7 @@ function App() {
                         className="sub-primary-btn"
                         onClick={handleStartPipeline}
                         disabled={genPicker !== null && genSelected.size === 0}
+                        data-tour="pipeline-run"
                       >
                         {hasSubmission ? 'Resume generation' : 'Generate submission'}
                         {genIsSubset ? ` (${genSelected.size} selected)` : ''}
@@ -5462,8 +6190,18 @@ function App() {
                       )}
                     </div>
                     <div className="sub-done-actions">
+                      <select
+                        className="sub-format-select"
+                        value={exportFormat}
+                        onChange={(e) => setExportFormat(e.target.value)}
+                        title="Export format"
+                      >
+                        {EXPORT_FORMATS.map(f => (
+                          <option key={f.id} value={f.id}>{f.label}</option>
+                        ))}
+                      </select>
                       <button onClick={handleDownloadSubmission} className="sub-ghost-btn">
-                        Download JSON
+                        Download {exportFormat.toUpperCase()}
                       </button>
                       <button onClick={scrollToScore} className="sub-primary-btn">
                         Score it
@@ -5654,8 +6392,9 @@ function App() {
                   <div>
                     <h3>Review & Download</h3>
                     <p className="step-sub">
-                      Tick the records to include in the downloaded submission.json — issues are listed
+                      Tick the records to include in the download — issues are listed
                       first so you can spot-check them. Unchecked rows are left out of the file.
+                      Export as JSON, CSV, NDJSON, XML or a plain-text report.
                     </p>
                   </div>
                   {submissionData && (
@@ -5773,6 +6512,16 @@ function App() {
                         {filteredSubEntries.length !== subEntries.length && ` · ${filteredSubEntries.length} shown`}
                       </span>
                       <div className="sub-export-actions">
+                        <select
+                          className="sub-format-select"
+                          value={exportFormat}
+                          onChange={(e) => setExportFormat(e.target.value)}
+                          title="Export format"
+                        >
+                          {EXPORT_FORMATS.map(f => (
+                            <option key={f.id} value={f.id}>{f.label}</option>
+                          ))}
+                        </select>
                         <button
                           className="sub-ghost-btn"
                           onClick={() => setSelectedEmails(new Set(subEntries.map(([eid]) => eid)))}
@@ -5822,6 +6571,32 @@ function App() {
             ok == null ? null : (
               <span className={ok ? 'tag ok' : 'tag danger'}>{ok ? 'Pass' : 'Fail'}</span>
             )
+          // Engine provenance chips — which tier produced each pipeline stage
+          const ENGINE_CHIP_LABEL = {
+            laya: 'laya', rule: 'regex', model: 'llm', vision: 'vision', fallback: 'default',
+          }
+          const STAGE_LABEL = { classifier: 'cls', intent: 'intent', si_extract: 'si', bl_extract: 'bl' }
+          const engineChips = (eng) => {
+            if (!eng) return null
+            const chips = []
+            Object.keys(STAGE_LABEL).forEach(stage => {
+              const v = eng[stage]
+              if (!v) return
+              String(v).split('+').forEach(tier => {
+                chips.push(
+                  <span
+                    key={`${stage}:${tier}`}
+                    className={`engine-chip engine-${tier}`}
+                    title={`${stage}: ${tier}`}
+                  >
+                    {STAGE_LABEL[stage]}·{ENGINE_CHIP_LABEL[tier] || tier}
+                  </span>
+                )
+              })
+            })
+            return chips.length ? chips : null
+          }
+          const engines = stressDataset?.engines || stressStatus?.engines
 
           return (
             <div className="card-container">
@@ -5875,6 +6650,103 @@ function App() {
                 )}
               </div>
 
+              {/* UPLOAD DATASET — judge drops a secret test set */}
+              <div className="item-card">
+                <div className="sub-card-head">
+                  <div>
+                    <h3>Upload dataset</h3>
+                    <p className="step-sub">
+                      Drop a secret test set — a <code>.zip</code> with <code>inbox/*.json</code> emails
+                      and <code>attachments/</code>, plus an optional <code>ground_truth.json</code> for
+                      accuracy scoring (loose files work too). The archive is saved to Supabase and every
+                      email is merged into the whole system — queue, verify, pipeline, submission and
+                      scoring all see it.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="sub-cta-row">
+                  <label className="sub-ghost-btn upload-choose">
+                    Choose files
+                    <input
+                      type="file"
+                      multiple
+                      hidden
+                      accept=".zip,.json,.txt,.pdf,.docx,.xlsx,.png,.jpg,.jpeg"
+                      onChange={(e) => {
+                        setUploadFiles(Array.from(e.target.files || []))
+                        setUploadResult(null)
+                        setUploadError(null)
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
+                  {uploadFiles.length > 0 && (
+                    <span className="sub-last-run">
+                      {uploadFiles.length} file{uploadFiles.length === 1 ? '' : 's'} ·{' '}
+                      {(uploadFiles.reduce((s, f) => s + f.size, 0) / 1048576).toFixed(1)} MB
+                    </span>
+                  )}
+                  <button
+                    className="sub-primary-btn"
+                    onClick={handleUploadDataset}
+                    disabled={!uploadFiles.length || uploadBusy}
+                  >
+                    {uploadBusy ? 'Uploading…' : 'Upload & ingest'}
+                  </button>
+                </div>
+
+                {uploadFiles.length > 0 && (
+                  <ul className="reset-file-list">
+                    {uploadFiles.slice(0, 8).map(f => <li key={f.name} className="mono">{f.name}</li>)}
+                    {uploadFiles.length > 8 && <li>… and {uploadFiles.length - 8} more</li>}
+                  </ul>
+                )}
+
+                {uploadError && <div className="sub-error">{uploadError}</div>}
+
+                {uploadResult && (
+                  <div className="sub-done" style={{ marginTop: '14px' }}>
+                    <div className="sub-done-text">
+                      <strong>
+                        {uploadResult.emails_ingested} email{uploadResult.emails_ingested === 1 ? '' : 's'} ingested
+                      </strong>
+                      <span className="sub-done-note">
+                        {uploadResult.attachments_saved} attachments saved
+                        {uploadResult.ground_truth_rows ? ` · ${uploadResult.ground_truth_rows} ground-truth rows merged` : ''}
+                        {uploadResult.ground_truth_ignored ? ` · ${uploadResult.ground_truth_ignored} GT rows ignored (no matching email)` : ''}
+                        {Object.keys(uploadResult.renamed || {}).length
+                          ? ` · ${Object.keys(uploadResult.renamed).length} id(s) renamed to avoid collisions`
+                          : ''}
+                      </span>
+                      <span className="sub-done-note">Supabase: {uploadResult.supabase}</span>
+                      {(uploadResult.skipped || []).length > 0 && (
+                        <details style={{ marginTop: '6px', fontSize: '0.82rem' }}>
+                          <summary style={{ cursor: 'pointer', opacity: 0.7 }}>
+                            {uploadResult.skipped.length} file(s) skipped
+                          </summary>
+                          <ul className="reset-file-list">
+                            {uploadResult.skipped.map((s, i) => (
+                              <li key={i} className="mono">{s.file} — {s.reason}</li>
+                            ))}
+                          </ul>
+                        </details>
+                      )}
+                      {Object.keys(uploadResult.renamed || {}).length > 0 && (
+                        <details style={{ marginTop: '6px', fontSize: '0.82rem' }}>
+                          <summary style={{ cursor: 'pointer', opacity: 0.7 }}>Renamed ids</summary>
+                          <ul className="reset-file-list">
+                            {Object.entries(uploadResult.renamed).map(([o, n]) => (
+                              <li key={o} className="mono">{o} → {n}</li>
+                            ))}
+                          </ul>
+                        </details>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* RUN CONTROLS */}
               <div className="item-card">
                 <div className="sub-card-head">
@@ -5888,11 +6760,30 @@ function App() {
                   </div>
                 </div>
 
+                {engines && (
+                  <div className="engine-legend">
+                    <span className="engine-legend-label">Pipeline engines:</span>
+                    {engines.laya_installed && (
+                      <span className="engine-chip engine-laya" title="convaiinnovations/laya — neural decision router">
+                        laya{engines.laya_loaded ? '' : ' (idle)'}
+                      </span>
+                    )}
+                    <span className="engine-chip engine-rule" title="deterministic regex/rules tier">regex</span>
+                    {engines.ai_fallback && (
+                      <span className="engine-chip engine-model" title="LLM fallback tier">{engines.llm_model}</span>
+                    )}
+                    <span className="engine-chip engine-vision" title="vision pass for scanned/photographed documents">vision</span>
+                    {!engines.laya_installed && !engines.ai_fallback && (
+                      <span className="engine-legend-note">— deterministic only (no neural/LLM tiers)</span>
+                    )}
+                  </div>
+                )}
+
                 {!stressRunning && (
                   <>
                     <div className="sub-cta-row">
                       <button className="sub-primary-btn" onClick={handleStartStress}
-                        disabled={!stressDataset?.exists}>
+                        disabled={!stressDataset?.exists} data-tour="stress-run">
                         Run stress test
                       </button>
                       {stressStatus?.finished_at && (
@@ -5924,13 +6815,34 @@ function App() {
                     <div className="sub-progress-meta">
                       <span className="sub-progress-current">
                         <span className="sub-pulse" />
-                        Processing stress cases…
+                        {stressStatus?.current?.id ? (
+                          <>
+                            Processing <strong className="mono">{stressStatus.current.id}</strong>
+                            {stressStatus.current.test_type && (
+                              <span className="engine-feed-type"> · {stressStatus.current.test_type}</span>
+                            )}
+                            {stressStatus.current.subject && (
+                              <span className="engine-feed-subject"> — {stressStatus.current.subject}</span>
+                            )}
+                          </>
+                        ) : 'Processing stress cases…'}
                       </span>
                       <strong>{stressPct}%</strong>
                     </div>
                     <div className="progress-track">
                       <div className="progress-fill animated" style={{ width: `${stressPct}%` }} />
                     </div>
+                    {(stressStatus?.recent || []).length > 0 && (
+                      <div className="engine-feed">
+                        {stressStatus.recent.map(r => (
+                          <div key={r.id} className="engine-feed-row">
+                            <span className="mono engine-feed-id">{r.id}</span>
+                            <span className="engine-feed-chips">{engineChips(r.engine)}</span>
+                            <span className="engine-feed-status">{r.status}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div className="sub-progress-foot">
                       <span>{stressStatus?.processed ?? 0} / {stressStatus?.total ?? 0} cases</span>
                       <button onClick={handleCancelStress} className="sub-cancel-btn">Cancel run</button>
@@ -6076,6 +6988,7 @@ function App() {
                                   <span className="sub-val bad">
                                     {f.predicted?.status || '—'}{f.predicted?.review_reason ? `/${f.predicted.review_reason}` : ''}
                                   </span>
+                                  {f.engine && <div className="engine-inline">{engineChips(f.engine)}</div>}
                                   {f.error && <div className="sub-error" style={{ marginTop: '4px' }}>{f.error}</div>}
                                 </td>
                                 <td>
@@ -6158,6 +7071,11 @@ function App() {
                       <span className="mono">{stressCaseResult.email_id}</span>
                       {verdictPill(stressCaseResult.match)}
                     </div>
+                    {stressCaseResult.predicted?.engine && (
+                      <div className="engine-inline" style={{ margin: '4px 0 10px' }}>
+                        {engineChips(stressCaseResult.predicted.engine)}
+                      </div>
+                    )}
                     {stressCaseResult.error && (
                       <div className="sub-error">Pipeline error: {stressCaseResult.error}</div>
                     )}
@@ -6200,6 +7118,189 @@ function App() {
             </div>
           )
         })()}
+
+        {/* ========================================================== */}
+        {/* VIEW: RESET DEMO                                           */}
+        {/* ========================================================== */}
+        {view === 'reset' && (
+          <div className="card-container">
+            <div className="page-header">
+              <h1>Reset Demo Data</h1>
+              <p>Wipe all verification data so the pipeline can be re-run from a cold start.</p>
+            </div>
+
+            {/* WARNING / SCOPE PANEL */}
+            <div className="item-card">
+              <div className="sub-warn reset-warning" data-tour="reset-scope">
+                <strong>This permanently deletes verification data.</strong>
+                <div className="reset-scope">
+                  <div>
+                    <p className="reset-scope-title">Will be deleted</p>
+                    <ul>
+                      <li>All verification verdicts &amp; classifications (520 emails)</li>
+                      <li>Resolutions, chasers, corrupted-doc and dispatch records</li>
+                      <li>Generated submission file &amp; audit state</li>
+                      <li>Supabase cloud records (verifications + audit logs)</li>
+                      <li>Ingested reply threads</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="reset-scope-title">Preserved</p>
+                    <ul>
+                      <li>The 520 inbox emails and their attachments</li>
+                      <li>The LLM response cache — re-runs stay fast</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* OPTIONS */}
+            <div className="item-card">
+              <div className="sub-card-head">
+                <div>
+                  <h3>What to wipe</h3>
+                  <p className="step-sub">Untick a scope to keep it.</p>
+                </div>
+              </div>
+              <div className="sub-option">
+                <input id="reset-local" type="checkbox" checked={resetLocal}
+                  onChange={(e) => setResetLocal(e.target.checked)} />
+                <label htmlFor="reset-local">Local verification data</label>
+              </div>
+              <div className="sub-option">
+                <input id="reset-supabase" type="checkbox" checked={resetSupabase}
+                  onChange={(e) => setResetSupabase(e.target.checked)} />
+                <label htmlFor="reset-supabase">Supabase cloud records</label>
+              </div>
+              <div className="sub-option">
+                <input id="reset-threads" type="checkbox" checked={resetThreads}
+                  onChange={(e) => setResetThreads(e.target.checked)} />
+                <label htmlFor="reset-threads">Ingested reply threads</label>
+              </div>
+              <div className="sub-cta-row">
+                <button className="sub-primary-btn" onClick={() => postReset(true)}
+                  disabled={resetBusy}>
+                  Preview (dry run)
+                </button>
+              </div>
+            </div>
+
+            {/* CONFIRM + EXECUTE */}
+            <div className="item-card">
+              <div className="sub-card-head">
+                <div>
+                  <h3>Confirm wipe</h3>
+                  <p className="step-sub">Type RESET to enable the delete button.</p>
+                </div>
+              </div>
+              <div className="sub-cta-row" data-tour="reset-confirm">
+                <input
+                  className="reset-confirm-input"
+                  type="text"
+                  value={resetConfirm}
+                  placeholder="Type RESET to confirm"
+                  onChange={(e) => setResetConfirm(e.target.value)}
+                />
+                <button
+                  className="reset-danger-btn"
+                  onClick={() => postReset(false)}
+                  disabled={resetConfirm !== 'RESET' || resetBusy}
+                >
+                  Delete all data
+                </button>
+              </div>
+              {resetError && <div className="sub-error">{resetError}</div>}
+            </div>
+
+            {/* DRY-RUN PREVIEW */}
+            {resetPreview && (
+              <div className="item-card">
+                <div className="sub-card-head">
+                  <div>
+                    <h3>Dry run — nothing was deleted</h3>
+                    <p className="step-sub">What a real reset would remove.</p>
+                  </div>
+                  <span className="tag info">preview</span>
+                </div>
+                {resetPreview.local?.stores && (
+                  <div className="sub-export-chips" style={{ marginBottom: '10px' }}>
+                    {Object.entries(resetPreview.local.stores).map(([k, v]) => (
+                      <span key={k} className="chip">{k}: {v}</span>
+                    ))}
+                  </div>
+                )}
+                {resetPreview.local?.files_present?.length > 0 && (
+                  <>
+                    <p className="step-sub">Files that would be deleted:</p>
+                    <ul className="reset-file-list">
+                      {resetPreview.local.files_present.map(f => <li key={f} className="mono">{f}</li>)}
+                    </ul>
+                  </>
+                )}
+                {resetPreview.supabase && (
+                  <p className="step-sub">
+                    Supabase: verifications={resetPreview.supabase.verifications_before ?? '—'},
+                    audit_logs={resetPreview.supabase.audit_logs_before ?? '—'}
+                    {resetPreview.supabase.service_role === false && ' — DELETE unavailable (no service role key)'}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* REAL RESET REPORT */}
+            {resetReport && (
+              <div className="item-card">
+                <div className="sub-card-head">
+                  <div>
+                    <h3>Reset complete</h3>
+                    <p className="step-sub">Finished at {resetReport.timestamp} ({resetReport.duration_ms} ms).</p>
+                  </div>
+                  <span className="tag ok">done</span>
+                </div>
+                {resetReport.local?.stores_cleared && (
+                  <>
+                    <p className="step-sub">Stores cleared:</p>
+                    <div className="sub-export-chips" style={{ marginBottom: '10px' }}>
+                      {Object.entries(resetReport.local.stores_cleared).map(([k, v]) => (
+                        <span key={k} className="chip">{k}: {v}</span>
+                      ))}
+                    </div>
+                  </>
+                )}
+                {resetReport.local?.files_deleted?.length > 0 && (
+                  <>
+                    <p className="step-sub">Files deleted:</p>
+                    <ul className="reset-file-list">
+                      {resetReport.local.files_deleted.map(f => <li key={f} className="mono">{f}</li>)}
+                    </ul>
+                  </>
+                )}
+                {resetReport.local?.preserved?.length > 0 && (
+                  <p className="step-sub">Preserved: {resetReport.local.preserved.join(' · ')}</p>
+                )}
+                {resetReport.supabase && (
+                  resetReport.supabase.error ? (
+                    <div className="sub-error">
+                      Supabase wipe failed: {resetReport.supabase.error}
+                    </div>
+                  ) : (
+                    <p className="step-sub">
+                      Supabase: {resetReport.supabase.verifications_deleted ?? 0} verifications and{' '}
+                      {resetReport.supabase.audit_logs_deleted ?? 0} audit logs deleted
+                      ({resetReport.supabase.verifications_remaining ?? 0} / {resetReport.supabase.audit_logs_remaining ?? 0} remaining)
+                    </p>
+                  )
+                )}
+                <div className="sub-cta-row" style={{ marginTop: '14px' }}>
+                  <button className="sub-primary-btn" onClick={() => setView('pipeline')}>
+                    Run pipeline now
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
 
       </main>

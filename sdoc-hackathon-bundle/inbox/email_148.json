@@ -3,5 +3,25 @@
   "from": "faraz_ali@aprilasia.com",
   "subject": "RE_ CUST SI _ MEA _ 5APH-84518 __ PO_25_4104",
   "body": "Hi Najiha\n\nPlease find Shipping instruction for 5APH-84518.\n\nPOL: SINGAPORE\nPOD: KARACHI, PAKISTAN\n\nShipper:\nAPRIL FINE PAPER TRADING (MIDDLE EAST) FZE\n#813, 4 EA, DUBAI AIRPORT FREE ZONE\nP.O. BOX: 293775, DUBAI, UNITED ARAB EMIRATES\n\nConsignee:\n3S PAPER PRODUCTS SDN BHD\nNO 12, JALAN INDUSTRI 3/6\nRAWANG INTEGRATED INDUSTRIAL PARK\n48000 RAWANG, SELANGOR, MALAYSIA\n\nNotify Party:\n3S PAPER PRODUCTS SDN BHD\nNO 12, JALAN INDUSTRI 3/6\nRAWANG INTEGRATED INDUSTRIAL PARK\n48000 RAWANG, SELANGOR, MALAYSIA\n\nDescription of Goods:\n3X40'HC\nMULTIPURPOSE PAPER - A4 - PAPERONE COPIER\nH.S.CODE: 48025600\nGROSS WT: 60,957 KG\n\nShipping line: CFR TERM\nDocuments Required:\n1) 3 Original invoice\n2) 3 Packing list\n3) 3 Original BL + 3 N/N\nPlease revert with draft BL once available.\n\nBest Regards,\nSathiyavani Munusamy\nShipping Documentation\nDID : +971 04 4938203\nAPRIL Fine Paper Trading (Middle East) Fze\n#813, 4 EA, Dubai Airport Free Zone\nP.O. Box : 293775, Dubai, United Arab Emirates\nWebsite : www.aprilasia.com | www.paperone.com",
-  "attachments": []
+  "attachments": [],
+  "generated_si": "attachments/email_148_SI_from_body.txt",
+  "generated_si_fields": {
+    "shipper": "APRIL FINE PAPER TRADING (MIDDLE EAST) FZE",
+    "consignee": "3S PAPER PRODUCTS SDN BHD",
+    "notify_party": "3S PAPER PRODUCTS SDN BHD",
+    "port_of_loading": "SINGAPORE",
+    "port_of_discharge": "KARACHI, PAKISTAN",
+    "container_count": "",
+    "gross_weight_kg": "60,957 KG"
+  },
+  "generated_si_provenance": {
+    "shipper": "rule",
+    "consignee": "rule",
+    "notify_party": "rule",
+    "port_of_loading": "rule",
+    "port_of_discharge": "rule",
+    "container_count": "missing",
+    "gross_weight_kg": "rule"
+  },
+  "generated_si_mtime": 1789990373.9284894
 }

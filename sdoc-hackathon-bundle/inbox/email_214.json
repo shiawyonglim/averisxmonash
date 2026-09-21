@@ -3,5 +3,25 @@
   "from": "deswita_elvyani@aprilasia.com",
   "subject": "RE_ CUST SI _ MEA _ 5APH-44714 __ PO_25_9425",
   "body": "Hi Elisa\n\nPlease find Shipping instruction for 5APH-44714.\n\nPOL: RUGAO/NANTONG/SHANGHAI, CHINA\nPOD: YANGON, MYANMAR\n\nShipper:\nAPRIL FINE PAPER TRADING (MIDDLE EAST) FZE\n#813, 4 EA, DUBAI AIRPORT FREE ZONE\nP.O. BOX: 293775, DUBAI, UNITED ARAB EMIRATES\n\nConsignee:\nCLIFFORD PAPER INC\n70 EAST STREET\nRIDGEFIELD, NJ 07657, USA\n\nNotify Party:\nPACIFIC OFFICE (M) SDN BHD\nLOT 6, JALAN P/7\nSECTION 13, 43650 BANDAR BARU BANGI\nSELANGOR, MALAYSIA\n\nDescription of Goods:\n2X20'FCL\nPAPERONE DIGITAL COPIER PAPER\nH.S.CODE: 48025600\nGROSS WT: 43,600 KG\n\nShipping line: OA TERM\nDocuments Required:\n1) 3 Original invoice\n2) 3 Packing list\n3) 3 Original BL + 3 N/N\nPlease revert with draft BL once available.\n\nBest Regards,\nArlene Yamomo\nShipping Documentation\nDID : +971 04 4938272\nAPRIL Fine Paper Trading (Middle East) Fze\n#813, 4 EA, Dubai Airport Free Zone\nP.O. Box : 293775, Dubai, United Arab Emirates\nWebsite : www.aprilasia.com | www.paperone.com",
-  "attachments": []
+  "attachments": [],
+  "generated_si": "attachments/email_214_SI_from_body.txt",
+  "generated_si_fields": {
+    "shipper": "APRIL FINE PAPER TRADING (MIDDLE EAST) FZE",
+    "consignee": "CLIFFORD PAPER INC",
+    "notify_party": "PACIFIC OFFICE (M) SDN BHD",
+    "port_of_loading": "RUGAO/NANTONG/SHANGHAI, CHINA",
+    "port_of_discharge": "YANGON, MYANMAR",
+    "container_count": "",
+    "gross_weight_kg": "43,600 KG"
+  },
+  "generated_si_provenance": {
+    "shipper": "rule",
+    "consignee": "rule",
+    "notify_party": "rule",
+    "port_of_loading": "rule",
+    "port_of_discharge": "rule",
+    "container_count": "missing",
+    "gross_weight_kg": "rule"
+  },
+  "generated_si_mtime": 1789990376.442438
 }

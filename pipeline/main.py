@@ -78,7 +78,8 @@ def process_email(email_data, bundle_dir=BUNDLE_DIR):
     }
 
     # 1. Classify Email
-    category, cls_prov = classify_email_with_provenance(subj, body, has_atts)
+    category, cls_prov = classify_email_with_provenance(
+        subj, body, has_atts, sender=email_data.get("from", ""))
     details["classification_provenance"] = cls_prov
 
     if category != "BL_COMPARISON":
@@ -94,7 +95,7 @@ def process_email(email_data, bundle_dir=BUNDLE_DIR):
             details["si_fields"] = inline_si
             details["si_provenance"] = {k: "email_body" for k in CORE_FIELDS}
             details["si_source"] = "email_body"
-        intent, intent_prov = comparison_intent(subj, body)
+        intent, intent_prov = comparison_intent(subj, body, sender=email_data.get("from", ""))
         details["intent"] = intent
         details["intent_provenance"] = intent_prov
         att_err = check_attachments(email_data, bundle_dir, intent)

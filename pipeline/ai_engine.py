@@ -3,13 +3,14 @@ import json
 import re
 import time
 import hashlib
+import threading
 from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
 
 MODEL = (os.getenv("AI_MODEL") or os.getenv("KIMI_MODEL")
-         or os.getenv("MUSE_MODEL") or "meta/llama-3.2-11b-vision-instruct")
+         or os.getenv("MUSE_MODEL") or "meta/muse-glimmer-30b")
 
 # When disabled (AI_FALLBACK=0), every LLM call is skipped and the pipeline
 # degrades to "value not extracted" / "GENERAL" rather than silently matching.
@@ -110,6 +111,108 @@ def _chat_with_retry(client, **kwargs):
     except Exception:
         time.sleep(3)
         return client.chat.completions.create(**kwargs)
+
+
+# ── Laya System-1 neural decision tier ───────────────────────────
+# Optional dependency (pip install laya==0.3.4 — pulls torch+transformers,
+# ~3GB; baked into the Modal image for the live deployment). When the
+# package or weights are unavailable every caller degrades to the
+# existing rules->LLM path unchanged.
+try:
+    import laya as _laya
+    LAYA_AVAILABLE = True
+except ImportError:
+    _laya = None
+    LAYA_AVAILABLE = False
+
+# Minimum calibrated confidence for Laya to own a decision outright;
+# sub-threshold answers are held in reserve behind the other tiers.
+LAYA_MIN_CONFIDENCE = float(os.getenv("LAYA_MIN_CONFIDENCE", "0.6"))
+
+_LAYA_AGENT = None
+_LAYA_LOCK = threading.Lock()
+_LAYA_FAILED = False
+
+def get_laya_agent():
+    """
+    Lazy singleton loader for convaiinnovations/laya (~421M ModernBERT).
+    Shared by the batch pipeline and the server inbox-dossier endpoints so
+    the weights load at most once per process.
+    """
+    global _LAYA_AGENT, _LAYA_FAILED
+    if not LAYA_AVAILABLE or _LAYA_FAILED:
+        return None
+    if _LAYA_AGENT is None:
+        with _LAYA_LOCK:
+            if _LAYA_AGENT is None:
+                try:
+                    _LAYA_AGENT = _laya.load("convaiinnovations/laya")
+                    print("[LAYA] Neural decision model loaded.", flush=True)
+                except Exception as e:
+                    _LAYA_FAILED = True
+                    print(f"[LAYA] Neural model unavailable, deterministic tiers only: {e}", flush=True)
+    return _LAYA_AGENT
+
+_LAYA_CATEGORY_CRITERIA = {
+    "BL_COMPARISON": "draft Bill of Lading to check or compare against a Shipping Instruction, or transmits those documents",
+    "SI_REQUEST": "prepare, submit or send a Shipping Instruction",
+    "INVOICE_QUERY": "charges, freight, billing, invoices, demurrage or detention",
+    "GENERAL": "operational updates, schedules, internal admin, automated reports",
+    "SPAM": "unsolicited marketing, phishing or scams",
+}
+
+_LAYA_INTENT_CRITERIA = {
+    "REQUEST_DOCS": "the sender asks someone else to send or issue a document (e.g. 'please send the draft BL'); no comparison can run from this email alone",
+    "COMPARE_NOW": "the sender asks to compare, check or verify a Shipping Instruction against a draft Bill of Lading now, and writes as though the documents accompany the message",
+    "OTHER": "neither of the above",
+}
+
+def _laya_state(subject, body, sender=""):
+    """Build a Laya input state, preferring the package's email helpers
+    (signature/disclaimer stripping) and falling back to a raw dict."""
+    if _laya is not None and hasattr(_laya, "email_state"):
+        try:
+            clean = _laya.clean_email_body(body) if hasattr(_laya, "clean_email_body") else body
+            return _laya.email_state(subject=subject or "", body=clean or "", sender=sender or "")
+        except Exception:
+            pass
+    # 512-token input budget — ~2000 chars keeps subject+body inside it
+    return {"subject": subject or "", "body": (body or "")[:2000], "from": sender or ""}
+
+def _laya_decide(subject, body, question_key, instructions, criteria, sender=""):
+    """
+    One Laya choice question over the email state. Returns (choice,
+    confidence), or (None, 0.0) when the neural tier is unavailable,
+    errors, or returns a label outside the criteria space.
+    """
+    agent = get_laya_agent()
+    if agent is None:
+        return None, 0.0
+    try:
+        res = agent.system_one(
+            _laya_state(subject, body, sender),
+            {question_key: {"type": "choice", "instructions": instructions, "criteria": criteria}},
+        )
+        ans = (res.get("answers") or {}).get(question_key) or {}
+        choice = str(ans.get("choice") or "").strip().upper()
+        conf = float(ans.get("confidence") or 0.0)
+        if choice in criteria:
+            return choice, conf
+        return None, conf
+    except Exception as e:
+        print(f"[LAYA] decision error: {e}", flush=True)
+        return None, 0.0
+
+def _laya_classify_category(subject, body, sender=""):
+    return _laya_decide(subject, body, "category",
+                        "Which shipping-operations category does this email belong to?",
+                        _LAYA_CATEGORY_CRITERIA, sender)
+
+def _laya_classify_intent(subject, body, sender=""):
+    return _laya_decide(subject, body, "intent",
+                        "What does the sender want right now?",
+                        _LAYA_INTENT_CRITERIA, sender)
+
 
 def _rules_category_detailed(subject, body, has_attachments):
     """
@@ -393,33 +496,46 @@ Output only the category name."""
                 best_cat, best_pos = cat, pos
     return best_cat or reasoning.strip()
 
-def classify_email_with_provenance(subject, body, has_attachments):
+def classify_email_with_provenance(subject, body, has_attachments, sender=""):
     """
     Returns (category, provenance) where provenance is
-    'rule' | 'model' | 'fallback'. Deterministic rules first; only the
-    unmatched GENERAL fallback escalates to the LLM.
+    'laya' | 'rule' | 'model' | 'fallback'.
+
+    Tier 1 — Laya System-1 neural decision owns routing when its calibrated
+    confidence clears LAYA_MIN_CONFIDENCE.
+    Tier 2 — deterministic rules (high-precision structural signals, and the
+    primary tier whenever the neural model is not installed).
+    Tier 3 — the LLM adjudicates what neither tier could settle; a
+    sub-threshold Laya answer still beats the blind GENERAL default.
     """
+    laya_choice, laya_conf = _laya_classify_category(subject, body, sender)
+    if laya_choice and laya_conf >= LAYA_MIN_CONFIDENCE:
+        return laya_choice, "laya"
+
     cat, subcat, _, _ = _rules_category_detailed(subject, body, has_attachments)
     if subcat != "GENERAL_UNMATCHED":
         return cat, "rule"
-    if not AI_FALLBACK_ENABLED:
-        return "GENERAL", "fallback"
-    try:
-        reply = _cached_llm("classify", f"{subject}\n{body}",
-                            lambda: _llm_classify(subject, body))
-        if reply:
-            normalized = reply.strip().upper()
-            # Reasoning content can echo the whole category list before the
-            # conclusion — take the LAST word-bounded category mention.
-            best_cat, best_idx = None, -1
-            for valid in VALID_CATEGORIES:
-                for m in re.finditer(rf"\b{valid}\b", normalized):
-                    if m.start() > best_idx:
-                        best_cat, best_idx = valid, m.start()
-            if best_cat:
-                return best_cat, "model"
-    except Exception as e:
-        print(f"Classification error: {e}")
+
+    if AI_FALLBACK_ENABLED:
+        try:
+            reply = _cached_llm("classify", f"{subject}\n{body}",
+                                lambda: _llm_classify(subject, body))
+            if reply:
+                normalized = reply.strip().upper()
+                # Reasoning content can echo the whole category list before the
+                # conclusion — take the LAST word-bounded category mention.
+                best_cat, best_idx = None, -1
+                for valid in VALID_CATEGORIES:
+                    for m in re.finditer(rf"\b{valid}\b", normalized):
+                        if m.start() > best_idx:
+                            best_cat, best_idx = valid, m.start()
+                if best_cat:
+                    return best_cat, "model"
+        except Exception as e:
+            print(f"Classification error: {e}")
+
+    if laya_choice:
+        return laya_choice, "laya"
     return "GENERAL", "fallback"
 
 def classify_email(subject, body, has_attachments):
@@ -565,13 +681,17 @@ Output only the label."""
     # scan it too so the answer isn't lost.
     return ((msg.content or "") or (getattr(msg, "reasoning_content", "") or "")).strip()
 
-def comparison_intent(subject, body):
+def comparison_intent(subject, body, sender=""):
     """
     Returns (intent, provenance) where intent is
     'COMPARE_NOW' | 'REQUEST_DOCS' | 'OTHER' and provenance is
-    'rule' | 'model' | 'fallback'.
+    'laya' | 'rule' | 'model' | 'fallback'.
     """
     text = f"{subject or ''}\n{body or ''}".lower()
+
+    laya_choice, laya_conf = _laya_classify_intent(subject, body, sender)
+    if laya_choice and laya_conf >= LAYA_MIN_CONFIDENCE:
+        return laya_choice, "laya"
 
     if re.search(r"(assist to send|please send|kindly send|pls send|revert with|share the draft|send (?:us |me )?the (?:draft )?bl)", text):
         return "REQUEST_DOCS", "rule"
@@ -600,6 +720,8 @@ def comparison_intent(subject, body):
                     return best, "model"
         except Exception as e:
             print(f"Intent classification error: {e}")
+    if laya_choice:
+        return laya_choice, "laya"
     return "OTHER", "fallback"
 
 

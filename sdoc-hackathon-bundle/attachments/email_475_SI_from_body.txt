@@ -1,0 +1,57 @@
+SHIPPING INSTRUCTION
+(Auto-extracted from email body - email_475)
+
+Shipper: APRIL FINE PAPER TRADING
+Consignee: KPP-ANTALIS (SINGAPORE) PTE. LTD.
+Notify Party: ROXCEL TRADING GMBH
+Port of Loading: PORT KLANG (WESTPORT), MALAYSIA
+Port of Discharge: KLAIPEDA, LITHUANIA
+Container Count: MISSING_VALUE
+Gross Weight (KG): 20,555 KG
+
+--- Source: email body of email_475 ---
+Hi Hari
+
+Please find Shipping instruction for 5APH-09109.
+
+POL: PORT KLANG (WESTPORT), MALAYSIA
+POD: KLAIPEDA, LITHUANIA
+
+Shipper:
+APRIL FINE PAPER TRADING
+ON BEHALF OF VITAL SOLUTIONS PTE LTD
+77 ROBINSON ROAD, #21-01
+SINGAPORE 068896
+
+Consignee:
+KPP-ANTALIS (SINGAPORE) PTE. LTD.
+8 TEMASEK BOULEVARD
+#42-01 SUNTEC TOWER 3
+SINGAPORE 038988
+
+Notify Party:
+ROXCEL TRADING GMBH
+OPERNRING 3-5
+1010 VIENNA, AUSTRIA
+
+Description of Goods:
+1X20'GP
+COATED IVORY BOARD
+H.S.CODE: 48105900
+GROSS WT: 20,555 KG
+
+Shipping line: CFR TERM
+Documents Required:
+1) 3 Original invoice
+2) 3 Packing list
+3) 3 Original BL + 3 N/N
+Please revert with draft BL once available.
+
+Best Regards,
+Elisa Tukiman
+Shipping Documentation
+DID : +971 04 4938236
+APRIL Fine Paper Trading (Middle East) Fze
+#813, 4 EA, Dubai Airport Free Zone
+P.O. Box : 293775, Dubai, United Arab Emirates
+Website : www.aprilasia.com | www.paperone.com

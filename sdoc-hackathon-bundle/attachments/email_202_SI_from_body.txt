@@ -1,0 +1,56 @@
+SHIPPING INSTRUCTION
+(Auto-extracted from email body - email_202)
+
+Shipper: APRIL FINE PAPER TRADING
+Consignee: CERIEX
+Notify Party: CERIEX
+Port of Loading: NHAVA SHEVA, INDIA
+Port of Discharge: KARACHI, PAKISTAN
+Container Count: MISSING_VALUE
+Gross Weight (KG): 91,288 KG
+
+--- Source: email body of email_202 ---
+Hi Mitchelle
+
+Please find Shipping instruction for 5ALT-93136.
+
+POL: NHAVA SHEVA, INDIA
+POD: KARACHI, PAKISTAN
+
+Shipper:
+APRIL FINE PAPER TRADING
+ON BEHALF OF VITAL SOLUTIONS PTE LTD
+77 ROBINSON ROAD, #21-01
+SINGAPORE 068896
+
+Consignee:
+CERIEX
+ZONE INDUSTRIELLE
+CONAKRY, GUINEA
+
+Notify Party:
+CERIEX
+ZONE INDUSTRIELLE
+CONAKRY, GUINEA
+
+Description of Goods:
+4X20'FCL
+FUJITO PAPERONE INKJET PAPER
+H.S.CODE: 48025500
+GROSS WT: 91,288 KG
+
+Shipping line: CFR TERM
+Documents Required:
+1) 3 Original invoice
+2) 3 Packing list
+3) 3 Original BL + 3 N/N
+Please revert with draft BL once available.
+
+Best Regards,
+Teo Ei Leen
+Shipping Documentation
+DID : +971 04 4938208
+APRIL Fine Paper Trading (Middle East) Fze
+#813, 4 EA, Dubai Airport Free Zone
+P.O. Box : 293775, Dubai, United Arab Emirates
+Website : www.aprilasia.com | www.paperone.com

@@ -1,0 +1,58 @@
+SHIPPING INSTRUCTION
+(Auto-extracted from email body - email_168)
+
+Shipper: APRIL FINE PAPER TRADING
+Consignee: PACIFIC OFFICE (M) SDN BHD
+Notify Party: PACIFIC OFFICE (M) SDN BHD
+Port of Loading: BUATAN, INDONESIA
+Port of Discharge: BALTIMORE, US
+Container Count: MISSING_VALUE
+Gross Weight (KG): 216,940 KG
+
+--- Source: email body of email_168 ---
+Hi Willy
+
+Please find Shipping instruction for 5RSG-64622.
+
+POL: BUATAN, INDONESIA
+POD: BALTIMORE, US
+
+Shipper:
+APRIL FINE PAPER TRADING
+ON BEHALF OF VITAL SOLUTIONS PTE LTD
+77 ROBINSON ROAD, #21-01
+SINGAPORE 068896
+
+Consignee:
+PACIFIC OFFICE (M) SDN BHD
+LOT 6, JALAN P/7
+SECTION 13, 43650 BANDAR BARU BANGI
+SELANGOR, MALAYSIA
+
+Notify Party:
+PACIFIC OFFICE (M) SDN BHD
+LOT 6, JALAN P/7
+SECTION 13, 43650 BANDAR BARU BANGI
+SELANGOR, MALAYSIA
+
+Description of Goods:
+10X40'HC
+PAPERBOARD
+H.S.CODE: 48109200
+GROSS WT: 216,940 KG
+
+Shipping line: LC TERM
+Documents Required:
+1) 3 Original invoice
+2) 3 Packing list
+3) 3 Original BL + 3 N/N
+Please revert with draft BL once available.
+
+Best Regards,
+Lee Guan Cheng
+Shipping Documentation
+DID : +971 04 4938297
+APRIL Fine Paper Trading (Middle East) Fze
+#813, 4 EA, Dubai Airport Free Zone
+P.O. Box : 293775, Dubai, United Arab Emirates
+Website : www.aprilasia.com | www.paperone.com

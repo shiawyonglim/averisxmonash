@@ -17,6 +17,8 @@ server.BACKUP_MANIFEST = os.path.join(server.BACKUP_ROOT, "manifest.json")
 server._get_from_supabase_record = lambda eid: None
 server._log_to_supabase_audit = lambda *a, **k: None
 server._persist_audit_state = lambda: None
+server._async_save_to_supabase = lambda *a, **k: None
+server._save_email_threads = lambda t: None  # keep real email_threads.json untouched
 server.INBOX_CACHE.clear()
 
 BODY_SI = """Hi Teo
@@ -134,5 +136,88 @@ c = server._detect_carrier("SI TEST DIRECT(OOCL) OOLU12345", "")
 print("CARRIER DIRECT(OOCL):", c)
 c2 = server._detect_carrier("Re: booking EGLV7547123", "")
 print("CARRIER EGLV prefix:", c2)
+
+# --- Case 6: reply WITHOUT a BL doc -> still awaiting --------------------------
+write_email("test_ack", [])
+server.CHASERS_STORE["test_ack"] = {
+    "status": "CHASER_DISPATCHED", "chaser_sent_at": server._utcnow()}
+r5 = server.process_inbound_reply(
+    email_id="test_ack",
+    from_addr="doc.desk@oocl.com",
+    subject="Re: SI TEST DIRECT(OOCL) OOLU12345 [REF: test_ack]",
+    body="Booking confirmed, draft BL generation in progress.",
+    attachments=[],
+)
+assert r5["bl_ingested"] is None and r5["auto_verdict"] is None
+assert server.CHASERS_STORE["test_ack"]["status"] == "REPLY_RECEIVED"
+assert "bl_received_at" not in server.CHASERS_STORE["test_ack"]
+r6 = server.get_email_content("test_ack")
+assert r6["missing_doc"] == "bl", r6["missing_doc"]
+print("ACK-ONLY REPLY: status=REPLY_RECEIVED, still missing_doc=bl")
+
+# --- Case 7: reply WITH a BL attachment -> ingest + auto-verify ----------------
+r7 = server.process_inbound_reply(
+    email_id="test_ack",
+    from_addr="doc.desk@oocl.com",
+    subject="Re: SI TEST DIRECT(OOCL) OOLU12345 [REF: test_ack]",
+    body="Please find attached the draft Bill of Lading.",
+    attachments=[{"filename": "Draft_BL_OOLU12345.pdf", "type": "application/pdf"}],
+)
+assert r7["bl_ingested"], r7
+assert r7["auto_verdict"], "expected auto-verdict"
+assert os.path.exists(os.path.join(tmp, r7["bl_ingested"]))
+assert server.CHASERS_STORE["test_ack"]["status"] == "BL_RECEIVED"
+d7 = json.load(open(os.path.join(inbox, "test_ack.json"), encoding="utf-8"))
+assert r7["bl_ingested"] in d7["attachments"]
+print("BL REPLY: ingested", r7["bl_ingested"], "| auto-verdict:", r7["auto_verdict"]["status"])
+
+# reopen -> full pair, nothing missing, stored verdict surfaces
+r8 = server.get_email_content("test_ack")
+assert r8["missing_doc"] is None
+assert "DRAFT BILL OF LADING" in r8["bl_text"]
+assert r8["verdict"]["status"] == r7["auto_verdict"]["status"]
+print("REOPEN: missing_doc=None, bl_text is the real doc, verdict surfaced")
+
+# --- Case 8: aging — old unanswered chaser flags overdue ------------------------
+write_email("test_overdue", [])
+from datetime import datetime, timezone, timedelta
+server.CHASERS_STORE["test_overdue"] = {
+    "status": "CHASER_DISPATCHED",
+    "chaser_sent_at": (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()}
+d8 = json.load(open(os.path.join(inbox, "test_overdue.json"), encoding="utf-8"))
+item = server._queue_item("test_overdue", d8)
+assert item["overdue"] is True, item
+assert item["chaser_age_days"] >= 5
+assert item["queue_status"] == "OVERDUE", item["queue_status"]
+assert server._queue_match(item, "overdue")
+# fresh chaser is not overdue
+server.CHASERS_STORE["test_overdue"]["chaser_sent_at"] = server._utcnow()
+item2 = server._queue_item("test_overdue", d8)
+assert item2["overdue"] is False
+print("OVERDUE: 5d chaser -> OVERDUE queue status; fresh chaser not overdue")
+
+# --- Case 9: si_missing_fields gate ---------------------------------------------
+write_email("test_incomplete", [])
+# strip fields from the body so extraction comes back partial
+d9 = json.load(open(os.path.join(inbox, "test_incomplete.json"), encoding="utf-8"))
+d9["body"] = """Hi
+
+Please find Shipping instruction for TEST-77777.
+
+Shipper:
+ONLY SHIPPER LTD
+
+Consignee:
+NAGAPPA EXPORTS
+
+Notify Party:
+NAGAPPA EXPORTS
+"""
+json.dump(d9, open(os.path.join(inbox, "test_incomplete.json"), "w", encoding="utf-8"))
+server.INBOX_CACHE.pop("test_incomplete", None)
+r9 = server.get_email_content("test_incomplete")
+assert r9["si_missing_fields"], "expected missing fields on partial inline SI"
+assert "port_of_loading" in r9["si_missing_fields"]
+print("SI GATE: missing fields detected ->", r9["si_missing_fields"])
 
 print("\nALL TESTS PASSED")

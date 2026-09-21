@@ -11,8 +11,8 @@
 - **Job:** Runs the AI pipeline, handles API requests, and manages database operations. Render keeps this code running on the internet all day.
 
 ## AI Engine (The Brain)
-- **Current implementation:** NVIDIA NIM `meta/llama-3.2-11b-vision-instruct` handles all three AI tasks — email classification, seven-field document extraction, and discrepancy reasoning.
-- **Model is swappable:** select a different model via the `AI_MODEL` or `MUSE_MODEL` env var. Google Gemini, Moonshot `kimi-k3`, and `muse-glimmer` keys exist in `.env` but are not yet wired into the pipeline.
+- **Current implementation:** NVIDIA NIM models — `z-ai/glm-5.3` (GLM 5.3) and `meta/muse-glimmer-30b` (Muse Glimmer 30B) — handle all three AI tasks: email classification, seven-field document extraction, and discrepancy reasoning.
+- **Model is swappable:** select via the `AI_MODEL`, `KIMI_MODEL`, or `MUSE_MODEL` env vars, each optionally with its own scoped API key (`NVIDIA_KIMI_API_KEY`, `NVIDIA_MUSE_API_KEY`). Code fallback when unset: `meta/muse-glimmer-30b`.
 - **Job:** Reads messy PDF scans, Excel tables, Word docs, and plain text; extracts the seven shipping fields; classifies emails into categories; and compares SI vs BL with strict discrepancy verification.
 
 ## Database (Data Storage)

@@ -1,0 +1,56 @@
+SHIPPING INSTRUCTION
+(Auto-extracted from email body - email_358)
+
+Shipper: APRIL FINE PAPER TRADING
+Consignee: ORIENT LINKS CO (LLC)
+Notify Party: ORIENT LINKS CO (LLC)
+Port of Loading: RUGAO/NANTONG/SHANGHAI, CHINA
+Port of Discharge: CONAKRY, GUINEA
+Container Count: MISSING_VALUE
+Gross Weight (KG): 329,880 KG
+
+--- Source: email body of email_358 ---
+Hi Deswita
+
+Please find Shipping instruction for 5APH-57937.
+
+POL: RUGAO/NANTONG/SHANGHAI, CHINA
+POD: CONAKRY, GUINEA
+
+Shipper:
+APRIL FINE PAPER TRADING
+ON BEHALF OF VITAL SOLUTIONS PTE LTD
+77 ROBINSON ROAD, #21-01
+SINGAPORE 068896
+
+Consignee:
+ORIENT LINKS CO (LLC)
+P.O. BOX 61041
+JEBEL ALI, DUBAI, UAE
+
+Notify Party:
+ORIENT LINKS CO (LLC)
+P.O. BOX 61041
+JEBEL ALI, DUBAI, UAE
+
+Description of Goods:
+15X40'HC
+PAPERBOARD
+H.S.CODE: 48109200
+GROSS WT: 329,880 KG
+
+Shipping line: CFR TERM
+Documents Required:
+1) 3 Original invoice
+2) 3 Packing list
+3) 3 Original BL + 3 N/N
+Please revert with draft BL once available.
+
+Best Regards,
+Elisa Tukiman
+Shipping Documentation
+DID : +971 04 4938240
+APRIL Fine Paper Trading (Middle East) Fze
+#813, 4 EA, Dubai Airport Free Zone
+P.O. Box : 293775, Dubai, United Arab Emirates
+Website : www.aprilasia.com | www.paperone.com

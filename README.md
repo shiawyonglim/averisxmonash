@@ -32,7 +32,7 @@ rules cannot. For every email in the inbox:
 3. **Extract (two-tier)** — `extract_fields_tiered`: a deterministic regex
    pass extracts the 7 fields from `.txt` / `.pdf` / `.xlsx` / `.docx`
    attachments; **only the fields left blank** escalate to one cached LLM call
-   (NVIDIA NIM, `meta/llama-3.2-11b-vision-instruct` by default, swappable via
+   (NVIDIA NIM — `z-ai/glm-5.3` and `meta/muse-glimmer-30b`, selectable via
    env vars). Every field carries a **provenance** tag — `rule`, `model`, or
    `missing`. Camera photos / scans of paper documents (`.png` / `.jpg` /
    `.jpeg` / `.webp` / `.gif` / `.bmp` / `.tif`) go through the model's vision
@@ -107,7 +107,8 @@ Create a `.env` in the repo root:
 NVIDIA_API_KEY=nvapi-...
 NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
 
-# Optional — model selection (defaults to meta/llama-3.2-11b-vision-instruct)
+# Optional — model selection (we run z-ai/glm-5.3 and meta/muse-glimmer-30b;
+# code fallback when unset is meta/muse-glimmer-30b)
 AI_MODEL=...
 # or scoped alternatives, each with its own key:
 KIMI_MODEL=...        NVIDIA_KIMI_API_KEY=...
@@ -174,12 +175,26 @@ by the organizers' `score_cli.py`.
 
 ## Tech stack
 
-- **Backend:** Python, FastAPI, Uvicorn, OpenAI SDK (NVIDIA NIM), pdfplumber,
-  openpyxl, python-docx, pydantic
+- **Backend:** Python, FastAPI, Uvicorn, pydantic, pdfplumber, openpyxl,
+  python-docx, pillow
 - **Frontend:** React 19, Vite, oxlint
 - **Database:** Supabase (managed Postgres) — schema in `supabase_schema.sql`
-- **AI:** NVIDIA NIM vision LLM (swappable via `AI_MODEL` / `KIMI_MODEL` /
-  `MUSE_MODEL`)
+- **AI — classification:** Laya System-1 neural decision model (Convai
+  Innovations ModernBERT, `laya==0.3.4` + torch/transformers) — typed,
+  calibrated-confidence decisions own email category and comparison-intent
+  routing when confidence clears `LAYA_MIN_CONFIDENCE` (default 0.6);
+  deterministic rules and the NIM LLM adjudicate what it can't settle
+- **Deterministic tier:** hand-tuned regex + precedence rules for 7-field
+  extraction and SI↔BL normalization/comparison — does the bulk of the
+  parsing work with zero model calls (97.54% weighted score rules-only)
+- **AI — extraction:** NVIDIA NIM LLMs via the OpenAI SDK —
+  `z-ai/glm-5.3` (GLM 5.3) and `meta/muse-glimmer-30b` (Muse Glimmer 30B),
+  selectable via `AI_MODEL` / `KIMI_MODEL` / `MUSE_MODEL`
+- **AI — inbox triage:** the same Laya pass enriches the live email
+  dossier with urgency, needs-reply and spam scores
+- **Deployment:** Modal serverless (`modal_app.py`) — single container serving
+  FastAPI + compiled frontend, Laya weights pre-baked into the image;
+  Render + Vercel blueprints also included for a lighter split deploy
 
 ## Deploy
 

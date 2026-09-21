@@ -3,5 +3,25 @@
   "from": "sathiya@april.com.my",
   "subject": "REQUEST SI _ 5AKR-88443 _ BRISBANE_AUSTRALIA _ PACIFIC OFFICE (M) SDN BHD _ YMJAI786866943",
   "body": "Hi Elisa\n\nPlease find Shipping instruction for 5AKR-88443.\n\nPOL: BUATAN, INDONESIA\nPOD: BRISBANE, AUSTRALIA\n\nShipper:\nASIA PACIFIC PAPERBOARD TRADING PTE LTD\n80 RAFFLES PLACE, #50-01 UOB PLAZA 1\nSINGAPORE 048624\n\nConsignee:\nPACIFIC OFFICE (M) SDN BHD\nLOT 6, JALAN P/7\nSECTION 13, 43650 BANDAR BARU BANGI\nSELANGOR, MALAYSIA\n\nNotify Party:\nPACIFIC OFFICE (M) SDN BHD\nLOT 6, JALAN P/7\nSECTION 13, 43650 BANDAR BARU BANGI\nSELANGOR, MALAYSIA\n\nDescription of Goods:\n1X20'FCL\nPAPERONE DIGITAL COPIER PAPER\nH.S.CODE: 48025600\nGROSS WT: 21,660 KG\n\nShipping line: DP TERM\nDocuments Required:\n1) 3 Original invoice\n2) 3 Packing list\n3) 3 Original BL + 3 N/N\nPlease revert with draft BL once available.\n\nBest Regards,\nLee Guan Cheng\nShipping Documentation\nDID : +971 04 4938217\nAPRIL Fine Paper Trading (Middle East) Fze\n#813, 4 EA, Dubai Airport Free Zone\nP.O. Box : 293775, Dubai, United Arab Emirates\nWebsite : www.aprilasia.com | www.paperone.com",
-  "attachments": []
+  "attachments": [],
+  "generated_si": "attachments/email_311_SI_from_body.txt",
+  "generated_si_fields": {
+    "shipper": "ASIA PACIFIC PAPERBOARD TRADING PTE LTD",
+    "consignee": "PACIFIC OFFICE (M) SDN BHD",
+    "notify_party": "PACIFIC OFFICE (M) SDN BHD",
+    "port_of_loading": "BUATAN, INDONESIA",
+    "port_of_discharge": "BRISBANE, AUSTRALIA",
+    "container_count": "",
+    "gross_weight_kg": "21,660 KG"
+  },
+  "generated_si_provenance": {
+    "shipper": "rule",
+    "consignee": "rule",
+    "notify_party": "rule",
+    "port_of_loading": "rule",
+    "port_of_discharge": "rule",
+    "container_count": "missing",
+    "gross_weight_kg": "rule"
+  },
+  "generated_si_mtime": 1789990379.419803
 }

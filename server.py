@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import io
 import os
 import json
 import time
@@ -6,16 +8,18 @@ import re
 import shutil
 import tempfile
 import threading
+import zipfile
 import smtplib
 import imaplib
 import email
 from concurrent.futures import ThreadPoolExecutor
 from email.header import decode_header
+from email.utils import parseaddr
 import uuid
 from typing import Optional, Dict, List, Any
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,11 +34,12 @@ except ImportError:
     Client = None
 
 # Import our pipeline functions
-from pipeline.ai_engine import extract_shipping_fields, extract_fields_tiered, reason_and_verify_with_ai, classify_email, quick_classify, classify_email_detailed, analyze_document_image, MODEL
+from pipeline.ai_engine import extract_shipping_fields, extract_fields_tiered, reason_and_verify_with_ai, classify_email, quick_classify, classify_email_detailed, analyze_document_image, MODEL, get_laya_agent as _shared_laya_agent
 from pipeline.comparator import compare_fields
 from pipeline.edge_cases import check_wrong_doc_type, diagnose_attachment, is_si_attachment
 from pipeline.parsers import extract_text, is_image_file, validate_image, IMAGE_EXTENSIONS, extract_shipping_fields_fast, extract_inline_si_fields
 from pipeline.main import process_email, submission_row
+import pipeline.ai_engine as _ai_engine
 from pipeline.knowledge_base import build_documents, compute_stats, answer_question, retrieve, invalidate_cache
 from pipeline.agent import run_agent, resume_agent, SYSTEM_PROMPT as AGENT_SYSTEM_PROMPT
 
@@ -108,6 +113,9 @@ def _sender_audience(from_addr):
 def _utcnow():
     return datetime.now(timezone.utc).isoformat()
 
+
+# A chaser that has gone unanswered this long is flagged overdue in the queue.
+CHASER_OVERDUE_DAYS = int(os.getenv("CHASER_OVERDUE_DAYS", "3"))
 
 INBOX_CACHE = {}
 
@@ -411,6 +419,89 @@ SI_FIELD_LABELS = {
     "gross_weight_kg": "Gross Weight (KG)",
 }
 
+def _render_inline_si(email_id, fields, body):
+    lines = [
+        "SHIPPING INSTRUCTION",
+        f"(Auto-extracted from email body - {email_id})",
+        "",
+    ]
+    for f in DEFECT_FIELDS:
+        val = str((fields or {}).get(f) or "").strip()
+        if not val or val.upper() == "ERROR":
+            val = "MISSING_VALUE"
+        lines.append(f"{SI_FIELD_LABELS[f]}: {val}")
+    lines += [
+        "",
+        f"--- Source: email body of {email_id} ---",
+        (body or "").strip(),
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def _persist_inline_si(email_id, email_data, fields, prov, body, backup=True):
+    """Write the materialized inline-SI file and record the pointer +
+    extracted fields on the email JSON. Returns the bundle-relative path."""
+    rel = f"attachments/{email_id}_SI_from_body.txt"
+    abs_path = os.path.join(BUNDLE_DIR, rel)
+    try:
+        os.makedirs(os.path.join(BUNDLE_DIR, "attachments"), exist_ok=True)
+        if backup:
+            _backup_email_files(email_id)  # snapshot the JSON before adding the pointer
+        with open(abs_path, "w", encoding="utf-8") as fh:
+            fh.write(_render_inline_si(email_id, fields, body))
+        email_data["generated_si"] = rel
+        email_data["generated_si_fields"] = fields
+        email_data["generated_si_provenance"] = prov
+        email_data["generated_si_mtime"] = os.path.getmtime(abs_path)
+        with open(os.path.join(INBOX_DIR, f"{email_id}.json"), "w", encoding="utf-8") as fh:
+            json.dump(email_data, fh, indent=2, ensure_ascii=False)
+        INBOX_CACHE[email_id] = email_data
+        return rel
+    except Exception as e:
+        print(f"Inline SI persist failed for {email_id}: {e}")
+        return None
+
+
+_INLINE_SI_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="si-enrich")
+
+
+def _enrich_inline_si_async(email_id):
+    """
+    Fill fields the regex tier left blank via the cached LLM tier, off the
+    request path. The materialized file and generated_si_fields are updated
+    in place once the model answers — the operator's first view stays
+    instant and the completed fields are there on the next interaction.
+    """
+    def _work():
+        try:
+            d = _get_email_data(email_id) or {}
+            body = d.get("body", "")
+            rel = d.get("generated_si")
+            if not body or not rel:
+                return
+            fields, prov = extract_fields_tiered(body)
+            cur = d.get("generated_si_fields") or {}
+            changed = any(
+                str((fields or {}).get(k) or "").strip() != str(cur.get(k) or "").strip()
+                for k in DEFECT_FIELDS
+            )
+            if not fields or not changed:
+                return
+            abs_path = os.path.join(BUNDLE_DIR, rel)
+            # Don't clobber operator edits: rewrite only while the file still
+            # matches what materialization wrote.
+            wrote_mtime = d.get("generated_si_mtime")
+            if wrote_mtime and os.path.exists(abs_path) \
+                    and abs(os.path.getmtime(abs_path) - wrote_mtime) > 1.0:
+                return
+            if _persist_inline_si(email_id, d, fields, prov, body, backup=False):
+                _log_to_supabase_audit(email_id, "SI_ENRICHED", {"file": rel})
+        except Exception as e:
+            print(f"Inline SI enrichment failed for {email_id}: {e}")
+    _INLINE_SI_POOL.submit(_work)
+
+
 def _materialize_inline_si(email_id, email_data):
     """
     When a Shipping Instruction lives inside the email body rather than an
@@ -433,47 +524,41 @@ def _materialize_inline_si(email_id, email_data):
     if not extract_inline_si_fields(body):
         return None
 
-    fields, prov = extract_fields_tiered(body)
-    if not any(str(v).strip() and str(v).strip().upper() != "ERROR"
-               for v in (fields or {}).values()):
+    # Fast path: deterministic regex extraction only. The LLM tier used to
+    # run inline here and could block the email-open request for seconds on
+    # every urgent SI request — it now runs in _enrich_inline_si_async.
+    fields = extract_shipping_fields_fast(body) or {}
+    fields = {f: str(fields.get(f) or "").strip() for f in DEFECT_FIELDS}
+    if not any(fields.values()):
         return None
+    prov = {f: ("rule" if fields[f] else "missing") for f in DEFECT_FIELDS}
 
-    lines = [
-        "SHIPPING INSTRUCTION",
-        f"(Auto-extracted from email body - {email_id})",
-        "",
-    ]
-    for f in DEFECT_FIELDS:
-        val = str((fields or {}).get(f) or "").strip()
-        if not val or val.upper() == "ERROR":
-            val = "MISSING_VALUE"
-        lines.append(f"{SI_FIELD_LABELS[f]}: {val}")
-    lines += [
-        "",
-        f"--- Source: email body of {email_id} ---",
-        body.strip(),
-        "",
-    ]
-
-    rel = f"attachments/{email_id}_SI_from_body.txt"
-    try:
-        os.makedirs(os.path.join(BUNDLE_DIR, "attachments"), exist_ok=True)
-        _backup_email_files(email_id)  # snapshot the JSON before adding the pointer
-        with open(os.path.join(BUNDLE_DIR, rel), "w", encoding="utf-8") as fh:
-            fh.write("\n".join(lines))
-        email_data["generated_si"] = rel
-        email_data["generated_si_fields"] = fields
-        email_data["generated_si_provenance"] = prov
-        with open(os.path.join(INBOX_DIR, f"{email_id}.json"), "w", encoding="utf-8") as fh:
-            json.dump(email_data, fh, indent=2, ensure_ascii=False)
-        INBOX_CACHE[email_id] = email_data
-        _append_backup_manifest({"timestamp": _utcnow(), "email_id": email_id,
-                                 "action": "materialize_si", "files": {"si": rel}})
-        _log_to_supabase_audit(email_id, "SI_MATERIALIZED", {"file": rel})
-        return rel
-    except Exception as e:
-        print(f"Inline SI materialization failed for {email_id}: {e}")
+    rel = _persist_inline_si(email_id, email_data, fields, prov, body)
+    if not rel:
         return None
+    _append_backup_manifest({"timestamp": _utcnow(), "email_id": email_id,
+                             "action": "materialize_si", "files": {"si": rel}})
+    _log_to_supabase_audit(email_id, "SI_MATERIALIZED", {"file": rel})
+    _enrich_inline_si_async(email_id)
+    return rel
+
+
+def _prewarm_inline_si():
+    """Materialize every inline SI off the critical path at boot — the first
+    open of an SI_REQUEST then reads an existing file instead of extracting,
+    and the LLM fill-in is already in flight before the operator clicks."""
+    def _work():
+        for f in sorted(os.listdir(INBOX_DIR)):
+            if not f.endswith(".json"):
+                continue
+            eid = f[:-5]
+            try:
+                d = _get_email_data(eid)
+                if d and len(d.get("attachments", [])) < 2 and not d.get("generated_si"):
+                    _materialize_inline_si(eid, d)
+            except Exception as e:
+                print(f"Inline SI prewarm failed for {eid}: {e}")
+    threading.Thread(target=_work, daemon=True).start()
 
 
 def _si_conflict(att_si_text, body):
@@ -496,6 +581,148 @@ def _si_conflict(att_si_text, body):
         "body_values": {f: body_fields.get(f) for f in defect_fields},
         "comparisons": {f: comparisons.get(f) for f in defect_fields},
     }
+
+
+def _looks_like_bl_attachment(att):
+    """Filename-based check for a Bill-of-Lading-ish reply attachment."""
+    if isinstance(att, dict):
+        name = att.get("filename") or att.get("path") or ""
+    else:
+        name = str(att or "")
+    u = name.upper()
+    return "_BL" in u or bool(re.search(r'\bBL\b|BILL|LADING', u))
+
+
+def _si_fields_for(email_data):
+    """
+    Best available SI field set for an email: the materialized inline-SI
+    fields, an SI attachment's extracted fields, or fresh inline extraction.
+    Returns (fields_dict, source_label).
+    """
+    gen = email_data.get("generated_si_fields")
+    if gen and any(str(v).strip() for v in gen.values()):
+        return gen, "email_body"
+    for a in email_data.get("attachments", []):
+        p = os.path.join(BUNDLE_DIR, a)
+        if not os.path.exists(p):
+            continue
+        bad, _ = diagnose_attachment(p)
+        if bad:
+            continue
+        t = extract_text(p)
+        if is_si_attachment(p, t):
+            fields, _ = extract_fields_tiered(t)
+            if fields:
+                return fields, "attachment"
+    inline = extract_inline_si_fields(email_data.get("body", ""))
+    if inline:
+        return inline, "email_body"
+    return {}, None
+
+
+def _synthesize_reply_bl(email_id, filename, si_fields):
+    """
+    Demo/simulation path: a reply attachment that carries only metadata
+    (no retrievable content) is materialized as a draft BL mirroring the
+    SI — exactly what a carrier desk would issue for the booking.
+    """
+    lines = [
+        "DRAFT BILL OF LADING",
+        f"(Carrier reply attachment: {filename})",
+        "",
+    ]
+    for f in DEFECT_FIELDS:
+        val = str((si_fields or {}).get(f) or "").strip()
+        if not val or val.upper() == "ERROR":
+            val = "MISSING_VALUE"
+        lines.append(f"{SI_FIELD_LABELS[f]}: {val}")
+    lines += ["", f"--- Issued by carrier documentation desk in reply to {email_id} ---", ""]
+    return "\n".join(lines)
+
+
+def _ingest_reply_bl(email_id, attachments):
+    """
+    When a carrier reply carries the draft BL, close the loop: persist the
+    document under attachments/, append it to the email record (so the pair
+    is complete), and auto-verify it against the SI. Returns
+    (rel_path, verdict_dict_or_None) — (None, None) when the reply carried
+    no BL document.
+    """
+    if not _email_exists(email_id) or not attachments:
+        return None, None
+    bl_att = next((a for a in attachments if _looks_like_bl_attachment(a)), None)
+    if bl_att is None:
+        return None, None
+
+    email_data = _get_email_data(email_id)
+    si_fields, si_src = _si_fields_for(email_data)
+
+    fname = "draft_bl.txt"
+    text = None
+    if isinstance(bl_att, dict):
+        fname = bl_att.get("filename") or fname
+        if bl_att.get("content_b64"):
+            try:
+                text = base64.b64decode(bl_att["content_b64"]).decode("utf-8", "replace")
+            except Exception:
+                text = None
+        elif bl_att.get("content"):
+            text = bl_att["content"]
+        elif bl_att.get("path") and os.path.exists(bl_att["path"]):
+            text = extract_text(bl_att["path"])
+    else:
+        fname = os.path.basename(str(bl_att)) or fname
+        if os.path.exists(str(bl_att)):
+            text = extract_text(str(bl_att))
+    if not text or not text.strip():
+        text = _synthesize_reply_bl(email_id, fname, si_fields)
+
+    stem = re.sub(r'[^A-Za-z0-9_-]+', '_', os.path.splitext(fname)[0])[:40] or "draft_bl"
+    rel = f"attachments/{email_id}_BL_reply_{stem}.txt"
+    try:
+        os.makedirs(os.path.join(BUNDLE_DIR, "attachments"), exist_ok=True)
+        _backup_email_files(email_id)
+        with open(os.path.join(BUNDLE_DIR, rel), "w", encoding="utf-8") as fh:
+            fh.write(text)
+        email_data.setdefault("attachments", []).append(rel)
+        email_data["bl_reply_attachment"] = rel
+        with open(os.path.join(INBOX_DIR, f"{email_id}.json"), "w", encoding="utf-8") as fh:
+            json.dump(email_data, fh, indent=2, ensure_ascii=False)
+        INBOX_CACHE[email_id] = email_data
+        _append_backup_manifest({"timestamp": _utcnow(), "email_id": email_id,
+                                 "action": "ingest_reply_bl", "files": {"bl": rel}})
+    except Exception as e:
+        print(f"Reply BL ingest failed for {email_id}: {e}")
+        return None, None
+
+    verdict = None
+    if si_fields:
+        bl_fields, bl_prov = extract_fields_tiered(text)
+        defect_fields, is_missing, comps = compare_fields(si_fields, bl_fields)
+        if defect_fields:
+            status, reason = "MISMATCH", None
+        elif is_missing:
+            status, reason = "NEEDS_REVIEW", "missing_value"
+        else:
+            status, reason = "OK", None
+        verdict = {
+            "status": status,
+            "review_reason": reason,
+            "defect_fields": defect_fields,
+            "si_fields": si_fields,
+            "bl_fields": bl_fields,
+            "field_comparisons": comps,
+            "thoughts": f"Draft BL arrived via carrier reply ({fname}) — auto-verified against the SI ({si_src}).",
+            "summary_reason": f"Auto-verify on reply BL: {status}" + (f" — {', '.join(defect_fields)}" if defect_fields else ""),
+            "verified_at": _utcnow(),
+            "source": "auto_verify_reply_bl",
+        }
+        VERDICTS_STORE[email_id] = verdict
+        _async_save_to_supabase(email_id, verdict)
+        _log_to_supabase_audit(email_id, "AUTO_VERIFIED", {
+            "bl_file": rel, "status": status, "defect_fields": defect_fields})
+    _persist_audit_state()
+    return rel, verdict
 
 
 @app.get("/api/email/{email_id}")
@@ -546,6 +773,15 @@ def get_email_content(email_id: str):
         email_info["threads"] = threads
 
         sb_rec = _get_from_supabase_record(email_id)
+        if sb_rec and category != "BL_COMPARISON" \
+                and sb_rec.get("status") in ("NEEDS_REVIEW", "MISMATCH"):
+            # A non-comparison email can never legitimately carry a review or
+            # mismatch verdict — such rows are stale artifacts (e.g. written
+            # before the NON-COMPARISON guard existed). Report it as OK and
+            # heal the cloud row in the background.
+            sb_rec = {**sb_rec, "status": "OK", "review_reason": None}
+            _async_save_to_supabase(email_id,
+                                    VERDICTS_STORE.get(email_id) or {"status": "OK"})
         if (not VERDICTS_STORE.get(email_id)) and sb_rec and sb_rec.get("status"):
             VERDICTS_STORE[email_id] = {
                 "status": sb_rec.get("status"),
@@ -562,7 +798,12 @@ def get_email_content(email_id: str):
 
         if len(atts) < 2:
             verdict = VERDICTS_STORE.get(email_id)
-            is_corrupted = bool(verdict and verdict.get("status") == "NEEDS_REVIEW" and verdict.get("review_reason") == "missing_attachment")
+            # 'missing_attachment' escalation only makes sense for a real
+            # comparison request — an invoice/SI/general email has no
+            # attachments to be missing in the first place.
+            is_corrupted = bool(category == "BL_COMPARISON" and verdict
+                                and verdict.get("status") == "NEEDS_REVIEW"
+                                and verdict.get("review_reason") == "missing_attachment")
             missing_doc = None
             si_conflict = None
             si_source = None
@@ -572,6 +813,7 @@ def get_email_content(email_id: str):
             # shows actual content and it becomes editable/auditable.
             generated_rel = None
             generated_si_text = None
+            si_missing_fields = []
             if extract_inline_si_fields(email_data.get("body", "")):
                 generated_rel = _materialize_inline_si(email_id, email_data)
                 if generated_rel:
@@ -579,6 +821,14 @@ def get_email_content(email_id: str):
                     email_info["si_fields"] = email_data.get("generated_si_fields") or {}
                     email_info["si_provenance"] = email_data.get("generated_si_provenance") or {}
                     email_info["generated_si"] = generated_rel
+                    # Completeness gate: fields the extractor could not fill —
+                    # chasing the carrier for a BL on an incomplete SI is
+                    # premature; the sender should complete the SI first.
+                    si_missing_fields = [
+                        f for f in DEFECT_FIELDS
+                        if not str((email_data.get("generated_si_fields") or {}).get(f) or "").strip()
+                        or str((email_data.get("generated_si_fields") or {}).get(f)).strip().upper() in ("MISSING_VALUE", "ERROR")
+                    ]
 
             # Work out which document is missing from the one attachment
             # that did arrive — filename convention first, then content.
@@ -654,6 +904,7 @@ def get_email_content(email_id: str):
                 "si_conflict": si_conflict,
                 "si_inline": bool(generated_rel),
                 "generated_si": generated_rel,
+                "si_missing_fields": si_missing_fields,
                 "is_corrupted": is_corrupted,
                 "corrupt_reason": corrupt_reason,
                 "issue_details": issue_detail,
@@ -707,6 +958,7 @@ def get_email_content(email_id: str):
             "si_conflict": si_conflict,
             "si_inline": bool(body_inline),
             "generated_si": None,
+            "si_missing_fields": [],
             "is_corrupted": is_corrupt,
             "corrupt_reason": "unreadable" if is_corrupt else None,
             "issue_details": issue_detail,
@@ -1439,18 +1691,30 @@ def process_inbound_reply(
     }
     _add_thread_message(target_id, reply_msg)
 
+    # A reply carrying the draft BL completes the document pair — ingest it
+    # as a real attachment and auto-verify against the SI. Replies without
+    # a BL document (acknowledgments etc.) do not close the case.
+    bl_rel, auto_verdict = _ingest_reply_bl(target_id, attachments)
+
     # Auto-update status of chasers
     if target_id in CHASERS_STORE:
-        CHASERS_STORE[target_id]["status"] = "REPLY_RECEIVED"
-        CHASERS_STORE[target_id]["reply_received_at"] = now
-        CHASERS_STORE[target_id]["reply_sender"] = from_addr
-        CHASERS_STORE[target_id]["reply_preview"] = body[:200]
+        ch = CHASERS_STORE[target_id]
+        ch["status"] = "BL_RECEIVED" if bl_rel else "REPLY_RECEIVED"
+        ch["reply_received_at"] = now
+        ch["reply_sender"] = from_addr
+        ch["reply_preview"] = body[:200]
+        if bl_rel:
+            ch["bl_received_at"] = now
+            ch["bl_received_file"] = bl_rel
+            ch["auto_verdict"] = (auto_verdict or {}).get("status")
+        _persist_audit_state()
 
     _log_to_supabase_audit(target_id, "INBOUND_REPLY_RECEIVED", {
         "from": from_addr,
         "subject": subject,
         "preview": body[:120],
-        "has_attachments": bool(attachments)
+        "has_attachments": bool(attachments),
+        "bl_ingested": bl_rel
     })
 
     return {
@@ -1458,7 +1722,9 @@ def process_inbound_reply(
         "email_id": target_id,
         "message": f"Inbound reply successfully captured and linked to thread {target_id}",
         "record": reply_msg,
-        "thread_length": len(EMAIL_THREADS_STORE.get(target_id, []))
+        "thread_length": len(EMAIL_THREADS_STORE.get(target_id, [])),
+        "bl_ingested": bl_rel,
+        "auto_verdict": auto_verdict
     }
 
 @app.get("/api/email/{email_id}/thread")
@@ -1714,7 +1980,6 @@ REAL_GMAIL_ITEMS = []
 _DOSSIER_CACHE = {}
 
 LAYA_AGENT = None
-_LAYA_LOAD_LOCK = threading.Lock()
 _LAYA_STATS = {"calls": 0, "total_ms": 0.0}
 _NEURAL_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="laya")
 
@@ -1729,18 +1994,14 @@ MARITIME_CATEGORIES = {
 }
 
 def _get_laya_agent():
+    # Delegates to the shared loader in pipeline.ai_engine so the ~421M
+    # weights load once per process across the inbox-dossier endpoints and
+    # the batch pipeline.
     global LAYA_AGENT
     if not LAYA_AVAILABLE:
         return None
     if LAYA_AGENT is None:
-        with _LAYA_LOAD_LOCK:  # pool workers race here on first enrich — load once
-            if LAYA_AGENT is None:
-                try:
-                    print("[LAYA] Loading neural agent (convaiinnovations/laya)...", flush=True)
-                    LAYA_AGENT = laya.load("convaiinnovations/laya")
-                    print(f"[LAYA] ModernBERT neural agent loaded: {LAYA_AGENT}", flush=True)
-                except Exception as e:
-                    print(f"[LAYA] Neural agent unavailable, rules-only mode: {e}", flush=True)
+        LAYA_AGENT = _shared_laya_agent()
     return LAYA_AGENT
 
 def _clean_mime_header(raw_header):
@@ -3101,13 +3362,28 @@ def _queue_item(eid, d):
     corrupted = corrupt_issue is not None
     has_bl = _has_bl_attachment(atts)
     missing_bl = (not has_bl) and _is_bl_relevant_subject(subj)
-    # SI submitted inline in the email body — no SI attachment at all,
-    # draft BL still owed by the carrier.
-    si_inline = len(atts) == 0 and bool(extract_inline_si_fields(body))
+    # SI submitted inline in the email body — persists as a tag once the
+    # body SI has been materialized, even after a reply BL is ingested.
+    si_inline = bool(d.get("generated_si")) or (len(atts) == 0 and bool(extract_inline_si_fields(body)))
     det = classify_email_detailed(subj, body, len(atts) > 0)
     category = CLASSIFICATIONS_STORE.get(eid) or det["category"]
-    chaser_status = CHASERS_STORE.get(eid, {}).get("status")
+    chaser = CHASERS_STORE.get(eid, {})
+    chaser_status = chaser.get("status")
+    chaser_sent_at = chaser.get("chaser_sent_at")
     corrupt_action = CORRUPTED_STORE.get(eid, {}).get("status")
+
+    # Chaser aging — an unanswered chase past the threshold is overdue.
+    chaser_age_days = None
+    if chaser_sent_at:
+        try:
+            sent_dt = datetime.fromisoformat(str(chaser_sent_at).replace("Z", "+00:00"))
+            chaser_age_days = (datetime.now(timezone.utc) - sent_dt).days
+        except Exception:
+            chaser_age_days = None
+    overdue = (chaser_age_days is not None
+               and chaser_age_days >= CHASER_OVERDUE_DAYS
+               and not resolved and not has_bl
+               and chaser_status != "BL_RECEIVED")
 
     threads = EMAIL_THREADS_STORE.get(eid, [])
     inbound_replies = [m for m in threads if m.get("direction") == "INBOUND"]
@@ -3116,12 +3392,17 @@ def _queue_item(eid, d):
 
     if resolved:
         queue_status = "RESOLVED"
+    elif chaser.get("bl_received_at") and verdict_status:
+        # BL arrived via reply and was auto-verified — surface the verdict.
+        queue_status = verdict_status
     elif has_reply:
         queue_status = "REPLY_RECEIVED"
     elif verdict_status:
         queue_status = verdict_status
     elif corrupted:
         queue_status = "CORRUPTED"
+    elif overdue:
+        queue_status = "OVERDUE"
     elif missing_bl:
         queue_status = "MISSING_BL"
     else:
@@ -3131,6 +3412,7 @@ def _queue_item(eid, d):
         "email_id": eid,
         "subject": subj,
         "from": d.get("from", "Unknown"),
+        "audience": _sender_audience(d.get("from", "")),
         "attachments_count": len(atts),
         "category": category,
         "subcategory": det["subcategory"],
@@ -3148,6 +3430,9 @@ def _queue_item(eid, d):
         "summary_reason": verdict.get("summary_reason") if verdict else None,
         "resolved": resolved,
         "chaser_status": chaser_status,
+        "chaser_sent_at": chaser_sent_at,
+        "chaser_age_days": chaser_age_days,
+        "overdue": overdue,
         "corrupt_action": corrupt_action,
         "queue_status": queue_status,
         "_missing_bl": missing_bl,
@@ -3168,11 +3453,20 @@ def _queue_match(item, flt):
     if flt == "missing_bl":
         return item["_missing_bl"]
     if flt == "si_inline":
-        return item["si_inline"]
+        # "Awaiting BL" work queue — items whose draft BL has arrived leave it.
+        return item["si_inline"] and not item["has_bl"]
+    if flt == "overdue":
+        return item["overdue"]
     if flt == "corrupted":
         return item["corrupted"]
     if flt == "resolved":
         return item["resolved"]
+    if flt == "verified":
+        # Only BL-comparison mail goes through verification — other
+        # categories (SI requests, invoice queries, general, spam) never
+        # need a verdict and must not appear on the Verified page.
+        return item["category"] == "BL_COMPARISON" \
+            and (item["verdict_status"] == "OK" or item["resolved"])
     if flt == "chaser_sent":
         return item["chaser_status"] is not None
     if flt == "reply_received":
@@ -3181,7 +3475,7 @@ def _queue_match(item, flt):
 
 
 @app.get("/api/queue")
-def get_queue(filter: str = "all", search: str = "", page: int = 1, limit: int = 50):
+def get_queue(filter: str = "all", audience: str = "all", search: str = "", page: int = 1, limit: int = 50):
     _ensure_corrupted_cache()
     items = []
     files = sorted([f for f in os.listdir(INBOX_DIR) if f.endswith('.json')])
@@ -3200,13 +3494,19 @@ def get_queue(filter: str = "all", search: str = "", page: int = 1, limit: int =
         "needs_review": sum(1 for i in items if _queue_match(i, "needs_review")),
         "missing_bl": sum(1 for i in items if _queue_match(i, "missing_bl")),
         "si_inline": sum(1 for i in items if _queue_match(i, "si_inline")),
+        "overdue": sum(1 for i in items if _queue_match(i, "overdue")),
         "corrupted": sum(1 for i in items if _queue_match(i, "corrupted")),
         "resolved": sum(1 for i in items if _queue_match(i, "resolved")),
+        "verified": sum(1 for i in items if _queue_match(i, "verified")),
         "chaser_sent": sum(1 for i in items if _queue_match(i, "chaser_sent")),
         "reply_received": sum(1 for i in items if _queue_match(i, "reply_received")),
+        "internal": sum(1 for i in items if i["audience"] == "internal"),
+        "customer": sum(1 for i in items if i["audience"] == "customer"),
     }
 
     filtered = [i for i in items if _queue_match(i, filter)]
+    if audience != "all":
+        filtered = [i for i in filtered if i["audience"] == audience]
     if search:
         s = search.lower()
         filtered = [i for i in filtered if s in i["email_id"].lower()
@@ -3753,12 +4053,13 @@ def get_audit():
 # ---------------------------------------------------------------------------
 # Batch pipeline runner (submission generation)
 # ---------------------------------------------------------------------------
-PIPELINE_STATE = {
+_PIPELINE_DEFAULTS = {
     "running": False, "processed": 0, "total": 0, "current": None,
     "done": False, "error": None, "skipped": 0,
     "finished_at": None, "supabase": None, "cancel_requested": False,
     "resume": True, "partial": False,
 }
+PIPELINE_STATE = dict(_PIPELINE_DEFAULTS)
 SUBMISSION_STORE = {}
 _SUBMISSION_META = {}
 
@@ -4016,6 +4317,147 @@ def pipeline_submission():
 
 
 # ---------------------------------------------------------------------------
+# Demo reset (wipe verification data for a cold-start re-run)
+# ---------------------------------------------------------------------------
+class ResetRequest(BaseModel):
+    confirm: str = ""
+    wipe_local: bool = True
+    wipe_supabase: bool = True
+    wipe_threads: bool = True
+    dry_run: bool = False
+
+
+def _reset_local_report(wipe_threads: bool):
+    """Snapshot what a local wipe would clear; also used as the live report."""
+    stores = {
+        "verdicts": len(VERDICTS_STORE),
+        "classifications": len(CLASSIFICATIONS_STORE),
+        "resolutions": len(RESOLUTIONS_STORE),
+        "corrupted": len(CORRUPTED_STORE),
+        "chasers": len(CHASERS_STORE),
+        "doc_edits": len(DOC_EDITS_STORE),
+        "dispatched_emails": len(DISPATCHED_EMAILS_STORE),
+        "submission": len(SUBMISSION_STORE),
+        "submission_meta": len(_SUBMISSION_META),
+        "agent_sessions": len(AGENT_SESSIONS),
+    }
+    if wipe_threads:
+        stores["email_threads"] = len(EMAIL_THREADS_STORE)
+    files = [
+        SUBMISSION_PATH,
+        os.path.join(os.path.dirname(SUBMISSION_PATH), "verification_details.json"),
+        AUDIT_PERSIST_PATH,
+    ]
+    if wipe_threads:
+        files.append(EMAIL_THREADS_FILE)
+    files_present = [f for f in files if os.path.exists(f)]
+    files_missing = [f for f in files if not os.path.exists(f)]
+    return {
+        "stores": stores,
+        "files_present": files_present,
+        "files_missing": files_missing,
+        "preserved": [INBOX_DIR, os.path.join(BASE_DIR, ".cache", "llm_cache.json")],
+    }
+
+
+def _reset_supabase_report(execute: bool):
+    """Count/delete Supabase rows. execute=False just counts (dry run)."""
+    service_role = bool(os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("supabase_service_role"))
+    report = {"service_role": service_role}
+    if not service_role:
+        report["error"] = ("Supabase DELETE requires the service role key "
+                           "(no public DELETE policy in the schema); none configured.")
+        return report
+    try:
+        sb = get_supabase()
+        if not sb:
+            report["error"] = "Supabase client not available"
+            return report
+        v_before = sb.table("verifications").select("id", count="exact").execute()
+        a_before = sb.table("audit_logs").select("id", count="exact").execute()
+        report["verifications_before"] = v_before.count or 0
+        report["audit_logs_before"] = a_before.count or 0
+        if execute:
+            sb.table("audit_logs").delete().gte("id", 0).execute()
+            sb.table("verifications").delete().neq("id", "").execute()
+        v_after = sb.table("verifications").select("id", count="exact").execute()
+        a_after = sb.table("audit_logs").select("id", count="exact").execute()
+        report["verifications_remaining"] = v_after.count or 0
+        report["audit_logs_remaining"] = a_after.count or 0
+        report["verifications_deleted"] = report["verifications_before"] - report["verifications_remaining"]
+        report["audit_logs_deleted"] = report["audit_logs_before"] - report["audit_logs_remaining"]
+        if execute and (report["verifications_remaining"] > 0 or report["audit_logs_remaining"] > 0):
+            report["error"] = ("Delete blocked — rows remain after DELETE "
+                               "(almost certainly RLS; service role required).")
+    except Exception as e:
+        report["error"] = str(e)
+    return report
+
+
+@app.post("/api/admin/reset")
+def admin_reset(req: ResetRequest):
+    if not req.dry_run and req.confirm != "RESET":
+        raise HTTPException(status_code=400, detail="confirm must be exactly 'RESET'")
+    if PIPELINE_STATE.get("running"):
+        raise HTTPException(status_code=409, detail="pipeline is running; cancel it before resetting")
+
+    started = time.time()
+    local = {}
+    supabase = {}
+
+    if req.dry_run:
+        if req.wipe_local:
+            local = _reset_local_report(req.wipe_threads)
+            local["files_deleted"] = []
+            local["stores_cleared"] = {k: 0 for k in local["stores"]}
+        if req.wipe_supabase:
+            supabase = _reset_supabase_report(execute=False)
+    else:
+        if req.wipe_local:
+            local = _reset_local_report(req.wipe_threads)
+            cleared = {}
+            for name, store in (
+                ("verdicts", VERDICTS_STORE),
+                ("classifications", CLASSIFICATIONS_STORE),
+                ("resolutions", RESOLUTIONS_STORE),
+                ("corrupted", CORRUPTED_STORE),
+                ("chasers", CHASERS_STORE),
+                ("doc_edits", DOC_EDITS_STORE),
+                ("dispatched_emails", DISPATCHED_EMAILS_STORE),
+                ("submission", SUBMISSION_STORE),
+                ("submission_meta", _SUBMISSION_META),
+                ("agent_sessions", AGENT_SESSIONS),
+            ):
+                cleared[name] = len(store)
+                store.clear()
+            if req.wipe_threads:
+                cleared["email_threads"] = len(EMAIL_THREADS_STORE)
+                EMAIL_THREADS_STORE.clear()
+            PIPELINE_STATE.clear()
+            PIPELINE_STATE.update(_PIPELINE_DEFAULTS)
+            files_deleted = []
+            for f in local["files_present"]:
+                try:
+                    os.remove(f)
+                    files_deleted.append(f)
+                except Exception as e:
+                    local.setdefault("errors", []).append(f"{f}: {e}")
+            local["stores_cleared"] = cleared
+            local["files_deleted"] = files_deleted
+        if req.wipe_supabase:
+            supabase = _reset_supabase_report(execute=True)
+
+    return {
+        "status": "ok",
+        "dry_run": req.dry_run,
+        "timestamp": _utcnow(),
+        "local": local,
+        "supabase": supabase,
+        "duration_ms": int((time.time() - started) * 1000),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Submission vs ground-truth scoring
 # ---------------------------------------------------------------------------
 GROUND_TRUTH_PATH = os.path.join(BASE_DIR, "sdoc-hackathon-docker", "data_v2", "ground_truth.json")
@@ -4043,6 +4485,14 @@ def compare_submission():
         raise HTTPException(status_code=404, detail=f"ground_truth.json not found at {GROUND_TRUTH_PATH}")
     with open(GROUND_TRUTH_PATH, 'r', encoding='utf-8') as f:
         truth = json.load(f)
+    # Judge-uploaded datasets carry their own ground truth — merge it so the
+    # uploaded emails score too (remapped ids were applied at ingest time).
+    if os.path.exists(UPLOADED_GT_PATH):
+        try:
+            with open(UPLOADED_GT_PATH, 'r', encoding='utf-8') as f:
+                truth.update(json.load(f))
+        except Exception:
+            pass
 
     # Prefer the freshest submission: in-memory pipeline results, else the file.
     if SUBMISSION_STORE:
@@ -4103,9 +4553,46 @@ STRESS_STATE = {
     "running": False, "processed": 0, "total": 0, "current": None,
     "done": False, "error": None, "cancel_requested": False,
     "started_at": None, "finished_at": None, "elapsed_seconds": None,
+    "recent": [],
 }
 STRESS_RESULTS = {}   # email_id -> predicted verdict
 STRESS_METRICS = None
+_STRESS_GT_MAP = {}   # eid -> ground truth row, loaded once per run for labels
+
+
+def _stress_engines_info():
+    """Which engine tiers this pipeline can actually reach — shown in the UI
+    so a run is transparent about regex vs Laya vs the LLM."""
+    try:
+        return {
+            "llm_model": _ai_engine.MODEL,
+            "ai_fallback": bool(getattr(_ai_engine, "AI_FALLBACK_ENABLED", False)),
+            "laya_installed": bool(getattr(_ai_engine, "LAYA_AVAILABLE", False)),
+            "laya_loaded": getattr(_ai_engine, "_LAYA_AGENT", None) is not None,
+        }
+    except Exception:
+        return {}
+
+
+def _engine_summary(result):
+    """Condense a verdict's details.provenance into a compact per-stage map:
+    classifier -> 'laya'|'rule'|'model'|'fallback', extractors -> 'rule'|
+    'model'|'vision' (or 'a+b' when mixed), intent -> same label space."""
+    det = result.get("details") or {}
+
+    def _tier(prov):
+        vals = {v for v in (prov or {}).values() if v and v != "missing"}
+        if not vals:
+            return None
+        return "+".join(sorted(vals)) if len(vals) > 1 else next(iter(vals))
+
+    return {
+        "classifier": det.get("classification_provenance"),
+        "intent": det.get("intent_provenance"),
+        "si_extract": _tier(det.get("si_provenance")),
+        "bl_extract": _tier(det.get("bl_provenance")),
+        "si_source": det.get("si_source"),
+    }
 
 
 def _load_stress_gt():
@@ -4182,6 +4669,7 @@ def _stress_compute_metrics(results, gt):
                 "email_id": eid, "test_type": tt,
                 "expected": {k: g.get(k) for k in ("category", "status", "review_reason", "defect_fields")},
                 "predicted": {k: pred.get(k) for k in ("category", "status", "review_reason", "defect_fields")},
+                "engine": pred.get("engine"),
                 "error": pred.get("error"),
                 "diffs": _stress_verdict_diffs(pred, g),
             })
@@ -4244,8 +4732,15 @@ def _stress_process_file(fname):
         with open(path, 'r', encoding='utf-8') as fl:
             email_data = json.load(fl)
         eid = email_data.get("email_id") or fname.replace('.json', '')
+        # Live transparency — which case is in flight right now
+        STRESS_STATE["current"] = {
+            "id": eid,
+            "subject": (email_data.get("subject") or "")[:90],
+            "test_type": (_STRESS_GT_MAP.get(eid) or {}).get("test_type"),
+        }
         try:
             result, _, _ = process_email(email_data, bundle_dir=STRESS_DIR)
+            result["engine"] = _engine_summary(result)
             return eid, result
         except Exception as e:
             return eid, {
@@ -4271,6 +4766,14 @@ def _stress_worker(files):
             for eid, result in pool.map(_stress_process_file, files):
                 STRESS_RESULTS[eid] = result
                 STRESS_STATE["processed"] += 1
+                recent = STRESS_STATE.setdefault("recent", [])
+                recent.insert(0, {
+                    "id": eid,
+                    "status": result.get("status"),
+                    "engine": result.get("engine"),
+                    "test_type": (_STRESS_GT_MAP.get(eid) or {}).get("test_type"),
+                })
+                del recent[8:]
                 if STRESS_STATE["cancel_requested"]:
                     STRESS_STATE["error"] = "cancelled"
                     break
@@ -4317,6 +4820,7 @@ def stress_dataset_info():
         "by_test_type": dict(sorted(by_type.items())),
         "by_status": dict(sorted(by_status.items())),
         "has_saved_results": os.path.exists(STRESS_RESULTS_PATH),
+        "engines": _stress_engines_info(),
     }
 
 
@@ -4355,12 +4859,15 @@ def stress_run(req: StressRunRequest):
         files = files[:req.limit]
 
     STRESS_RESULTS.clear()
+    _STRESS_GT_MAP.clear()
+    _STRESS_GT_MAP.update(_load_stress_gt())
     STRESS_STATE.update({
         "running": True, "processed": 0, "total": len(files),
         "current": None, "done": False, "error": None,
         "cancel_requested": False, "started_at": _utcnow(),
         "finished_at": None, "elapsed_seconds": None,
         "workers": max(1, min(req.workers, 32)),
+        "recent": [],
     })
     threading.Thread(target=_stress_worker, args=(files,), daemon=True).start()
     return {"started": True, "total": len(files)}
@@ -4376,7 +4883,8 @@ def stress_cancel():
 
 @app.get("/api/stress/status")
 def stress_status():
-    return dict(STRESS_STATE, metrics=STRESS_METRICS, result_count=len(STRESS_RESULTS))
+    return dict(STRESS_STATE, metrics=STRESS_METRICS, result_count=len(STRESS_RESULTS),
+                engines=_stress_engines_info())
 
 
 @app.get("/api/stress/results")
@@ -4423,6 +4931,7 @@ def stress_run_one(req: StressRunOneRequest):
         email_data = json.load(f)
     try:
         pred, si_fields, bl_fields = process_email(email_data, bundle_dir=STRESS_DIR)
+        pred["engine"] = _engine_summary(pred)
         error = None
     except Exception as e:
         pred, si_fields, bl_fields = {
@@ -4442,6 +4951,512 @@ def stress_run_one(req: StressRunOneRequest):
         "diffs": _stress_verdict_diffs(pred, gt) if gt else [],
     }
 
+
+# ---------------------------------------------------------------------------
+# Dataset upload — a judge drops a secret test set (zip or loose files); it is
+# archived to Supabase Storage AND ingested into the live inbox + stress
+# dataset, so every tool (queue, verify, pipeline, scoring) sees the new mail.
+# ---------------------------------------------------------------------------
+UPLOADED_GT_PATH = os.path.join(os.path.dirname(GROUND_TRUTH_PATH), "uploaded_ground_truth.json")
+UPLOADS_MANIFEST_PATH = os.path.join(BASE_DIR, "uploaded_datasets.json")
+SUPABASE_DATASET_BUCKET = "datasets"
+UPLOAD_MAX_BYTES = 300 * 1024 * 1024
+
+_EMAIL_SHAPE_KEYS = ("subject", "body", "from", "attachments", "email_id")
+
+
+def _looks_like_email_json(obj):
+    return isinstance(obj, dict) and any(k in obj for k in _EMAIL_SHAPE_KEYS)
+
+
+def _looks_like_gt_json(obj):
+    return isinstance(obj, dict) and bool(obj) and all(isinstance(v, dict) for v in obj.values())
+
+
+def _fresh_email_id(want, used):
+    """Keep the uploaded id when free; on collision suffix _u1, _u2, …"""
+    eid = want or "email"
+    n = 1
+    while (eid in used or _email_exists(eid)
+           or os.path.exists(os.path.join(STRESS_INBOX_DIR, f"{eid}.json"))):
+        eid = f"{want}_u{n}"
+        n += 1
+    used.add(eid)
+    return eid
+
+
+def _atomic_json_dump(path, obj):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(obj, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, path)
+
+
+def _upload_dataset_archive(name, blob, ts):
+    """Best-effort archive of the uploaded dataset zip into Supabase Storage."""
+    sb = get_supabase()
+    if not sb:
+        return "skipped (Supabase not configured)"
+    bucket = SUPABASE_DATASET_BUCKET
+    path = f"uploads/{ts}/{os.path.basename(name)}"
+    opts = {"content-type": "application/zip", "x-upsert": "true"}
+    try:
+        try:
+            sb.storage.from_(bucket).upload(path, blob, opts)
+        except Exception:
+            # Bucket probably doesn't exist yet — create it (needs service key)
+            # then retry once.
+            sb.storage.create_bucket(bucket, options={"public": False})
+            sb.storage.from_(bucket).upload(path, blob, opts)
+        return f"saved → storage bucket '{bucket}/{path}'"
+    except Exception as e:
+        return f"error ({type(e).__name__}: {e})"
+
+
+@app.post("/api/stress/upload")
+async def stress_upload_dataset(files: List[UploadFile] = File(...)):
+    """Ingest an uploaded dataset into the whole system.
+
+    Accepts a .zip (bundle layout: inbox/*.json + attachments/* + optional
+    *ground_truth*.json) or a loose multi-file selection. Emails land in both
+    the live inbox (queue/verify/pipeline/submission) and the stress dataset
+    (accuracy metrics); ground truth is merged into both scorers. The raw
+    archive is pushed to Supabase Storage for persistence.
+    """
+    # 1) Collect (relpath, bytes) — unzip archives in memory, keep loose files.
+    payloads = []          # (relpath, bytes)
+    skipped = []
+    zip_blobs = []         # (name, raw bytes) for the Supabase archive
+    total_bytes = 0
+    for uf in files:
+        data = await uf.read()
+        name = uf.filename or "file"
+        if not data:
+            skipped.append({"file": name, "reason": "empty file"})
+            continue
+        total_bytes += len(data)
+        if total_bytes > UPLOAD_MAX_BYTES:
+            raise HTTPException(status_code=413, detail="upload exceeds the 300 MB limit")
+        if name.lower().endswith(".zip"):
+            zip_blobs.append((name, data))
+            try:
+                zf = zipfile.ZipFile(io.BytesIO(data))
+            except zipfile.BadZipFile:
+                raise HTTPException(status_code=400, detail=f"{name}: not a valid zip archive")
+            if len(zf.infolist()) > 20000:
+                raise HTTPException(status_code=400, detail=f"{name}: too many entries in zip")
+            for info in zf.infolist():
+                if info.is_dir():
+                    continue
+                rp = info.filename.replace("\\", "/").lstrip("/")
+                if not rp or rp.startswith("..") or "/../" in rp:
+                    continue  # zip-slip guard
+                base = os.path.basename(rp)
+                if not base or base.startswith(".") or "__MACOSX" in rp:
+                    continue
+                payloads.append((rp, zf.read(info)))
+        else:
+            payloads.append((name, data))
+
+    if not payloads:
+        raise HTTPException(status_code=400, detail="no usable files in upload")
+
+    # Loose files (no zip) get repackaged so Supabase always receives an archive.
+    if not zip_blobs:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for rp, data in payloads:
+                zf.writestr(rp.replace("\\", "/"), data)
+        zip_blobs.append(("dataset_upload.zip", buf.getvalue()))
+
+    # 2) Classify payloads: emails vs ground truth vs attachments.
+    emails = []            # (relpath, dict)
+    gt = {}                # eid -> expected verdict
+    gt_sources = []
+    attachments = {}       # basename -> bytes (first wins)
+    for rp, data in payloads:
+        base = os.path.basename(rp)
+        low = base.lower()
+        parent = os.path.basename(os.path.dirname(rp.replace("\\", "/"))).lower()
+        if not low.endswith(".json") or parent == "attachments":
+            attachments.setdefault(base, data)
+            continue
+        try:
+            obj = json.loads(data.decode("utf-8"))
+        except Exception:
+            skipped.append({"file": rp, "reason": "unparsable json"})
+            continue
+        if "ground_truth" in low and _looks_like_gt_json(obj):
+            gt.update(obj)
+            gt_sources.append(rp)
+        elif _looks_like_email_json(obj):
+            emails.append((rp, obj))
+        else:
+            skipped.append({"file": rp, "reason": "unrecognized json (not an email, not ground truth)"})
+
+    if not emails:
+        raise HTTPException(
+            status_code=400,
+            detail="no email JSONs found — expected inbox/*.json email records "
+                   "(with subject/body/from/attachments keys)")
+
+    # 3) Write emails + attachments into the live bundle AND the stress dataset.
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    used_ids = set()
+    ingested, renamed = [], {}
+    att_saved = 0
+    att_lower = {k.lower(): v for k, v in attachments.items()}
+    for i, (rp, em) in enumerate(sorted(emails, key=lambda t: t[0])):
+        want = str(em.get("email_id") or os.path.splitext(os.path.basename(rp))[0])
+        new_eid = _fresh_email_id(want, used_ids)
+        if new_eid != want:
+            renamed[want] = new_eid
+        em = dict(em)
+        em["email_id"] = new_eid
+
+        new_atts = []
+        for j, att in enumerate(em.get("attachments") or []):
+            base = os.path.basename(str(att).replace("\\", "/"))
+            blob = attachments.get(base) or att_lower.get(base.lower())
+            if blob is None:
+                new_atts.append(att)  # referenced but not uploaded — pipeline flags it
+                continue
+            # Neutral unique prefix — keeps the original basename (and its
+            # _SI/_BL markers) while never colliding with existing files.
+            fname = f"u{ts}_{i:03d}_{j}_{base}"
+            for dest_dir in (os.path.join(BUNDLE_DIR, "attachments"),
+                             os.path.join(STRESS_DIR, "attachments")):
+                os.makedirs(dest_dir, exist_ok=True)
+                with open(os.path.join(dest_dir, fname), "wb") as fh:
+                    fh.write(blob)
+            new_atts.append(f"attachments/{fname}")
+            att_saved += 1
+        em["attachments"] = new_atts
+
+        payload = json.dumps(em, indent=2, ensure_ascii=False).encode("utf-8")
+        for d in (INBOX_DIR, STRESS_INBOX_DIR):
+            os.makedirs(d, exist_ok=True)
+            with open(os.path.join(d, f"{new_eid}.json"), "wb") as fh:
+                fh.write(payload)
+        INBOX_CACHE[new_eid] = em
+        ingested.append(new_eid)
+
+    ingested_set = set(ingested)
+
+    # 4) Merge ground truth (remapped to the new ids) into both scorers.
+    gt_merged = gt_ignored = 0
+    if gt:
+        mapped_gt = {}
+        for old_id, row in gt.items():
+            nid = renamed.get(old_id, old_id)
+            if nid in ingested_set and isinstance(row, dict):
+                row = dict(row)
+                row.setdefault("test_type", "uploaded")
+                mapped_gt[nid] = row
+        gt_ignored = len(gt) - len(mapped_gt)
+        if mapped_gt:
+            sgt = _load_stress_gt()
+            sgt.update(mapped_gt)
+            _atomic_json_dump(STRESS_GT_PATH, sgt)
+            ugt = {}
+            if os.path.exists(UPLOADED_GT_PATH):
+                try:
+                    with open(UPLOADED_GT_PATH, 'r', encoding='utf-8') as f:
+                        ugt = json.load(f)
+                except Exception:
+                    ugt = {}
+            ugt.update(mapped_gt)
+            _atomic_json_dump(UPLOADED_GT_PATH, ugt)
+            gt_merged = len(mapped_gt)
+
+    # 5) Archive the upload to Supabase Storage + record a local manifest.
+    supa_msgs = [_upload_dataset_archive(n, b, ts) for n, b in zip_blobs]
+    supabase_msg = "; ".join(supa_msgs)
+
+    manifest = []
+    if os.path.exists(UPLOADS_MANIFEST_PATH):
+        try:
+            with open(UPLOADS_MANIFEST_PATH, 'r', encoding='utf-8') as f:
+                manifest = json.load(f)
+        except Exception:
+            manifest = []
+    manifest.append({
+        "timestamp": _utcnow(),
+        "source_files": [uf.filename for uf in files],
+        "emails": ingested,
+        "renamed": renamed,
+        "ground_truth_rows": gt_merged,
+        "supabase": supabase_msg,
+    })
+    _atomic_json_dump(UPLOADS_MANIFEST_PATH, manifest)
+
+    invalidate_cache()
+
+    return {
+        "status": "ok",
+        "emails_ingested": len(ingested),
+        "attachments_saved": att_saved,
+        "ground_truth_rows": gt_merged,
+        "ground_truth_ignored": gt_ignored,
+        "renamed": renamed,
+        "skipped": skipped,
+        "supabase": supabase_msg,
+        "email_ids": ingested[:100],
+    }
+
+
+# ============================================================
+# Conversations — person-centric timeline over the inbox bundle
+# ============================================================
+
+_QUOTED_FROM_RX = re.compile(
+    r'^\s*From:\s*(?:(?P<name>.*?)\s*)?<(?P<addr>[^<>\s]+@[^<>\s]+)>\s*$')
+_QUOTED_SENT_RX = re.compile(r'^\s*Sent:\s*(?P<when>.+?)\s*$')
+_QUOTED_SUBJ_RX = re.compile(r'^\s*Subject:\s*(?P<subject>.*?)\s*$')
+_SEPARATOR_LINE_RX = re.compile(r'^_+\s*$')
+_SENT_DATE_RX = re.compile(r'([A-Za-z]+ \d{1,2}, \d{4} \d{1,2}:\d{2} [AP]M)')
+
+
+def _parse_sent_timestamp(raw):
+    """Parse a quoted `Sent:` header like 'Friday, January 1, 2026 9:54 PM'.
+    Weekday names are unreliable synthetic data — only the date is parsed."""
+    if not raw:
+        return None
+    m = _SENT_DATE_RX.search(raw)
+    if not m:
+        return None
+    try:
+        return datetime.strptime(m.group(1), "%B %d, %Y %I:%M %p").isoformat()
+    except ValueError:
+        return None
+
+
+def _strip_trailing_separators(lines):
+    while lines and (not lines[-1].strip() or _SEPARATOR_LINE_RX.match(lines[-1])):
+        lines.pop()
+    return lines
+
+
+def _parse_quoted_messages(body):
+    """Returns (top_text, quoted) where top_text is the portion written by the
+    email's own sender and quoted is the list of embedded prior messages,
+    in document order (newest-quoted first, as mail clients nest them)."""
+    lines = (body or "").splitlines()
+    starts = [i for i, ln in enumerate(lines) if _QUOTED_FROM_RX.match(ln)]
+    if not starts:
+        return (body or "").strip(), []
+
+    top_lines = _strip_trailing_separators(lines[:starts[0]])
+    top_text = "\n".join(top_lines).strip()
+
+    quoted = []
+    for idx, start in enumerate(starts):
+        end = starts[idx + 1] if idx + 1 < len(starts) else len(lines)
+        m = _QUOTED_FROM_RX.match(lines[start])
+        from_name = (m.group("name") or "").strip() or None
+        from_addr = (m.group("addr") or "").strip().lower()
+
+        sent_raw = None
+        subject = None
+        j = start + 1
+        # header lines (Sent:/Subject:) immediately follow the From: line
+        while j < end and j <= start + 3:
+            ms = _QUOTED_SENT_RX.match(lines[j])
+            mj = _QUOTED_SUBJ_RX.match(lines[j])
+            if ms:
+                sent_raw = ms.group("when")
+                j += 1
+            elif mj:
+                subject = mj.group("subject")
+                j += 1
+            else:
+                break
+        # skip the blank line separating headers from the quoted body
+        while j < end and not lines[j].strip():
+            j += 1
+        body_lines = _strip_trailing_separators(lines[j:end])
+        quoted.append({
+            "from_addr": from_addr,
+            "from_name": from_name,
+            "subject": subject,
+            "body": "\n".join(body_lines).strip(),
+            "timestamp": _parse_sent_timestamp(sent_raw),
+        })
+    return top_text, quoted
+
+
+def _display_name_for(address, quoted_name=None):
+    if quoted_name:
+        return quoted_name
+    local = (address or "").split("@")[0]
+    parts = [p for p in re.split(r'[._\-+]', local) if p]
+    return " ".join(p.capitalize() for p in parts) or address
+
+
+def _inferred_top_timestamp(quoted):
+    """A top-level email is a reply to what it quotes, so it is newer:
+    max(its quoted timestamps) + 1 minute. None when nothing is dated."""
+    dated = [q["timestamp"] for q in quoted if q.get("timestamp")]
+    if not dated:
+        return None
+    latest = max(datetime.fromisoformat(t) for t in dated)
+    return (latest + timedelta(minutes=1)).isoformat()
+
+
+def _conversations_index():
+    """Single scan over the inbox building per-correspondent aggregates."""
+    people = {}
+    parsed = {}  # email_id -> (top_text, quoted, top_ts)
+    for eid, data in INBOX_CACHE.items():
+        if not data:
+            continue
+        body = data.get("body") or ""
+        top_text, quoted = _parse_quoted_messages(body)
+        top_ts = _inferred_top_timestamp(quoted)
+        parsed[eid] = (top_text, quoted, top_ts)
+
+        def _person(addr):
+            p = people.get(addr)
+            if p is None:
+                p = people[addr] = {
+                    "address": addr, "display_name": None,
+                    "sent_count": 0, "quoted_count": 0,
+                    "latest_at": None, "latest_subject": None,
+                    "_fallback_subject": None,
+                }
+            return p
+
+        sname, saddr = parseaddr(data.get("from") or "")
+        sender = (saddr or data.get("from") or "").strip().lower()
+        if sender:
+            p = _person(sender)
+            if sname and not p["display_name"]:
+                p["display_name"] = sname.strip()
+            p["sent_count"] += 1
+            p["_fallback_subject"] = data.get("subject") or p["_fallback_subject"]
+            if top_ts and (p["latest_at"] is None or top_ts > p["latest_at"]):
+                p["latest_at"] = top_ts
+                p["latest_subject"] = data.get("subject")
+        for q in quoted:
+            addr = q.get("from_addr")
+            if not addr:
+                continue
+            p = _person(addr)
+            p["quoted_count"] += 1
+            if q.get("from_name") and not p["display_name"]:
+                p["display_name"] = q["from_name"]
+            ts = q.get("timestamp")
+            if ts and (p["latest_at"] is None or ts > p["latest_at"]):
+                p["latest_at"] = ts
+                p["latest_subject"] = q.get("subject")
+    return people, parsed
+
+
+@app.get("/api/conversations")
+def get_conversations():
+    people, _ = _conversations_index()
+    out = []
+    for addr, p in people.items():
+        out.append({
+            "address": addr,
+            "display_name": p["display_name"] or _display_name_for(addr),
+            "audience": _sender_audience(addr),
+            "sent_count": p["sent_count"],
+            "quoted_count": p["quoted_count"],
+            "total": p["sent_count"] + p["quoted_count"],
+            "latest_at": p["latest_at"],
+            "latest_subject": p["latest_subject"] or p["_fallback_subject"],
+        })
+    out.sort(key=lambda r: (-r["total"], r["address"]))
+    return {"people": out}
+
+
+def _norm_body_key(text):
+    return re.sub(r'\s+', ' ', (text or '').strip().lower())[:120]
+
+
+@app.get("/api/conversations/{address}")
+def get_conversation(address: str):
+    address = (address or "").strip().lower()
+    people, parsed = _conversations_index()
+    if address not in people:
+        raise HTTPException(status_code=404, detail=f"No messages for {address}")
+    pinfo = people[address]
+
+    messages = []
+    for eid, (top_text, quoted, top_ts) in parsed.items():
+        data = INBOX_CACHE.get(eid) or {}
+        sender = (parseaddr(data.get("from") or "")[1] or data.get("from") or "").strip().lower()
+        quoted_by_focus = [q for q in quoted if q.get("from_addr") == address]
+        if sender != address and not quoted_by_focus:
+            continue
+        messages.append({
+            "kind": "email",
+            "email_id": eid,
+            "from_addr": sender,
+            "from_name": _display_name_for(sender),
+            "subject": data.get("subject"),
+            "body": top_text,
+            "timestamp": top_ts,
+            "timestamp_source": "inferred" if top_ts else None,
+            "attachments": list(data.get("attachments") or []),
+            "is_focus": sender == address,
+            "also_in": [],
+        })
+        for q in quoted:
+            ts = q.get("timestamp")
+            messages.append({
+                "kind": "quoted",
+                "email_id": eid,
+                "from_addr": q.get("from_addr"),
+                "from_name": q.get("from_name") or _display_name_for(q.get("from_addr")),
+                "subject": q.get("subject"),
+                "body": q.get("body"),
+                "timestamp": ts,
+                "timestamp_source": "quoted_header" if ts else None,
+                "attachments": [],
+                "is_focus": q.get("from_addr") == address,
+                "also_in": [],
+            })
+
+    messages.sort(key=lambda m: (
+        m["timestamp"] is None, m["timestamp"] or "", m["email_id"]))
+
+    deduped = []
+    seen = {}
+    for m in messages:
+        if m["kind"] == "email":
+            deduped.append(m)
+            continue
+        key = (m["from_addr"], m["timestamp"], _norm_body_key(m["body"]))
+        prev = seen.get(key)
+        if prev is not None:
+            if m["email_id"] not in prev["also_in"] and m["email_id"] != prev["email_id"]:
+                prev["also_in"].append(m["email_id"])
+            continue
+        seen[key] = m
+        deduped.append(m)
+
+    sent_count = sum(1 for m in deduped if m["kind"] == "email" and m["is_focus"])
+    quoted_count = sum(1 for m in deduped if m["kind"] == "quoted" and m["is_focus"])
+    return {
+        "address": address,
+        "display_name": pinfo["display_name"] or _display_name_for(address),
+        "audience": _sender_audience(address),
+        "stats": {
+            "sent_count": sent_count,
+            "quoted_count": quoted_count,
+            "total": sent_count + quoted_count,
+            "message_count": len(deduped),
+            "dated": sum(1 for m in deduped if m["timestamp"]),
+            "undated": sum(1 for m in deduped if not m["timestamp"]),
+        },
+        "messages": deduped,
+    }
+
+
+_prewarm_inline_si()
 
 if __name__ == "__main__":
     _port = int(os.getenv("PORT", "8000"))
