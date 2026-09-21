@@ -9,6 +9,7 @@ tqdm
 pydantic
 pillow
 python-multipart
+supabase==2.28.3
 # Optional: Laya System-1 decision model for the email-triage neural tier.
 # NOT for Render free tier — pulls torch+transformers (~3GB). Installed by the
 # Modal image in modal_app.py for the live deployment; local/demo install:
