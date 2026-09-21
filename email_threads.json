@@ -355,5 +355,19 @@
         }
       ]
     }
+  ],
+  "gmail_30299": [
+    {
+      "id": "msg_out_fced75b3",
+      "direction": "OUTBOUND",
+      "message_id": "<averis-ops-gmail_30299-f6f91f38@averis-freight.com>",
+      "from_addr": "shiawyonglim@gmail.com",
+      "to_addr": "Ocean Carrier Operations <shiawyonglim@gmail.com>",
+      "subject": "Documentation Clearance Notice — URGENT DRAFT BL READY _ 5AKR-61849 _ PORT KLANG _ SIN832764835 [Ref: gmail_30299]",
+      "body": "Dear Shipper / Carrier Team,\n\nRegarding shipment ref [gmail_30299], all documentation cross-checks have completed. All 7 critical shipping attributes (shipper, consignee, notify party, ports, container count, and gross weight) have been verified.\n\nShipment Reference: gmail_30299\nStatus: APPROVED / CLEARED FOR ISSUANCE\n\nKind regards,\nShipping Documentation Operations Desk\nAveris Automated Logistics Pipeline",
+      "sent_at": "2026-09-21T09:31:57.417626+00:00",
+      "status": "DELIVERED",
+      "mode": "Live Google SMTP (smtp.gmail.com:587)"
+    }
   ]
 }

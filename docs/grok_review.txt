@@ -1,0 +1,41 @@
+1. Data Inconsistency on Dashboard
+
+Total Emails = 520 but Verified = 521
+This is a clear bug — verified count should never exceed total emails.
+
+2. Stress Lab is broken
+
+Shows “dataset missing”
+Cannot run stress tests or individual edge cases.
+The 2,000-email stress dataset is not available on the deployed version.
+
+3. Submission Builder has no submission yet
+
+“No submission yet” status.
+You still need to generate submission.json and score it against ground truth for the hackathon evaluation.
+
+4. Resolved count is stuck at 0
+
+Dashboard shows 0 Resolved even though there are 46 mismatches and 25 needing review.
+Human-in-the-loop resolution flow exists, but no cases appear to have been marked as resolved.
+
+5. High number of Missing Draft BLs
+
+216 Missing Draft BL is a large portion of the inbox.
+The system correctly flags them, but there is limited guidance on what operators should do next (only basic “chaser” features).
+
+6. Potential over-reliance on live LLM calls
+
+Verification sometimes shows “Analyzing via NVIDIA NIM…” in real time.
+This can be slow or fail if the NVIDIA NIM endpoint has latency/quota issues.
+For the basic stage, a more deterministic/local extraction + comparison would be more reliable.
+
+7. Limited evidence of advanced document handling
+
+Paper Scan UI exists (good for OCR / vision), but I couldn’t fully test real scanned PDFs/Word docs.
+Stress Lab being unavailable makes it hard to prove robustness on messy inputs, varied labels, or missing attachments.
+
+8. Minor UX / polish issues
+
+Some buttons/labels feel slightly crowded on smaller viewports.
+“Chasers Sent = 0” suggests the auto-chase feature hasn’t been actively used or tested end-to-end.
