@@ -63,17 +63,25 @@ CARRIERS = ["MSC", "CMA", "HAPAG", "OOCL", "EVERGREEN", "ONE", "PIL", "YANG MING
 # Carrier name -> regex matched against the SUBJECT only. Subjects encode
 # carriers as CODE(ref) e.g. ONE(SINF07365118), EVER(EGLV...), YM(YMJAI...).
 # Word boundaries prevent "ONE" matching PAPERONE/ZONE and "EVER" must not
-# match "EVERY".
+# match "EVERY". Container/booking prefixes (OOLU, EGLV, HLCU, ...) use a
+# leading boundary only — they are always glued to digits ("EGLV7547...").
 CARRIER_PATTERNS = {
-    "MSC": r'\bMSC\b',
-    "CMA": r'\bCMA\b',
-    "HAPAG": r'\bHAPAG\b|\bHLCU\b',
-    "OOCL": r'\bOOCL\b|\bOOLU\b',
-    "EVERGREEN": r'\bEVER\s*\(|\bEVERGREEN\b|\bEGLV\b',
-    "ONE": r'\bONE\s*\(',
-    "PIL": r'\bPIL\b',
-    "YANG MING": r'\bYM\s*\(|\bYANG\s*MING\b',
-    "MONTER": r'\bMONTER\b|\bMCLS\b',
+    "MSC": r'\bMSC\b|\bMEDU|\bMSCU',
+    "CMA": r'\bCMA\b|\bCMAU|\bCGMU',
+    "HAPAG": r'\bHAPAG\b|\bHLCU',
+    "OOCL": r'\bOOCL\b|\bOOLU',
+    "EVERGREEN": r'\bEVER\s*\(|\bEVERGREEN\b|\bEGLV',
+    "ONE": r'\bONE\s*\(|\bONEY',
+    "PIL": r'\bPIL\b|\bPILU',
+    "YANG MING": r'\bYM\s*\(|\bYANG\s*MING\b|\bYMJAI|\bYMLU',
+    "MONTER": r'\bMONTER\b|\bMCLS',
+}
+
+# Explicit carrier tag used by "SI - <ref> - DIRECT(<code>)" submissions.
+DIRECT_CARRIER_ALIASES = {
+    "OOCL": "OOCL", "PIL": "PIL", "CMA": "CMA", "ONE": "ONE",
+    "YM": "YANG MING", "EVER": "EVERGREEN", "HAPAG": "HAPAG",
+    "MSC": "MSC", "MONTER": "MONTER", "MCLS": "MONTER",
 }
 
 DEFECT_FIELDS = [
@@ -122,6 +130,11 @@ def _is_bl_relevant_subject(subject):
 
 def _detect_carrier(subj, body):
     text = (subj or "").upper()
+    # An explicit DIRECT(<code>) tag wins over any booking-ref prefix —
+    # e.g. "SIN706562729 - DIRECT(PIL)" is a PIL filing, whatever SIN means.
+    m = re.search(r'DIRECT\s*\(\s*([A-Z]+)\s*\)', text)
+    if m and m.group(1) in DIRECT_CARRIER_ALIASES:
+        return DIRECT_CARRIER_ALIASES[m.group(1)]
     for c in CARRIERS:
         if re.search(CARRIER_PATTERNS[c], text):
             return c

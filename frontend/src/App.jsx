@@ -64,13 +64,16 @@ const CARRIER_DESK_EMAILS = {
 }
 
 function getCarrierDeskEmail(carrier) {
-  if (!carrier) return 'carrier-desk@shippingline.com'
-  const upper = String(carrier).toUpperCase()
+  const upper = String(carrier || '').toUpperCase()
+  // Unknown/generic carrier — leave the shared desk placeholder for the
+  // operator to correct in the draft modal.
+  if (!upper || upper === 'SHIPPING LINE' || upper === 'LINER OPERATIONS DESK' || upper === 'OCEAN CARRIER DESK') {
+    return 'carrier-desk@shippingline.com'
+  }
   for (const [k, v] of Object.entries(CARRIER_DESK_EMAILS)) {
     if (upper.includes(k)) return v
   }
-  const clean = String(carrier).toLowerCase().replace(/[^a-z0-9]/g, '')
-  return `doc.desk@${clean || 'carrier'}-lines.com`
+  return 'carrier-desk@shippingline.com'
 }
 
 const AUDIT_DOT_COLORS = {
