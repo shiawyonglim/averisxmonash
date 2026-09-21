@@ -42,7 +42,16 @@ rules cannot. For every email in the inbox:
    punctuation, UN/LOCODE stripping, weight/count numeric extraction).
    Writing-style variations are accepted; value differences are flagged.
    A field that cannot be extracted escalates to `NEEDS_REVIEW` rather than
-   fabricating an `OK`.
+   fabricating an `OK`. An SI written **inline in the email body** is
+   materialized as a `generated_si` document — so a single-attachment email
+   carrying an inline SI still runs a real comparison against the attached
+   BL reply instead of being flagged `missing_attachment`.
+5. **Adjudicate** — every `MISMATCH` and `NEEDS_REVIEW` verdict runs a
+   Laya → Muse adjudication chain (`diagnose_mismatch` /
+   `adjudicate_review`) that explains *why* the verdict landed and stores
+   the diagnosis with provenance. Each stage of the pipeline records an
+   **engine trail** (`rule` / `laya` / `model` / `vision`) in
+   `verification_details.json`, surfaced per-decision in `/api/audit`.
 
 **Compared fields:** `shipper`, `consignee`, `notify_party`,
 `port_of_loading`, `port_of_discharge`, `container_count`, `gross_weight_kg`
@@ -67,16 +76,26 @@ catch.
 ## Project layout
 
 ```
-server.py               FastAPI backend (~20 endpoints: verify, queue,
-                        resolutions, chasers, audit, pipeline run, scoring)
+server.py               FastAPI backend (~55 endpoints: verify, queue,
+                        resolutions, chasers, audit, pipeline run, scoring,
+                        agent/chat, email send/receive, Supabase sync,
+                        dataset upload, admin reset)
 pipeline/
   main.py               Batch pipeline -> writes submission.json
-  ai_engine.py          LLM client (NVIDIA NIM), classify/extract/reason
+  ai_engine.py          LLM client (NVIDIA NIM), classify/extract/adjudicate
   comparator.py         7-field normalization + comparison logic
   edge_cases.py         Attachment/doc-type/unreadable checks
   parsers.py            Text extraction for txt/pdf/xlsx/docx
-frontend/               React 19 + Vite UI (dashboard, queue, verify,
-                        paper scan, audit, stress lab)
+  agent.py              Tool-calling ops agent (confirm-gated actions)
+  knowledge_base.py     RAG Q&A over inbox + verdicts + resolutions
+frontend/               React 19 + Vite UI (dashboard, assistant, queue,
+                        conversations, getter, verify, review, verified,
+                        cloud, audit, pipeline, stress lab, reset) with a
+                        driver.js guided judge tour (judgeTour.js)
+modal_app.py            Modal serverless deploy: FastAPI + compiled
+                        frontend + Laya weights in one container
+email_threads.json      Runtime thread tracker (inbound replies, chaser
+                        state, simulated carrier replies)
 sdoc-hackathon-bundle/  Dataset: inbox/ (520 emails) + attachments/
 sdoc-hackathon-docker/  Organizers' bundle: docker-compose.yml, server/,
                         data_v2/ dataset (its ground_truth.json and
@@ -86,7 +105,13 @@ tests/
   generate_stress_dataset.py      2,020-case edge/stress suite ->
                                   tests/stress_dataset/ (ground truth
                                   in stress_ground_truth.json)
+  generate_ood_dataset.py         Hand-written out-of-distribution set
   eval_synthetic_benchmark.py     CLI scorer; accepts a dataset dir arg
+  eval_ood.py                     OOD scorer (residual-gap analysis)
+  score_against_ground_truth.py   Score submission.json vs ground truth
+  edge_case_probe.py              Targeted edge-case probe
+test_conversations.py   Tests for the conversations/thread index
+test_inline_si.py       Tests for inline-body SI extraction + compare
 supabase_schema.sql     Postgres schema (verifications + audit_logs)
 submission.json         Pipeline output for all 520 emails
 docs/                   Hackathon info pack, rules, use case PDF
@@ -123,10 +148,36 @@ AI_FALLBACK=1
 # are free and exhaustion degrades to deterministic fallbacks (default 30)
 AI_MAX_CALLS=30
 
+# Optional — min calibrated confidence for the Laya System-1 neural tier to
+# own a classification/intent decision (default 0.6; needs `pip install laya`,
+# absent locally it degrades to rules -> LLM)
+LAYA_MIN_CONFIDENCE=0.6
+
+# Optional — gross-weight variance tolerance in percent (default 0 = exact)
+WEIGHT_TOLERANCE_PCT=0
+
 # Optional — Supabase (schema in supabase_schema.sql; not required to run)
 SUPABASE_URL=...
 SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
+
+# Optional — outbound email via Gmail SMTP (falls back to simulated send)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=...
+SMTP_PASSWORD=...        # Google App Password
+DEFAULT_SENDER=...
+
+# Optional — inbound email polling (IMAP)
+IMAP_HOST=...
+IMAP_PORT=993
+IMAP_USER=...
+IMAP_PASSWORD=...
+
+# Optional — real-Gmail ingestion endpoints (/api/getter/*). LOCAL DEMO ONLY:
+# keep unset/0 on public deploys — it exposes mailbox content and sends mail
+# via the stored SMTP credentials
+REAL_GMAIL_ENABLED=0
 ```
 
 Run the API (serves on `http://localhost:8000`):
@@ -160,30 +211,49 @@ by the organizers' `score_cli.py`.
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/inbox`, `/api/emails`, `/api/email/{id}` | Browse the inbox |
-| `POST /api/verify`, `GET /api/compare` | Run/inspect verification |
+| `GET /api/email/{id}/thread` | Full thread view incl. tracked replies |
+| `POST /api/email/{id}/save-documents`, `/restore-documents` | Edit/restore an email's SI+BL documents |
+| `POST /api/verify`, `GET /api/compare` | Run/inspect verification (re-verify returns diagnosis + engine trail) |
 | `POST /api/verify/scan` | Paper mode: multipart upload of SI + BL photos/scans (`si_file`, `bl_file`) — vision extraction + same 7-field audit |
-| `GET /api/queue`, `/api/stats` | Work queue + dashboard stats |
+| `GET /api/queue`, `/api/queue/adjacent`, `/api/stats` | Work queue, prev/next navigation, dashboard stats |
 | `POST /api/resolve`, `GET /api/resolutions` | Human resolution workflow |
 | `GET /api/corrupted`, `POST /api/corrupted/resolve` | Corrupted-attachment handling |
 | `GET /api/missing-bills`, `POST /api/missing-bills/chase`, `/batch-chase` | Chase missing BLs |
-| `GET /api/audit` | Audit trail of all decisions |
+| `GET /api/conversations`, `/api/conversations/{address}` | Per-person conversation index across sent + quoted messages |
+| `POST /api/email/send-smtp`, `GET /api/smtp/config` | In-app compose → Gmail SMTP (simulated send when unconfigured) |
+| `POST /api/email/inbound-webhook`, `/{id}/simulate-reply`, `/imap-poll` | Inbound reply capture (webhook, simulator, IMAP poll) |
+| `GET /api/getter/*` (`status`, `emails`, `fetch`, `poll-gmail`, `ingest-custom`, `send-real-test`, `reset`) | Real-Gmail ingestion dashboard — gated by `REAL_GMAIL_ENABLED`, local demo only |
+| `GET /api/supabase/status`, `/records`, `POST /sync-all`, `/pull/{id}` | Cloud persistence: inspect, push, pull |
+| `POST /api/chat`, `GET /api/chat/stats` | RAG Q&A over inbox + verdicts + resolutions |
+| `POST /api/agent/chat`, `/confirm`, `/reset` | Tool-calling ops agent (stats, verify, chasers, pipeline, Supabase sync) with confirm-gated side effects |
+| `GET /api/audit` | Audit trail of all decisions, incl. per-stage engine badges |
 | `POST /api/pipeline/run`, `/cancel`, `GET /status`, `/submission` | Batch pipeline control |
 | `GET /api/stress/dataset`, `/cases` | Stress dataset info + case browser |
 | `POST /api/stress/run`, `/cancel`, `GET /status`, `/results` | Batch stress test over `tests/stress_dataset` |
 | `POST /api/stress/run-one` | Run a single stress case vs ground truth |
+| `POST /api/stress/upload` | Upload a dataset (.zip bundle or loose files) into inbox + stress set; archives to Supabase Storage |
+| `POST /api/admin/reset` | Demo reset: dry-run preview, typed `RESET` confirm, scoped wipes of local stores / Supabase / uploads (inbox + LLM cache preserved) |
 | `GET /api/config` | Runtime config |
 
 ## Tech stack
 
 - **Backend:** Python, FastAPI, Uvicorn, pydantic, pdfplumber, openpyxl,
   python-docx, pillow
-- **Frontend:** React 19, Vite, oxlint
+- **Frontend:** React 19, Vite, oxlint, driver.js (guided judge tour)
+- **Agent + chat:** tool-calling ops agent (`pipeline/agent.py`) with
+  confirm-gated actions, and a RAG Q&A assistant
+  (`pipeline/knowledge_base.py`) over inbox, verdicts and resolutions
+- **Email integration:** Gmail SMTP compose (simulated send fallback),
+  IMAP polling, inbound webhook + reply simulator, thread tracking in
+  `email_threads.json`
 - **Database:** Supabase (managed Postgres) — schema in `supabase_schema.sql`
 - **AI — classification:** Laya System-1 neural decision model (Convai
   Innovations ModernBERT, `laya==0.3.4` + torch/transformers) — typed,
   calibrated-confidence decisions own email category and comparison-intent
   routing when confidence clears `LAYA_MIN_CONFIDENCE` (default 0.6);
-  deterministic rules and the NIM LLM adjudicate what it can't settle
+  deterministic rules and the NIM LLM adjudicate what it can't settle. The
+  same chain diagnoses every `MISMATCH`/`NEEDS_REVIEW` verdict
+  (`diagnose_mismatch` / `adjudicate_review`) with provenance
 - **Deterministic tier:** hand-tuned regex + precedence rules for 7-field
   extraction and SI↔BL normalization/comparison — does the bulk of the
   parsing work with zero model calls (97.54% weighted score rules-only)

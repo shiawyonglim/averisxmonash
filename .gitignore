@@ -63,6 +63,8 @@ server_smoke.log
 # Organizers' answer key + data generator (kept on disk for local scoring,
 # never committed to a public submission repo)
 sdoc-hackathon-docker/data_v2/ground_truth.json
+sdoc-hackathon-docker/data_v2/uploaded_ground_truth.json
+uploaded_datasets.json
 sdoc-hackathon-docker/data_v2/generate.py
 sdoc-hackathon-docker/data_v2/edgecases.py
 sdoc-hackathon-docker/data_v2/pools.py

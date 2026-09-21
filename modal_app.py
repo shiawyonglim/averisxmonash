@@ -46,6 +46,8 @@ image = (
         "huggingface_hub>=0.23.0",
         "laya==0.3.4",
         "openai>=1.30.0",
+        "supabase==2.28.3",
+        "httpx>=0.27,<1",
     )
     # Pre-cache Laya ModernBERT model weights in container image so cold start is <1 second
     .run_commands(
@@ -53,6 +55,7 @@ image = (
     )
     # Add project files and shipping datasets to the container
     .add_local_file(LOCAL_ROOT / "server.py", remote_path="/root/server.py")
+    .add_local_dir(LOCAL_ROOT / "pipeline", remote_path="/root/pipeline")
     .add_local_dir(LOCAL_ROOT / "sdoc-hackathon-bundle", remote_path="/root/sdoc-hackathon-bundle")
     .add_local_dir(LOCAL_ROOT / "frontend" / "dist", remote_path="/root/frontend/dist")
 )

@@ -979,6 +979,14 @@ function App() {
   const [stressCaseLoading, setStressCaseLoading] = useState(false)
   const [stressShowAllFailures, setStressShowAllFailures] = useState(false)
   const [stressFailFilter, setStressFailFilter] = useState('')
+  // Live deployment ping targets — preset via VITE_RENDER_URL / VITE_MODAL_URL,
+  // otherwise remembered in localStorage once entered.
+  const [deployRenderUrl, setDeployRenderUrl] = useState(() =>
+    import.meta.env?.VITE_RENDER_URL || localStorage.getItem('averis_deploy_render') || '')
+  const [deployModalUrl, setDeployModalUrl] = useState(() =>
+    import.meta.env?.VITE_MODAL_URL || localStorage.getItem('averis_deploy_modal') || '')
+  const [deployTesting, setDeployTesting] = useState(false)
+  const [deployResults, setDeployResults] = useState(null)
   const [uploadFiles, setUploadFiles] = useState([])
   const [uploadBusy, setUploadBusy] = useState(false)
   const [uploadResult, setUploadResult] = useState(null)
@@ -1498,6 +1506,40 @@ function App() {
       setStressCaseLoading(false)
     }
   }, [])
+
+  // Ping the live Render + Modal deployments — hits /api/config (the same
+  // path Render uses as its health check) and reports latency + model.
+  const handleTestDeployments = useCallback(async () => {
+    const targets = [
+      ['render', deployRenderUrl],
+      ['modal', deployModalUrl],
+    ].filter(([, u]) => (u || '').trim())
+    if (!targets.length) return
+    setDeployTesting(true)
+    try { localStorage.setItem('averis_deploy_render', deployRenderUrl.trim()) } catch { /* private mode */ }
+    try { localStorage.setItem('averis_deploy_modal', deployModalUrl.trim()) } catch { /* private mode */ }
+    const results = {}
+    await Promise.all(targets.map(async ([name, raw]) => {
+      const base = raw.trim().replace(/\/+$/, '')
+      const t0 = performance.now()
+      try {
+        const res = await fetch(`${base}/api/config`, { signal: AbortSignal.timeout(20000) })
+        const ms = Math.round(performance.now() - t0)
+        const data = await res.json().catch(() => null)
+        results[name] = res.ok
+          ? { ok: true, ms, model: data?.model, provider: data?.provider }
+          : { ok: false, ms, error: `HTTP ${res.status}` }
+      } catch (e) {
+        results[name] = {
+          ok: false,
+          ms: Math.round(performance.now() - t0),
+          error: e.name === 'TimeoutError' ? 'timed out (cold start?)' : (e.message || 'unreachable'),
+        }
+      }
+    }))
+    setDeployResults(results)
+    setDeployTesting(false)
+  }, [deployRenderUrl, deployModalUrl])
 
   // Dataset upload — judge drops a secret test set; server archives it to
   // Supabase and ingests it into the live inbox + stress dataset.
@@ -7091,7 +7133,9 @@ function App() {
                     <p className="step-sub">
                       Drop a secret test set — a <code>.zip</code> with <code>inbox/*.json</code> emails
                       and <code>attachments/</code>, plus an optional <code>ground_truth.json</code> for
-                      accuracy scoring (loose files work too). The archive is saved to Supabase and every
+                      accuracy scoring (loose files work too, and a standalone
+                      <code> ground_truth.json</code> alone enables scoring where the bundled answer key
+                      isn't deployed). The archive is saved to Supabase and every
                       email is merged into the whole system — queue, verify, pipeline, submission and
                       scoring all see it.
                     </p>
@@ -7176,6 +7220,50 @@ function App() {
                         </details>
                       )}
                     </div>
+                  </div>
+                )}
+              </div>
+
+              {/* LIVE DEPLOYMENTS — ping Render + Modal */}
+              <div className="item-card">
+                <div className="sub-card-head">
+                  <div>
+                    <h3>Live deployments</h3>
+                    <p className="step-sub">
+                      Ping the Render and Modal deployments — hits <code>/api/config</code> (the
+                      same path Render uses as its health check) and reports reachability, latency
+                      and the active model. URLs are remembered in this browser; preset them via
+                      <code> VITE_RENDER_URL</code> / <code>VITE_MODAL_URL</code>.
+                    </p>
+                  </div>
+                </div>
+                <div className="sub-option">
+                  <label htmlFor="deploy-render-url">Render</label>
+                  <input id="deploy-render-url" className="sub-diff-filter" type="url"
+                    placeholder="https://<service>.onrender.com"
+                    value={deployRenderUrl} onChange={(e) => setDeployRenderUrl(e.target.value)} />
+                </div>
+                <div className="sub-option">
+                  <label htmlFor="deploy-modal-url">Modal</label>
+                  <input id="deploy-modal-url" className="sub-diff-filter" type="url"
+                    placeholder="https://<workspace>--averis-shipping-ai-web.modal.run"
+                    value={deployModalUrl} onChange={(e) => setDeployModalUrl(e.target.value)} />
+                </div>
+                <div className="sub-cta-row">
+                  <button className="sub-primary-btn" onClick={handleTestDeployments}
+                    disabled={deployTesting || (!deployRenderUrl.trim() && !deployModalUrl.trim())}>
+                    {deployTesting ? 'Pinging…' : 'Test deployments'}
+                  </button>
+                </div>
+                {deployResults && (
+                  <div className="sub-export-chips" style={{ marginTop: '10px' }}>
+                    {['render', 'modal'].filter(n => deployResults[n]).map(n => (
+                      <span key={n} className={`tag ${deployResults[n].ok ? 'ok' : 'danger'}`}>
+                        {n}: {deployResults[n].ok
+                          ? `up · ${deployResults[n].ms} ms${deployResults[n].model ? ` · ${deployResults[n].model}` : ''}`
+                          : `down · ${deployResults[n].error}`}
+                      </span>
+                    ))}
                   </div>
                 )}
               </div>

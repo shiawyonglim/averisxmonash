@@ -4763,18 +4763,25 @@ def _scoring():
 
 @app.get("/api/compare")
 def compare_submission():
-    if not os.path.exists(GROUND_TRUTH_PATH):
-        raise HTTPException(status_code=404, detail=f"ground_truth.json not found at {GROUND_TRUTH_PATH}")
-    with open(GROUND_TRUTH_PATH, 'r', encoding='utf-8') as f:
-        truth = json.load(f)
+    truth = {}
+    if os.path.exists(GROUND_TRUTH_PATH):
+        with open(GROUND_TRUTH_PATH, 'r', encoding='utf-8') as f:
+            truth = json.load(f)
     # Judge-uploaded datasets carry their own ground truth — merge it so the
     # uploaded emails score too (remapped ids were applied at ingest time).
+    # On deployments where the bundled answer key is gitignored, an uploaded
+    # ground_truth.json is the only truth source.
     if os.path.exists(UPLOADED_GT_PATH):
         try:
             with open(UPLOADED_GT_PATH, 'r', encoding='utf-8') as f:
                 truth.update(json.load(f))
         except Exception:
             pass
+    if not truth:
+        raise HTTPException(
+            status_code=404,
+            detail="No ground truth available — upload a ground_truth.json via the "
+                   "dataset uploader (the bundled answer key is not deployed).")
 
     # Prefer the freshest submission: in-memory pipeline results, else the file.
     if SUBMISSION_STORE:
@@ -5296,6 +5303,29 @@ def _upload_dataset_archive(name, blob, ts):
         return f"error ({type(e).__name__}: {e})"
 
 
+def _record_dataset_upload(files, zip_blobs, ts, ingested, renamed, gt_merged):
+    """Archive the raw upload to Supabase Storage and append to the local manifest."""
+    supa_msgs = [_upload_dataset_archive(n, b, ts) for n, b in zip_blobs]
+    supabase_msg = "; ".join(supa_msgs)
+    manifest = []
+    if os.path.exists(UPLOADS_MANIFEST_PATH):
+        try:
+            with open(UPLOADS_MANIFEST_PATH, 'r', encoding='utf-8') as f:
+                manifest = json.load(f)
+        except Exception:
+            manifest = []
+    manifest.append({
+        "timestamp": _utcnow(),
+        "source_files": [uf.filename for uf in files],
+        "emails": ingested,
+        "renamed": renamed,
+        "ground_truth_rows": gt_merged,
+        "supabase": supabase_msg,
+    })
+    _atomic_json_dump(UPLOADS_MANIFEST_PATH, manifest)
+    return supabase_msg
+
+
 @app.post("/api/stress/upload")
 async def stress_upload_dataset(files: List[UploadFile] = File(...)):
     """Ingest an uploaded dataset into the whole system.
@@ -5303,8 +5333,10 @@ async def stress_upload_dataset(files: List[UploadFile] = File(...)):
     Accepts a .zip (bundle layout: inbox/*.json + attachments/* + optional
     *ground_truth*.json) or a loose multi-file selection. Emails land in both
     the live inbox (queue/verify/pipeline/submission) and the stress dataset
-    (accuracy metrics); ground truth is merged into both scorers. The raw
-    archive is pushed to Supabase Storage for persistence.
+    (accuracy metrics); ground truth is merged into both scorers. A standalone
+    ground_truth.json is also accepted — it merges into the uploaded-GT scorer
+    file only (used on deployments where the bundled answer key is gitignored).
+    The raw archive is pushed to Supabase Storage for persistence.
     """
     # 1) Collect (relpath, bytes) — unzip archives in memory, keep loose files.
     payloads = []          # (relpath, bytes)
@@ -5377,14 +5409,44 @@ async def stress_upload_dataset(files: List[UploadFile] = File(...)):
         else:
             skipped.append({"file": rp, "reason": "unrecognized json (not an email, not ground truth)"})
 
-    if not emails:
+    if not emails and not gt:
         raise HTTPException(
             status_code=400,
             detail="no email JSONs found — expected inbox/*.json email records "
-                   "(with subject/body/from/attachments keys)")
+                   "(with subject/body/from/attachments keys) or a ground_truth.json")
+
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+
+    # Ground-truth-only upload — e.g. the organizers' answer key on the live
+    # deployment, where data_v2/ground_truth.json is gitignored. Ids already
+    # refer to existing inbox emails, so rows merge verbatim into the
+    # uploaded-GT file that /api/compare folds into the scorer.
+    if gt and not emails:
+        mapped_gt = {eid: dict(row) for eid, row in gt.items() if isinstance(row, dict)}
+        ugt = {}
+        if os.path.exists(UPLOADED_GT_PATH):
+            try:
+                with open(UPLOADED_GT_PATH, 'r', encoding='utf-8') as f:
+                    ugt = json.load(f)
+            except Exception:
+                ugt = {}
+        ugt.update(mapped_gt)
+        _atomic_json_dump(UPLOADED_GT_PATH, ugt)
+        supabase_msg = _record_dataset_upload(files, zip_blobs, ts, [], {}, len(mapped_gt))
+        invalidate_cache()
+        return {
+            "status": "ok",
+            "emails_ingested": 0,
+            "attachments_saved": 0,
+            "ground_truth_rows": len(mapped_gt),
+            "ground_truth_ignored": len(gt) - len(mapped_gt),
+            "renamed": {},
+            "skipped": skipped,
+            "supabase": supabase_msg,
+            "email_ids": [],
+        }
 
     # 3) Write emails + attachments into the live bundle AND the stress dataset.
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     used_ids = set()
     ingested, renamed = [], {}
     att_saved = 0
@@ -5453,25 +5515,7 @@ async def stress_upload_dataset(files: List[UploadFile] = File(...)):
             gt_merged = len(mapped_gt)
 
     # 5) Archive the upload to Supabase Storage + record a local manifest.
-    supa_msgs = [_upload_dataset_archive(n, b, ts) for n, b in zip_blobs]
-    supabase_msg = "; ".join(supa_msgs)
-
-    manifest = []
-    if os.path.exists(UPLOADS_MANIFEST_PATH):
-        try:
-            with open(UPLOADS_MANIFEST_PATH, 'r', encoding='utf-8') as f:
-                manifest = json.load(f)
-        except Exception:
-            manifest = []
-    manifest.append({
-        "timestamp": _utcnow(),
-        "source_files": [uf.filename for uf in files],
-        "emails": ingested,
-        "renamed": renamed,
-        "ground_truth_rows": gt_merged,
-        "supabase": supabase_msg,
-    })
-    _atomic_json_dump(UPLOADS_MANIFEST_PATH, manifest)
+    supabase_msg = _record_dataset_upload(files, zip_blobs, ts, ingested, renamed, gt_merged)
 
     invalidate_cache()
 
