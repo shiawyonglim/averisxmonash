@@ -1,6 +1,6 @@
-# Averis x Monash Hackathon — Shipping Document Verification
+# Averis x Monash Hackathon — ShipSure (Shipping Document Verification)
 
-An AI-powered pipeline that processes a 520-email shipping inbox, classifies
+ShipSure is an AI-powered pipeline that processes a 520-email shipping inbox, classifies
 each email, and — for `BL_COMPARISON` emails — verifies a draft **Bill of
 Lading (BL)** against its **Shipping Instruction (SI)** by extracting and
 comparing 7 core fields. A React front-end gives human reviewers a dashboard,
